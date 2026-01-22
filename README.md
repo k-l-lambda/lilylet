@@ -42,7 +42,7 @@ LilyPond is powerful but overly flexible—the same music can be written in mult
 | Chord | `<c e g>4` | C major triad, quarter note |
 | Voice separator | `\\` | Separates multiple voices within the same staff |
 | Part separator | `\\\` | Separates different instrument tracks (parts) in a score |
-| Bar line | `|` | Separates measures |
+| Bar line | `\|` | Separates measures |
 
 ## Syntax Example
 

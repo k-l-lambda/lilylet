@@ -1,0 +1,48 @@
+{
+  "name": "@k-l-lambda/lilylet",
+  "version": "0.1.0",
+  "description": "Lilylet is a lilyopnd-like sheet music language designed for Markdown rendering and symbolic music representation in AIGC applications.",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./browser": {
+      "types": "./lib/browser.d.ts",
+      "default": "./lib/browser.js"
+    }
+  },
+  "files": [
+    "lib",
+    "source"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && cp source/paraff/grammar.jison.js lib/source/paraff/ && cp source/abc/grammar.jison.js lib/source/abc/",
+    "build:grammar": "ts-node ./tools/buildJisonParser.ts",
+    "prepublishOnly": "npm run build:grammar && npm run build",
+    "test": "ts-node ./tests/parser.ts",
+    "ts": "ts-node"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/k-l-lambda/lilylet.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "k.l.lambda",
+  "license": "ISC",
+  "homepage": "https://github.com/k-l-lambda/lilylet#readme",
+  "dependencies": {
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.20",
+    "@types/yargs": "^17.0.32",
+    "jison": "^0.4.18",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "yargs": "^17.7.2"
+  }
+}
