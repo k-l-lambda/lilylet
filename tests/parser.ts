@@ -12,7 +12,7 @@ const parse = async (lyl_dir: string): Promise<void> => {
 		const code = fs.readFileSync(`${lyl_dir}/${file}`, { encoding: "utf-8" });
 		await lilylet.parseCode(code);
 
-		console.log(name, "parsing passed.");
+		console.log(file, "parsing passed.");
 	}
 };
 
