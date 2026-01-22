@@ -18,7 +18,11 @@ const build = async (jison: string, target?: string): Promise<void> => {
 
 const main = async () => {
 	await build("./source/lilylet/lilylet.jison", "./source/lilylet/grammar.jison.js");
-	await build("./source/abc/abc.jison", "./source/abc/grammar.jison.js");
+
+	// Only build abc if it exists
+	if (fs.existsSync("./source/abc/abc.jison")) {
+		await build("./source/abc/abc.jison", "./source/abc/grammar.jison.js");
+	}
 
 	console.log("Done.");
 };

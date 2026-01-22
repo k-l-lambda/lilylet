@@ -184,12 +184,8 @@
 
 [a-g](ss|ff|s|f)?				return 'PITCH'
 
-"'''"							return 'OCT_UP3'
-"''"							return 'OCT_UP2'
-"'"								return 'OCT_UP1'
-",,,"							return 'OCT_DOWN3'
-",,"							return 'OCT_DOWN2'
-","								return 'OCT_DOWN1'
+"'"								return 'OCT_UP'
+","								return 'OCT_DOWN'
 
 [0-9]+							return 'NUMBER'
 
@@ -301,14 +297,10 @@ pitch
 	;
 
 octave
-	: OCT_UP1									-> 1
-	| OCT_UP2									-> 2
-	| OCT_UP3									-> 3
-	| OCT_DOWN1									-> -1
-	| OCT_DOWN2									-> -2
-	| OCT_DOWN3									-> -3
-	| octave OCT_UP1							-> $1 + 1
-	| octave OCT_DOWN1							-> $1 - 1
+	: OCT_UP									-> 1
+	| OCT_DOWN									-> -1
+	| octave OCT_UP								-> $1 + 1
+	| octave OCT_DOWN							-> $1 - 1
 	;
 
 duration
