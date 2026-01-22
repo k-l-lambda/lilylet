@@ -1,0 +1,9 @@
+[title "An Example Lilylet File"]
+[subtitle "Demonstrating Headers"]
+[composer "Calvin X"]
+[opus "1"]
+[instrument "Piano"]
+[genre "Modern"]
+
+
+\time 4/4 \clef "treble" c1
