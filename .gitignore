@@ -1,0 +1,17 @@
+node_modules/
+npm-debug.log*
+yarn-error.log
+yarn.lock
+package-lock.json
+
+*.bak
+*.local
+*.local.*
+
+# build this file by tools/buildJisonParser.ts
+*.jison.js
+
+# build output
+/lib/
+
+/footages/
