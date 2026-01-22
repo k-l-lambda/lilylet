@@ -1,0 +1,5 @@
+\staff "1" \key bf \major \time 4/4 \clef "treble" a''8\rest \stemDown c <b d>[ <a c>] <g b> <fs a> <e g> <d f> \\
+\staff "1" <a d a'>4. \\
+\staff "1" s8 \stemUp \times 2/3 {e''16 f e} \\
+\staff "2" \key bf \major \clef "bass" b8 d,[ a'] <c d fs> <fs, a d>2 ~ \\
+\staff "2" fs,,1 |

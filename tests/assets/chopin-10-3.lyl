@@ -1,0 +1,327 @@
+\staff "1" \key e \major \time 2/4 \clef "treble" \stemUp b8 \p \\
+\staff "2" \key e \major \clef "bass" g8  \rest |
+
+\staff "1" \stemUp e8 [ ds16 e16 ] fs4 ~ \\
+\staff "1" s4 \stemDown ds4 ~ \\
+\staff "2" \stemUp e,,4 b4 \\
+\staff "2" \stemDown e,,16 [ b'8 -> b16 ] b,16 [ b'8 -> b16 ] \\
+\staff "2" \stemUp gs16 [ b16 gs16 b16 ] a16 [ b16 a16 b16 ] |
+
+\staff "1" \stemUp fs16 [ \< ( gs16 ] gs16 [ \! \> fs16 ] ) gs4 -> \! ~ \\
+\staff "1" \stemDown ds8 [ ds8 ] e4 \\
+\staff "2" \stemUp b,,4 e4 \\
+\staff "2" \stemDown b,,16 [ b'8 -> b16 ] e,16 [ b'8 -> b16 ] \\
+\staff "2" \stemUp a16 [ b16 a16 b16 ] gs16 [ b16 gs16 b16 ] |
+
+\staff "1" \stemUp gs'16 [ \< ( a16 ] a16 [ \! \> gs16 ] \! \! ) cs8. [ -> \> ( b16 ] \! \\
+\staff "1" \stemDown gs16 [ e'16 b16 e16 ] ds16 [ a'16 b,16 ds16 ] \\
+\staff "2" \stemDown e,,16 [ b'8 b16 ] b,16 [ b'8 b16 ] \\
+\staff "2" \stemUp e,,4 b4 |
+
+\staff "1" \stemUp a'16 [ gs16 ds16 e16 ] ) fs4 -> ~ \\
+\staff "1" \stemDown b16 [ e16 gs,16 b16 ] \staff "2" \stemUp <a cs>16 [ <b ds>16 <a cs>16 <b ds>16 ] \\
+\staff "2" \stemDown e,,16 [ b'8 b16 ] b,16 [ b'8 b16 ] \\
+\staff "2" \stemUp e,,4 b4 |
+
+\staff "1" \stemUp fs16 [ \< ( gs16 ] gs16 [ \! \> fs16 ] ) e4 -> \! \\
+\staff "2" \stemUp b,,4 e4 \\
+\staff "2" \stemDown b,,16 [ b'8 b16 ] e,16 [ b'8 b16 ] \\
+\staff "2" \stemUp <a cs>16 [ <b ds>16 ] <a cs>16 [ <b ds>16 ] gs16 [ b16 gs16 b16 ] |
+
+\staff "1" \stemUp gs'16 [ \< ( a16 fs16 gs16 ] a16 [ b16 gs16 a16 ] ) \\
+\staff "1" \stemDown d16 [ e16 d16 e16 ] cs16 [ e16 cs16 e16 ] \\
+\staff "2" \stemDown e,,16 [ e'8 e16 ] a,16 [ e'8 e16 ] \\
+\staff "2" \stemUp e,,4 a4 |
+
+\staff "1" \stemUp cs'8 -. fs,4 -> \grace { \stemUp as8 ( } \stemUp gs16 [ ) ( fs16 ] \> ) ~ \\
+\staff "1" \stemDown cs16 [ \! e16 cs16 e16 ] b16 [ e16 b16 e16 ] \\
+\staff "2" \stemDown a,16 [ fs'8 -> fs16 ] b,16 [ fs'8 fs16 ] \\
+\staff "2" \stemUp a,4 b4 |
+
+\staff "1" \stemUp fs8 [ \grace { \stemUp as8 ( } \stemUp gs16 ) fs16 ] \pp <ds b'>4 -> \\
+\staff "1" \stemDown as16 [ \! e'16 as,16 e'16 ] \staff "2" \stemUp a,16 [ b16 a16 b16 ] \\
+\staff "2" \stemDown cs,16 [ fs8 fs16 ] b,16 [ fs'8 fs16 ] \\
+\staff "2" \stemUp cs,4 b4 |
+
+\staff "1" \stemUp <e gs>8 [ \< ds16 e16 ] fs4 \! ~ \\
+\staff "1" \stemUp s4 \stemDown ds4 ~ \\
+\staff "2" \stemUp e,,4 b4 \\
+\staff "2" \stemDown e,,16 [ b'8 b16 ] b,16 [ b'8 b16 ] \\
+\staff "2" \stemUp gs16 [ b16 gs16 b16 ] a16 [ b16 a16 b16 ] |
+
+\staff "1" \stemUp fs16 [ \< ( gs16 ] gs16 [ \! \> fs16 ] ) gs4 -> \! ~ \\
+\staff "1" \stemDown ds8 [ ds8 ] e4 \\
+\staff "2" \stemUp b,,4 e4 \\
+\staff "2" \stemDown b,,16 [ b'8 b16 ] e,16 [ b'8 b16 ] \\
+\staff "2" \stemUp a16 [ b16 a16 b16 ] gs16 [ b16 gs16 b16 ] |
+
+\staff "1" \stemUp gs'16 [ \< ( a16 ] a16 [ \> \! gs16 ] ) cs8. [ \! \> ( b16 ] \\
+\staff "1" \stemDown gs16 [ e'16 b16 e16 ] ds16 [ a'16 b,16 ds16 ] \\
+\staff "2" \stemDown e,,16 [ b'8 b16 ] b,16 [ b'8 b16 ] \\
+\staff "2" \stemUp e,,4 b4 |
+
+\staff "1" \stemUp a'16 [ gs16 ds16 e16 ] ) fs4 -> ~ \\
+\staff "1" \stemDown b16 [ \! e16 gs,16 b16 ] \staff "2" \stemUp <a cs>16 [ <b ds>16 <a cs>16 <b ds>16 ] \\
+\staff "2" \stemDown e,,16 [ b'8 b16 ] b,16 [ b'8 b16 ] \\
+\staff "2" \stemUp e,,4 b4 |
+
+\staff "1" \stemUp fs16 [ \< ( gs16 ] gs16 [ \! \> fs16 ] ) e4 -> \! \\
+\staff "2" \stemUp b,,4 e4 \\
+\staff "2" \stemDown b,,16 [ b'8 b16 ] e,16 [ b'8 b16 ] \\
+\staff "2" \stemUp <a cs>16 [ <b ds>16 <a cs>16 <b ds>16 ] gs16 [ b16 gs16 b16 ] |
+
+\staff "1" \stemUp b'16 [ ( cs16 ] ) cs16 [ -> ( b16 ] ) a16 [ \< ( b16 gs16 a16 ] \! ) \\
+\staff "1" \stemDown <d fs>16 [ <e gs>16 <d fs>16 <e gs>16 ] cs16 [ e16 cs16 e16 ] \\
+\staff "2" \stemDown e,,16 [ e'8 -> e16 ] a,16 [ e'8 -> e16 ] \\
+\staff "2" \stemUp e,,4 a4 |
+
+\staff "1" \stemUp ds'16 [ ( e16 ] ) e16 [ -> ( ds16 ] ) cs16 [ ( ds16 bs16 cs16 ] ) \\
+\staff "1" \stemDown <fs bs>16 [ gs16 <fs as>16 <gs bs>16 ] e16 [ gs16 e16 gs16 ] \\
+\staff "2" \stemDown gs,16 [ gs'8 gs16 ] cs,16 [ gs'8 gs16 ] \\
+\staff "2" \stemUp gs,4 cs4 |
+
+\staff "1" \stemDown <e as e'>16 [ -. ( <fs as fs'>16 -. <ds as' ds>16 -. <e as e'>16 ] -. <fs as fs'>16 [ -. <gs as gs'>16 -. <e as e'>16 -. <fs as fs'>16 ] -. ) \\
+\staff "2" \stemDown <cs, e fs as>16 [ <cs e fs as>16 <cs e fs as>16 <cs e fs as>16 ] <c e fs as>16 [ <c e fs as>16 <c e fs as>16 <c e fs as>16 ] |
+
+\staff "1" \stemUp <e' gs>4 ~ \ff gs16 [ \> fs16 e16 cs16 ] \\
+\staff "1" \stemDown gs'16 [ b16 gs16 b16 ] gs16 [ b16 gs16 b16 ] \\
+\staff "2" \stemDown <b, e gs b>2 |
+
+\staff "1" \stemUp ds'4 -> ( e16 [ \> ) ds16 \! cs16 gs16 ] \\
+\staff "1" \stemDown ds16 [ \! fs16 ds16 fs16 ] e16 [ gs16 e16 gs16 ] \\
+\staff "2" \stemDown fs,16 [ b16 b,16 b'16 ] cs,16 [ gs'16 gs,16 gs'16 ] \\
+\staff "2" \stemDown s4. \stemUp gs,8 |
+
+\staff "1" \stemUp b'4 -> ( cs16 [ ) b16 a16 e16 ] \\
+\staff "1" \stemDown b16 [ ds16 b16 ds16 ] cs16 [ e16 cs16 e16 ] \\
+\staff "2" \stemDown ds,16 [ gs16 gs,16 gs'16 ] a,16 [ e'16 e,16 e'16 ] \\
+\staff "2" \stemUp s4. e,,8 |
+
+\staff "1" \stemUp gs'2 -> ( \\
+\staff "2" \stemUp s8 e,,4 e8 ~ \\
+\staff "2" \stemDown b,16 [ e16 e,16 e'16 ] b16 [ e16 e,16 b'16 ] ~ \\
+\staff "2" \stemUp gs16 [ b16 gs16 b16 ] gs16 [ b16 \pp gs16 b16 ] |
+
+\staff "1" \grace { \stemUp gs'16 [ fs16 ] } \stemUp <gs, e'>4 ) \stemDown <gs' e'>16 [ \> ( <fs ds'>16 <gs e'>16 <ds b'>16 ] \! \\
+\staff "2" \grace s8 \ottava #0 \clef "bass" \stemDown e,,4 d'4  \rest \\
+\staff "2" \grace s8 \ottava #0 \clef "bass" \stemDown b,4 d4  \rest \\
+\staff "2" \grace s8 \ottava #0 \clef "bass" \stemDown e,4 d4  \rest |
+
+\staff "1" \stemUp <fs ds'>16 [ <e cs'>16 <fs ds'>16 <ds gs>16 ] b'16 [ as16 cs8 ] \\
+\staff "1" \stemDown s4 e8 [ gs16 fs16 ] \\
+\staff "2" \stemDown fs,,16 [ -. as'16 -. fs,16 -. b'16 ] -. fs,16 [ -. cs''16 ( b16 as16 ] ) |
+
+\staff "1" \grace { \stemUp as'8 } \stemDown <e gs>16 [ ) <ds fs>16 \grace { \stemUp as'8 ( } \stemDown <e gs>16 ) <ds fs>16 ] <gs e'>16 [ ( <fs ds'>16 <gs e'>16 <ds b'>16 ] \\
+\staff "2" \grace s8 \ottava #0 \clef "bass" \stemDown b,16 [ ( fs'16 b16 ] ) b16  \rest b4  \rest |
+
+\staff "1" \stemUp <fs ds'>16 [ <e cs'>16 <fs ds'>16 <ds gs>16 ] b'16 [ as16 cs8 ] \\
+\staff "1" \stemDown s4 e8 [ gs16 fs16 ] \\
+\staff "2" \stemDown fs,,16 [ -. as'16 -. fs,16 -. b'16 ] -. fs,16 [ -. cs''16 ( b16 as16 ] ) |
+
+\staff "1" \grace { \stemUp as'8 } \stemDown <e gs>16 [ ) <ds fs>16 \grace { \stemUp as'8 ( } \stemDown <e gs>16 ) <ds fs>16 ] <a' fs'>16 [ \> ( <gs e'>16 <a fs'>16 <e cs'>16 ] \\
+\staff "2" \grace s8 \ottava #0 \clef "bass" \stemDown b,16 [ ( fs'16 b16 ] ) b16  \rest b4  \rest |
+
+\staff "1" \stemDown s4 \! \stemUp cs'16 [ bs16 ds8 ] \\
+\staff "1" \stemDown <gs' e'>16 [ <fs ds'>16 <gs e'>16 <e as>16 ] fs8 [ a16 gs16 ] \\
+\staff "2" \stemDown gs,16 [ -. bs'16 -. gs,16 -. cs'16 ] -. gs,16 [ -. ds''16 ( cs16 bs16 ] ) |
+
+\staff "1" \grace { \stemUp b'8 } \stemDown <fs a>16 [ \< ) <e gs>16 \grace { \stemUp b'8 ( } \stemDown <fs a>16 ) <e gs>16 ] \! <a fs'>16 [ \> ( <gs e'>16 <a fs'>16 <e cs'>16 ] \\
+\staff "2" \grace s8 \ottava #0 \clef "bass" \stemDown cs,16 [ ( gs'16 cs16 ] ) c16  \rest c4  \rest |
+
+\staff "1" \stemDown s4 \! \stemUp cs'16 [ bs16 ds8 ] \\
+\staff "1" \stemDown <gs' e'>16 [ <fs ds'>16 <gs e'>16 <e as>16 ] fs8 [ a16 gs16 ] \\
+\staff "2" \stemDown gs,16 [ -. bs'16 -. gs,16 -. cs'16 ] -. gs,16 [ -. ds''16 ( cs16 bs16 ] ) |
+
+\staff "1" \grace { \stemUp b'8 } \stemDown <fs a>16 [ \> ) <e gs>16 \grace { \stemUp b'8 ( } \stemDown <fs a>16 ) <e gs>16 ] \! \grace { \stemUp b'8 ( } \stemUp <fs a>16 [ ) <e gs>16 \< <fs a>16 <gs b>16 ] \! \\
+\staff "2" \grace s8 \ottava #0 \clef "bass" \stemDown cs,16 [ -. gs'16 -. cs16 -. cs,16 ] -. b16 [ -. d'16 -. e,16 -. b16 ] -. |
+
+\staff "1" \stemUp <a' cs>8. [ ( <a cs>16 ] <gs b>8. [ <gs b>16 ] ) \\
+\staff "1" \stemDown c16  \rest <cs e>16 [ <d fs>8. ] <d fs>16 [ <d e>8 ] \\
+\staff "2" \stemDown a,8. [ e16 ] b'8. [ e,16 ] \\
+\staff "2" \stemDown c16  \rest \f \stemUp e,16 [ e8. ] -> e16 [ -> e8 ] |
+
+\staff "1" \stemUp <a' c>8. [ ( \p <a c>16 ] <gs b>8. [ <gs b>16 ] ) \\
+\staff "1" \stemDown c16  \rest <c e>16 [ <d f>8. ] <d f>16 [ <d e>8 ] \\
+\staff "2" \stemDown a,8. [ e16 ] b'8. [ e,16 ] \\
+\staff "2" \stemUp c16  \rest e,16 [ e8. ] -> e16 [ -> e8 ] |
+
+\staff "1" \stemUp <cs e b' cs>16 -! \stemDown <cs' e>16 [ ( <g b>16 ] ) <b cs>16 [ ( <e g>16 ] ) <g b>16 [ ( <cs, e>16 ] ) <e g>16 ( \\
+\staff "2" \stemUp <g, g'>16 -! \stemDown <g' b>16 [ ( <cs e>16 ] ) \clef "treble" \stemUp <e g>16 [ ( <b cs>16 ] ) <cs e>16 [ ( <g' b>16 ] ) <b cs>16 ( |
+
+\staff "1" \stemDown <b'' cs>16 ) <cs e>16 [ ( <g b>16 ] ) <b cs>16 [ ( <e g>16 ] ) <as,, g'>16 [ -. \> ( <as fs'>16 -. <as e'>16 ] -. \! ) \\
+\staff "2" \stemUp <e g>16 ) \stemDown <g b>16 [ ( <cs e>16 ] ) <e g>16 [ ( <cs e>16 ] ) \clef "bass" <fs,, cs' e>16 [ -. ( <fs cs' e>16 -. <fs cs' e>16 ] -. ) |
+
+\staff "1" \stemUp <b' ds>8. [ ( \f <b ds>16 ] <as cs>8. [ <as cs>16 ] ) \\
+\staff "1" \stemDown e16  \rest <ds fs>16 [ <e gs>8. ] <e gs>16 [ <e fs>8 ] \\
+\staff "2" \stemDown b16 s16 fs16 [ fs,16 ] cs'8. [ fs,16 ] \\
+\staff "2" \stemDown s16 \stemUp fs,16 [ fs8. ] -> fs16 [ -> fs8 ] |
+
+\staff "1" \stemUp <b' d>8. [ ( \p <b d>16 ] <as cs>8. [ <as cs>16 ] ) \\
+\staff "1" \stemDown s16 <d fs>16 [ <e g>8. ] <e g>16 [ <e fs>8 ] \\
+\staff "2" \stemDown b,8. [ fs16 ] cs'8. [ fs,16 ] \\
+\staff "2" \stemUp s16 fs,16 [ fs8. ] -> fs16 [ -> fs8 ] |
+
+\staff "1" \stemUp <ds fs cs' ds>16 -! \stemDown <ds' fs>16 [ ( <a cs>16 ] ) <cs ds>16 [ ( <fs a>16 ] ) <a cs>16 [ ( <ds, fs>16 ] ) <fs a>16 ( \\
+\staff "2" \stemDown <a, a'>16 -! <a' cs>16 [ ( <ds fs>16 ] ) \clef "treble" \stemUp <fs a>16 [ ( <cs ds>16 ] ) <ds fs>16 [ ( <a' cs>16 ] ) <cs ds>16 ( |
+
+\staff "1" \stemDown <cs'' ds>16 ) <ds fs>16 [ ( <a cs>16 ] ) <cs ds>16 [ ( <fs a>16 ] ) <bs,, a'>16 [ -. ( <bs gs'>16 -. <bs fs'>16 ] -. ) \\
+\staff "2" \stemUp <fs a>16 ) \stemDown <a cs>16 [ ( <ds fs>16 ] ) <fs a>16 [ ( <cs ds>16 ] ) \clef "bass" <gs, ds' fs>16 [ -. ( <gs ds' fs>16 -. <gs ds' fs>16 ] -. ) |
+
+\staff "1" \stemDown <b' es>16 -. <gs d'>16 [ ( <g cs>16 \< <c fs>16 ] <b es>16 [ <e as>16 <ds a'>16 \! <gs d'>16 ] \\
+\staff "2" \stemDown <gs d' es>16 -. <f b>16 [ ( <e as>16 <ds a'>16 ] <d gs>16 [ <cs g'>16 <c fs>16 <b f'>16 ] |
+
+\staff "1" \stemDown <g'' cs>16 -! ) <g, cs>16 [ ( <fs c'>16 <b f'>16 ] \< <as e'>16 [ <ds a'>16 <d gs>16 <g cs>16 ] \! \\
+\staff "2" \stemUp <as, e'>16 -! ) \stemDown <e' as>16 [ ( <ds a'>16 <d gs>16 ] <cs g'>16 [ <c fs>16 <b f'>16 <as e'>16 ] |
+
+\staff "1" \stemDown <fs' c'>16 -! ) \stemUp <fs, c'>16 [ \< ( <f b>16 <as e'>16 ] \stemDown <a ds>16 [ <d gs>16 <cs g'>16 <fs c'>16 ] \! \\
+\staff "2" \stemUp <a, ds>16 -! ) \stemDown <ds a'>16 [ ( <d gs>16 <cs g'>16 ] \stemUp <c fs>16 [ <b f'>16 <as e'>16 <a ds>16 ] |
+
+\staff "1" \stemDown <f' b>16 [ \< ) <as e'>16 ( <a ds>16 ) \ottava #1 <d gs>16 ] ( <cs g'>16 [ ) <fs c'>16 ( <es b'>16 ) <as e'>16 ] \! ( \\
+\staff "2" \stemUp <gs, d'>16 [ <g cs>16 <fs c'>16 <f b>16 ] <e as>16 [ <ds a'>16 <d gs>16 <cs fs>16 ] |
+
+\staff "1" \ottava #0 \ottava #1 \stemDown <b''' ds>16 -. ) \ff <ds, b'>16 [ ( \ottava #0 <a fs'>16 ] ) a16  \rest a16  \rest \stemUp <ds,, b'>16 [ ( <a fs'>16 ] ) a16  \rest \\
+\staff "2" \stemUp <b,, fs'>16 -. ) b16  \rest b16  \rest \clef "treble" \stemDown <ds''' b'>16 [ ( <a fs'>16 ] ) a16  \rest a16  \rest \clef "bass" <ds,, b'>16 ( |
+
+\staff "1" \stemUp a16  \rest <a e' fs a>16 [ -! \< <b e fs b>16 -! <c e fs c'>16 ] -! <b e fs b>16 [ -! <a e' fs a>16 -! <b e fs b>16 -! <c e fs c'>16 ] -! \! \\
+\staff "2" \stemUp <a, fs'>16 ) <c, c'>16 [ <b b'>16 <a a'>16 ] <b b'>16 [ <c c'>16 <b b'>16 <a a'>16 ] |
+
+\staff "1" \stemUp <b ds fs b>16 -! \ottava #1 \stemDown <a''' ds>16 [ ( \ottava #0 <ds, b'>16 ] ) d16  \rest d16  \rest \stemUp <a, ds>16 [ ( <ds, b'>16 ] ) d16  \rest \\
+\staff "2" \stemUp <b,, b'>16 -. b16  \rest b16  \rest \clef "treble" \stemDown <fs'''' ds'>16 [ ( <b, a'>16 ] ) b16  \rest b16  \rest \clef "bass" <fs, ds'>16 ( |
+
+\staff "1" \stemUp d16  \rest <a e' fs a>16 [ -! \< <b e fs b>16 -! <c e fs c'>16 ] -! <b e fs b>16 [ -! <a e' fs a>16 -! <b e fs b>16 -! <fs' c' e fs>16 ] -! \\
+\staff "2" \stemDown <b, a'>16 ) \stemUp <c, c'>16 [ <b b'>16 <a a'>16 ] <b b'>16 [ <c c'>16 <b b'>16 <a a'>16 ] |
+
+\staff "1" \stemDown <fs b ds fs>16 -! \! \f <d'' b'>16 [ ( <gs, f'>16 ] ) <f d'>16 [ ( <b gs'>16 ] ) <c a'>16 [ ( <fs, ds'>16 ] ) <ds c'>16 ( \\
+\staff "2" \stemUp <b,, b'>16 -! \clef "treble" <d'' b'>16 [ ( <gs f'>16 ] ) <f d'>16 [ ( <b, gs'>16 ] ) <c a'>16 [ ( <fs ds'>16 ] ) <ds c'>16 ( |
+
+\staff "1" \stemDown <a'' fs'>16 ) <c a'>16 [ ( <fs, ds'>16 ] ) <f d'>16 [ ( <b gs'>16 ] ) <as g'>16 [ ( <e cs'>16 ] ) <ds c'>16 ( \\
+\staff "2" \stemUp <a fs'>16 ) <c a'>16 [ ( <fs ds'>16 ] ) <f d'>16 [ ( <b, gs'>16 ] ) <as g'>16 [ ( <e' cs'>16 ] ) <ds c'>16 ( |
+
+\staff "1" \stemDown <a'' fs'>16 -! ) <c a'>16 [ ( <fs, ds'>16 ] ) <ds c'>16 [ ( <a' fs'>16 ] ) <b gs'>16 [ ( <f d'>16 ] ) <d b'>16 ( \\
+\staff "2" \stemUp <a fs'>16 -! ) <c a'>16 [ ( <fs ds'>16 ] ) <ds c'>16 [ ( <a fs'>16 ] ) <b gs'>16 [ ( <f' d'>16 ] ) <d b'>16 ( |
+
+\staff "1" \stemDown <gs'' f'>16 ) <b gs'>16 [ ( <f d'>16 ] ) <e cs'>16 [ ( <as g'>16 ] ) <a fs'>16 [ ( <ds, c'>16 ] ) <d b'>16 ( \\
+\staff "2" \stemUp <gs f'>16 ) <b gs'>16 [ ( <f' d'>16 ] ) <e cs'>16 [ ( <as, g'>16 ] ) <a fs'>16 [ ( <ds c'>16 ] ) <d b'>16 ( |
+
+\staff "1" \stemDown <gs'' f'>16 -! ) <b gs'>16 [ ( <f d'>16 ] ) <d b'>16 [ ( <gs f'>16 ] ) <a fs'>16 [ ( <ds, c'>16 ] ) <c a'>16 ( \\
+\staff "2" \stemUp <gs f'>16 -! ) <b gs'>16 [ ( <f' d'>16 ] ) <d b'>16 [ ( <gs, f'>16 ] ) <a fs'>16 [ ( <ds c'>16 ] ) <c a'>16 ( |
+
+\staff "1" \stemDown <fs' ds'>16 ) <a fs'>16 [ ( <ds, c'>16 ] ) <d b'>16 [ ( <gs f'>16 ] ) <g e'>16 [ ( <cs, as'>16 ] ) <c a'>16 ( \\
+\staff "2" \stemUp <fs, ds'>16 ) <a fs'>16 [ ( <ds c'>16 ] ) <d b'>16 [ ( <gs, f'>16 ] ) <g e'>16 [ ( <cs as'>16 ] ) <c a'>16 ( |
+
+\staff "1" \stemDown <fs' ds'>16 ) <f d'>16 [ ( <b, gs'>16 ] ) <as g'>16 [ ( <e' cs'>16 ] ) <as, g'>16 [ ( <e' cs'>16 ] ) <as, g'>16 ( \\
+\staff "2" \stemUp <fs, ds'>16 ) <f d'>16 [ ( <b gs'>16 ] ) <as g'>16 [ ( \clef "bass" <e cs'>16 ] ) \stemDown <as g'>16 [ ( <e cs'>16 ] ) <as g'>16 ( |
+
+\staff "1" \stemUp <e' c'>16 ) <as, fs'>16 [ ( <e' c'>16 ] ) <as, fs'>16 [ ( <e' c'>16 ] ) <a, fs'>16 [ ( <e' c'>16 ] ) s16 \\
+\staff "1" \stemDown s4.. <a' fs'>16 ( \\
+\staff "2" \stemDown <e, c'>16 ) <as fs'>16 [ ( <e c'>16 ] ) <as fs'>16 [ ( <e c'>16 ] ) <a fs'>16 [ ( <e c'>16 ] ) <a fs'>16 ( |
+
+\staff "1" \stemUp s8 \sf b'16 [ ( gs16 ] b16 [ a16 fs8 ] -> ) ~ \\
+\staff "1" \stemDown <ds' b'>16 -! ) b16  \rest d,16 [ e16 ] cs16 [ e16 a,16 e'16 ] \\
+\staff "2" \stemDown <b, b'>16 -! ) b16  \rest \stemUp e8 [ ( a,8 ] ) c8 -> ( |
+
+\staff "1" \stemUp fs8 [ b16 ( gs16 ] b16 [ a16 fs8 ] -> ) ~ \\
+\staff "1" \stemDown a16 [ ds16 d16 e16 ] cs16 [ e16 a,16 e'16 ] \\
+\staff "2" \stemDown s4. c,8 \\
+\staff "2" \stemUp b,8 ) \times 2/3 { \stemDown e16 [ ( fs16 e16 ) } \stemDown a,8 ] s8 |
+
+\staff "1" \stemUp fs8 [ gs16 \> ( fs16 ] \p fs16 [ e16 \! cs8 ] -> ) \\
+\staff "2" \stemDown s8 a8 [ gs8 ] g8 \\
+\staff "2" \stemDown b,8 b,8 [ ( e8 ] ) b'8 [ ~ \\
+\staff "2" \stemUp a16 [ ds16 a16 b16 ] gs16 [ b16 g16 -> b16 ] |
+
+\staff "1" \stemUp e16 [ ( ds16 gs16 \> fs16 ] fs16 [ \! e16 cs8 ] -> ) \\
+\staff "2" \stemDown fs,8 a8 [ gs8 ] g8 \\
+\staff "2" \stemDown b,8 \times 2/3 { \stemDown b,16 [ ( cs16 b16 ) } \stemDown e8 ] b'8 [ ~ \\
+\staff "2" \stemUp fs,16 [ b16 a16 b16 ] gs16 [ b16 g16 -> b16 ] |
+
+\staff "1" \stemUp e16 [ ds8 -> cs16 ] e16 [ ds8 -> cs16 ] \\
+\staff "2" \stemDown fs,8 g8 [ fs8 ] g8 \\
+\staff "2" \stemDown b,8 \times 2/3 { \stemDown e,16 [ ( fs16 e16 ) } \stemDown b8 ] b'8 [ ~ \\
+\staff "2" \stemUp fs,16 [ b16 g16 -> b16 ] fs16 [ b16 g16 -> b16 ] |
+
+\staff "1" \stemUp e16 [ ds8 -> cs16 ] e16 [ ds8 -> cs16 ] \\
+\staff "2" \stemDown b,8 \times 2/3 { \stemDown e,16 [ ( fs16 e16 ) } \stemDown b'8 ] ( g'8 [ \\
+\staff "2" \stemUp fs,16 [ b16 g16 -> b16 ] fs16 [ b16 g16 -> b16 ] |
+
+\staff "1" \stemUp <fs, e'>16 [ <b ds>16 <fs e'>16 <b ds>16 ] <fs e'>16 [ <cs' ds>16 <fs, e'>16 <cs' ds>16 ] \\
+\staff "2" \stemDown fs,8 s4. \\
+\staff "2" \stemUp e,,4  \rest e8  \rest \times 2/3 { \stemDown fs16 [ ( gs16 fs16 ] } |
+
+\staff "1" \stemUp <fs, e'>16 [ <a ds>16 <fs e'>16 <a ds>16 ] <fs e'>16 [ <b ds>16 <fs cs'>16 <b ds>16 ] \\
+\staff "2" \stemDown b,,4 ) d4  \rest |
+
+\staff "1" \stemUp e8 [ ds16 e16 ] fs4 ~ \\
+\staff "1" \stemDown s4 ds4 ~ \\
+\staff "2" \stemUp e,,4 b4 \\
+\staff "2" \stemDown e,,16 [ ) b'8 b16 ] b,16 [ b'8 b16 ] \\
+\staff "2" \stemUp gs16 [ b16 gs16 b16 ] a16 [ b16 a16 b16 ] |
+
+\staff "1" \stemUp fs16 [ \< ( gs16 ] ) gs16 [ \! ( fs16 ] \> ) gs4 \! ~ \\
+\staff "1" \stemDown ds8 [ ds8 ] e4 \\
+\staff "2" \stemUp b,,4 e4 \\
+\staff "2" \stemDown b,,16 [ b'8 b16 ] e,16 [ b'8 b16 ] \\
+\staff "2" \stemUp a16 [ b16 a16 b16 ] gs16 [ b16 gs16 b16 ] |
+
+\staff "1" \stemUp gs'16 [ \< ( a16 ] ) a16 [ ( gs16 ] \! ) cs8. [ -> \> ( b16 ] \! ) \\
+\staff "1" \stemDown gs16 [ e'16 b16 e16 ] ds16 [ a'16 b,16 ds16 ] \\
+\staff "2" \stemDown e,,16 [ b'8 b16 ] b,16 [ b'8 b16 ] \\
+\staff "2" \stemUp e,,4 b4 |
+
+\staff "1" \stemUp a'16 [ ( gs16 ds16 e16 ] ) fs4 -> ~ \\
+\staff "1" \stemDown b16 [ e16 gs,16 b16 ] \staff "2" \stemUp <a cs>16 [ <b ds>16 <a cs>16 <b ds>16 ] \\
+\staff "2" \stemDown e,,16 [ b'8 b16 ] b,16 [ b'8 b16 ] \\
+\staff "2" \stemUp e,,4 b4 |
+
+\staff "1" \stemUp fs16 [ \< ( gs16 ] gs16 [ \! \> fs16 ] \! ) e4 -> \\
+\staff "2" \stemUp b,,4 e4 \\
+\staff "2" \stemDown b,,16 [ b'8 b16 ] e,16 [ b'8 b16 ] \\
+\staff "2" \stemUp <a cs>16 [ <b ds>16 <a cs>16 <b ds>16 ] gs16 [ b16 gs16 b16 ] |
+
+\staff "1" \stemUp b'16 [ ( cs16 ] ) cs16 [ \> ( b16 ] ) a16 [ \! ( b16 gs16 a16 ] ) \\
+\staff "1" \stemDown <d fs>16 [ <e gs>16 <d fs>16 <e gs>16 ] cs16 [ e16 cs16 e16 ] \\
+\staff "2" \stemDown e,,16 [ e'8 e16 ] a,16 [ e'8 e16 ] \\
+\staff "2" \stemUp e,,4 a4 |
+
+\staff "1" \stemUp ds'16 [ ( e16 ] ) e16 [ ds16 ] \> cs16 [ \! ( ds16 bs16 cs16 ] ) \\
+\staff "1" \stemDown <fs bs>16 [ gs16 <fs as>16 <gs bs>16 ] e16 [ gs16 e16 gs16 ] \\
+\staff "2" \stemDown gs,16 [ gs'8 gs16 ] cs,16 [ gs'8 gs16 ] \\
+\staff "2" \stemUp gs,4 cs4 |
+
+\staff "1" \stemDown <e as e'>16 [ -. \< ( <fs as fs'>16 -. <ds as' ds>16 -. <e as e'>16 ] -. <fs as fs'>16 [ -. <gs as gs'>16 -. <e as e'>16 -. <fs as fs'>16 ] -. \! ) \\
+\staff "2" \stemDown <cs, e fs as>16 [ <cs e fs as>16 <cs e fs as>16 <cs e fs as>16 ] <c e fs as>16 [ <c e fs as>16 <c e fs as>16 <c e fs as>16 ] |
+
+\staff "1" \stemUp <e' gs>4 ~ \f gs16 [ fs16 \> e16 cs16 ] \! \\
+\staff "1" \stemDown gs'16 [ b16 gs16 b16 ] gs16 [ b16 gs16 b16 ] \\
+\staff "2" \stemDown <b, e gs b>2 |
+
+\staff "1" \stemUp ds'4 -> ( e16 [ ) ( ds16 cs16 gs16 ] ) \\
+\staff "1" \stemDown ds16 [ fs16 ds16 fs16 ] e16 [ gs16 e16 gs16 ] \\
+\staff "2" \stemDown fs,16 [ b16 b,16 b'16 ] cs,16 [ gs'16 gs,16 gs'16 ] |
+
+\staff "1" \stemUp b'4 -> ( cs16 [ ) ( b16 a16 e16 ] ) \\
+\staff "1" \stemDown b16 [ ds16 b16 ds16 ] cs16 [ e16 cs16 e16 ] \\
+\staff "2" \stemDown ds,16 [ gs16 gs,16 gs'16 ] \stemUp a,16 [ e'16 e,16 e'16 ] |
+
+\staff "1" \stemUp gs'4 \< ~ \pp gs16 [ \! \> ( fs16 e16 c16 ] \! ) \\
+\staff "2" \stemUp s8 e,,8 s8 e8 \\
+\staff "2" \stemDown b,16 [ e16 e,16 e'16 ] c16 [ e16 e,16 e'16 ] \\
+\staff "2" \stemUp gs16 [ b16 gs16 b16 ] a16 [ c16 a16 \staff "1" \stemDown c16 ] |
+
+\staff "1" \stemUp gs'4 \< ~ gs16 [ \! \> ( fs16 e16 \! c16 ] ) \\
+\staff "2" \stemUp s8 e,,8 s8 e8 \\
+\staff "2" \stemDown b,16 [ e16 e,16 e'16 ] c16 [ e16 e,16 e'16 ] \\
+\staff "2" \stemUp gs16 [ b16 gs16 b16 ] a16 [ c16 a16 \staff "1" \stemDown c16 ] |
+
+\staff "1" \stemUp gs'2 ~ \\
+\staff "2" \stemUp s8 e,,8 s8 e8 \\
+\staff "2" \stemDown b,16 [ e16 e,16 e'16 ] b16 [ e16 e,16 e'16 ] \\
+\staff "2" \stemUp gs16 [ b16 gs16 b16 ] gs16 [ b16 gs16 b16 ] |
+
+\staff "1" \stemUp gs'4 \< \! ~ gs16 [ ( fs16 \! e16 b16 ] ) \\
+\staff "2" \stemUp s8 e,,4 s8 \\
+\staff "2" \stemDown b,16 [ e16 e,16 e'16 ] b16 [ e16 e,16 b'16 ] ~ \\
+\staff "2" \stemUp gs16 [ b16 gs16 b16 ] gs16 [ b16 gs16 \staff "1" \stemDown b16 ] \> |
+
+\staff "1" \stemUp <gs e'>2 \\
+\staff "2" \stemDown <e,, b'>2 \! |
