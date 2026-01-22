@@ -1,5 +1,5 @@
 \staff "1" \key e \major \time 2/4 \clef "treble" \stemUp b8 \p \\
-\staff "2" \key e \major \clef "bass" g8  \rest |
+\staff "2" \key e \major \clef "bass" g8 \rest |
 
 \staff "1" \stemUp e8 [ ds16 e16 ] fs4 ~ \\
 \staff "1" s4 \stemDown ds4 ~ \\
