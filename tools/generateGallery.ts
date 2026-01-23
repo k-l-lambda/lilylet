@@ -34,6 +34,7 @@ const getCategory = (name: string): string => {
     if (name.startsWith('multiple-')) return 'multiple';
     if (name.startsWith('octaves-')) return 'octaves';
     if (name.startsWith('pedals-')) return 'pedals';
+    if (name.startsWith('pitch-')) return 'pitch';
     if (name.startsWith('rest-')) return 'rest';
     if (name.startsWith('stem-')) return 'stem';
     if (name.startsWith('tempo-')) return 'tempo';
@@ -219,6 +220,7 @@ const html = `<!DOCTYPE html>
         <button class="filter-btn" data-filter="multiple">Multiple</button>
         <button class="filter-btn" data-filter="octaves">Octaves</button>
         <button class="filter-btn" data-filter="pedals">Pedals</button>
+        <button class="filter-btn" data-filter="pitch">Pitch</button>
         <button class="filter-btn" data-filter="rest">Rests</button>
         <button class="filter-btn" data-filter="stem">Stem</button>
         <button class="filter-btn" data-filter="tempo">Tempo</button>
