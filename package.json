@@ -23,6 +23,7 @@
     "build:grammar": "ts-node ./tools/buildJisonParser.ts",
     "prepublishOnly": "npm run build:grammar && npm run build",
     "test": "ts-node ./tests/parser.ts",
+    "test:mei": "ts-node ./tests/mei.ts",
     "ts": "ts-node"
   },
   "repository": {
@@ -35,14 +36,13 @@
   "author": "k.l.lambda",
   "license": "ISC",
   "homepage": "https://github.com/k-l-lambda/lilylet#readme",
-  "dependencies": {
-  },
   "devDependencies": {
     "@types/node": "^20.11.20",
     "@types/yargs": "^17.0.32",
     "jison": "^0.4.18",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
+    "verovio": "^5.7.0",
     "yargs": "^17.7.2"
   }
 }
