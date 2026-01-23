@@ -1,3 +1,8 @@
+[title "Étude Op.10 No.3 in E Major"]
+[composer "Frédéric Chopin"]
+[instrument "Piano"]
+[genre "Romantic"]
+
 \staff "1" \key e \major \time 2/4 \clef "treble" \stemUp b8 \p \\
 \staff "2" \key e \major \clef "bass" g8 \rest |
 

@@ -1,5 +1,5 @@
 
-import { LilyletDoc, Pitch, NoteEvent } from "./types";
+import { LilyletDoc, Pitch, NoteEvent, RestEvent } from "./types";
 
 
 const PHONETS = "cdefgab";
@@ -80,6 +80,12 @@ const resolveDocumentPitches = (doc: LilyletDoc): void => {
 						// Base for next note is first pitch of this chord
 						// env already updated by first resolveRelativePitch call
 					}
+				} else if (event.type === 'rest') {
+					// Rest with pitch (e.g., a''\rest) should update the pitch environment
+					const restEvent = event as RestEvent;
+					if (restEvent.pitch) {
+						resolveRelativePitch(env, restEvent.pitch);
+					}
 				} else if (event.type === 'tuplet') {
 					// Process tuplet events
 					for (const tupletEvent of event.events) {
@@ -93,6 +99,12 @@ const resolveDocumentPitches = (doc: LilyletDoc): void => {
 										resolveRelativePitch(chordEnv, pitches[i]);
 									}
 								}
+							}
+						} else if (tupletEvent.type === 'rest') {
+							// Rest with pitch inside tuplet
+							const restEvent = tupletEvent as RestEvent;
+							if (restEvent.pitch) {
+								resolveRelativePitch(env, restEvent.pitch);
 							}
 						}
 					}
