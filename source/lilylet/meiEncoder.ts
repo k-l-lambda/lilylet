@@ -63,6 +63,10 @@ const CLEF_SHAPES: Record<string, { shape: string; line: number }> = {
 	treble: { shape: "G", line: 2 },
 	bass: { shape: "F", line: 4 },
 	alto: { shape: "C", line: 3 },
+	// Also support uppercase letter clef names
+	G: { shape: "G", line: 2 },
+	F: { shape: "F", line: 4 },
+	C: { shape: "C", line: 3 },
 };
 
 
