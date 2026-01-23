@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { decode } from '../source/lilylet/lilypondDecoder';
+import { serializeLilyletDoc } from '../source/lilylet/serializer';
 
 
 const args = process.argv.slice(2);
@@ -58,11 +59,22 @@ const main = async () => {
 	let failed = 0;
 	const results: { file: string; measures: number; notes: number; error?: string }[] = [];
 
+	// Create json and lyl subdirectories
+	const jsonDir = path.join(OUTPUT_DIR, 'json');
+	const lylDir = path.join(OUTPUT_DIR, 'lyl');
+	if (!fs.existsSync(jsonDir)) {
+		fs.mkdirSync(jsonDir, { recursive: true });
+	}
+	if (!fs.existsSync(lylDir)) {
+		fs.mkdirSync(lylDir, { recursive: true });
+	}
+
 	for (let i = 0; i < lyFiles.length; i++) {
 		const filename = lyFiles[i];
 		const inputPath = path.join(INPUT_DIR, filename);
-		const outputName = filename.replace('.ly', '.json');
-		const outputPath = path.join(OUTPUT_DIR, outputName);
+		const baseName = filename.replace('.ly', '');
+		const jsonPath = path.join(jsonDir, baseName + '.json');
+		const lylPath = path.join(lylDir, baseName + '.lyl');
 
 		try {
 			const source = fs.readFileSync(inputPath, 'utf-8');
@@ -84,9 +96,13 @@ const main = async () => {
 						vsum + v.events.filter(e => e.type === 'note').length, 0), 0), 0);
 
 			// Write output JSON
-			fs.writeFileSync(outputPath, JSON.stringify(doc, null, 2));
+			fs.writeFileSync(jsonPath, JSON.stringify(doc, null, 2));
 
-			console.log(`[${i + 1}/${lyFiles.length}] ✓ ${filename} -> ${outputName} (${measureCount} measures, ${noteCount} notes)`);
+			// Write output .lyl
+			const lylContent = serializeLilyletDoc(doc);
+			fs.writeFileSync(lylPath, lylContent);
+
+			console.log(`[${i + 1}/${lyFiles.length}] ✓ ${filename} -> ${baseName}.json, ${baseName}.lyl (${measureCount} measures, ${noteCount} notes)`);
 			passed++;
 			results.push({ file: filename, measures: measureCount, notes: noteCount });
 		} catch (e) {
@@ -102,7 +118,8 @@ const main = async () => {
 
 	console.log('\n========================================');
 	console.log(`Total: ${lyFiles.length}, Passed: ${passed}, Failed: ${failed}`);
-	console.log(`Output directory: ${OUTPUT_DIR}`);
+	console.log(`JSON output: ${jsonDir}`);
+	console.log(`LYL output: ${lylDir}`);
 
 	// Write summary
 	const summaryPath = path.join(OUTPUT_DIR, '_summary.json');
