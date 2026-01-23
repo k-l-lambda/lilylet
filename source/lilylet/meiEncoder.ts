@@ -202,9 +202,10 @@ const buildNoteElement = (
 		if (stemMod) attrs += ` stem.mod="${stemMod}"`;
 	}
 
+	// Arpeggio is handled as a control event, not inline
 	const hasChildren = !inChord && (
 		(options.artics && options.artics.length > 0) ||
-		options.fermata || options.trill || options.arpeggio ||
+		options.fermata || options.trill ||
 		options.turn || options.mordent
 	);
 
@@ -224,9 +225,7 @@ const buildNoteElement = (
 	if (options.trill) {
 		result += `${indent}    <trill xml:id="${generateId('trill')}" />\n`;
 	}
-	if (options.arpeggio) {
-		result += `${indent}    <arpeg xml:id="${generateId('arpeg')}" />\n`;
-	}
+	// Arpeggio is handled as a control event at measure level, not inline
 	if (options.turn) {
 		result += `${indent}    <turn xml:id="${generateId('turn')}" />\n`;
 	}
@@ -350,14 +349,14 @@ const extractMarkOptions = (marks?: Mark[]): {
 };
 
 
-// Convert NoteEvent to MEI - returns { xml, elementId, hairpin, pedal, hasTieStart, pitches }
+// Convert NoteEvent to MEI - returns { xml, elementId, hairpin, pedal, hasTieStart, pitches, arpeggio }
 const noteEventToMEI = (
 	event: NoteEvent,
 	indent: string,
 	layerStaff?: number,
 	tieEnd?: boolean,
 	contextStemDir?: StemDirection
-): { xml: string; elementId: string; hairpin?: string; pedal?: string; hasTieStart: boolean; pitches: Pitch[] } => {
+): { xml: string; elementId: string; hairpin?: string; pedal?: string; hasTieStart: boolean; pitches: Pitch[]; arpeggio: boolean } => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
 	const markOptions = extractMarkOptions(event.marks);
@@ -417,6 +416,7 @@ const noteEventToMEI = (
 			pedal: markOptions.pedal,
 			hasTieStart: markOptions.tieStart,
 			pitches: event.pitches,
+			arpeggio: markOptions.arpeggio,
 		};
 	}
 
@@ -449,9 +449,7 @@ const noteEventToMEI = (
 	if (noteOptions.trill) {
 		result += `${indent}    <trill xml:id="${generateId('trill')}" />\n`;
 	}
-	if (noteOptions.arpeggio) {
-		result += `${indent}    <arpeg xml:id="${generateId('arpeg')}" />\n`;
-	}
+	// Arpeggio is handled as a control event at measure level, not inline
 	if (noteOptions.turn) {
 		result += `${indent}    <turn xml:id="${generateId('turn')}" />\n`;
 	}
@@ -467,6 +465,7 @@ const noteEventToMEI = (
 		pedal: markOptions.pedal,
 		hasTieStart: markOptions.tieStart,
 		pitches: event.pitches,
+		arpeggio: markOptions.arpeggio,
 	};
 };
 
@@ -572,8 +571,12 @@ interface OctaveSpan {
 	endId: string;
 }
 
-// Encode a layer (voice) - returns xml, hairpin spans, pedal spans, and octave spans
-const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[]; octaves: OctaveSpan[] } => {
+interface ArpegRef {
+	plist: string;  // Reference to chord/notes that have arpeggio
+}
+
+// Encode a layer (voice) - returns xml, hairpin spans, pedal spans, octave spans, and arpeggio refs
+const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[]; octaves: OctaveSpan[]; arpeggios: ArpegRef[] } => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -593,6 +596,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 	let currentOctave: { dis: 8 | 15; disPlace: 'above' | 'below'; startId: string } | null = null;
 	let pendingOttava: number | null = null;  // Track ottava to apply to next note
 	let lastNoteId: string | null = null;  // Track last note id for ending ottava spans
+
+	// Track arpeggio refs
+	const arpeggios: ArpegRef[] = [];
 
 	// Track current stem direction from context changes
 	let currentStemDirection: StemDirection | undefined = undefined;
@@ -677,6 +683,11 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 					});
 					currentPedal = null;
 				}
+
+				// Track arpeggio refs
+				if (result.arpeggio) {
+					arpeggios.push({ plist: result.elementId });
+				}
 				break;
 			}
 			case 'rest':
@@ -740,17 +751,18 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves };
+	return { xml, hairpins, pedals, octaves, arpeggios };
 };
 
 
-// Encode a staff - returns both xml, hairpin spans, pedal spans, and octave spans
-const encodeStaff = (voices: Voice[], staffN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[]; octaves: OctaveSpan[] } => {
+// Encode a staff - returns xml, hairpin spans, pedal spans, octave spans, and arpeggio refs
+const encodeStaff = (voices: Voice[], staffN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[]; octaves: OctaveSpan[]; arpeggios: ArpegRef[] } => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
 	const allPedals: PedalSpan[] = [];
 	const allOctaves: OctaveSpan[] = [];
+	const allArpeggios: ArpegRef[] = [];
 
 	if (voices.length === 0) {
 		xml += `${indent}    <layer xml:id="${generateId('layer')}" n="1" />\n`;
@@ -761,11 +773,12 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): { xml: st
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
 			allOctaves.push(...result.octaves);
+			allArpeggios.push(...result.arpeggios);
 		});
 	}
 
 	xml += `${indent}</staff>\n`;
-	return { xml, hairpins: allHairpins, pedals: allPedals, octaves: allOctaves };
+	return { xml, hairpins: allHairpins, pedals: allPedals, octaves: allOctaves, arpeggios: allArpeggios };
 };
 
 
@@ -805,6 +818,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	const allHairpins: HairpinSpan[] = [];
 	const allPedals: PedalSpan[] = [];
 	const allOctaves: OctaveSpan[] = [];
+	const allArpeggios: ArpegRef[] = [];
 
 	// Extract tempo from context changes
 	let measureTempo: Tempo | undefined;
@@ -837,6 +851,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
 		allOctaves.push(...result.octaves);
+		allArpeggios.push(...result.arpeggios);
 	}
 
 	// Generate tempo element if present
@@ -857,6 +872,11 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	// Generate octave control events
 	for (const oct of allOctaves) {
 		xml += `${indent}    <octave xml:id="${generateId('octave')}" dis="${oct.dis}" dis.place="${oct.disPlace}" startid="#${oct.startId}" endid="#${oct.endId}" />\n`;
+	}
+
+	// Generate arpeggio control events
+	for (const arp of allArpeggios) {
+		xml += `${indent}    <arpeg xml:id="${generateId('arpeg')}" plist="#${arp.plist}" />\n`;
 	}
 
 	xml += `${indent}</measure>\n`;
