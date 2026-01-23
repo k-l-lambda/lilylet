@@ -102,7 +102,7 @@ const ARTIC_MAP: Record<string, string> = {
 	tenuto: "ten",
 	marcato: "marc",
 	accent: "acc",
-	portato: "ten-stacc",
+	portato: "stacc ten",  // Both staccato and tenuto (portato)
 };
 
 
@@ -357,6 +357,7 @@ interface NoteEventResult {
 	trill: boolean;
 	mordent: 'lower' | 'upper' | false;  // lower = mordent, upper = prall
 	turn: boolean;
+	dynamic?: string;  // dynamic marking (p, pp, f, ff, etc.)
 }
 
 // Convert NoteEvent to MEI
@@ -405,18 +406,12 @@ const noteEventToMEI = (
 		tremolo: markOptions.tremolo,
 	};
 
-	// Handle dynamic before note
-	let dynamicXml = '';
-	if (markOptions.dynamic) {
-		dynamicXml = `${indent}<dynam xml:id="${generateId('dynam')}">${markOptions.dynamic}</dynam>\n`;
-	}
-
 	// Single note
 	if (event.pitches.length === 1) {
 		const pitch = encodePitch(event.pitches[0]);
 		const noteId = generateId('note');
 		return {
-			xml: dynamicXml + buildNoteElement(pitch, dur, dots, indent, false, noteOptions, noteId),
+			xml: buildNoteElement(pitch, dur, dots, indent, false, noteOptions, noteId),
 			elementId: noteId,
 			hairpin: markOptions.hairpin,
 			pedal: markOptions.pedal,
@@ -427,6 +422,7 @@ const noteEventToMEI = (
 			trill: markOptions.trill,
 			mordent: markOptions.mordent,
 			turn: markOptions.turn,
+			dynamic: markOptions.dynamic,
 		};
 	}
 
@@ -442,7 +438,7 @@ const noteEventToMEI = (
 	}
 	if (slur) chordAttrs += ` slur="${slur}"`;
 
-	let result = dynamicXml + `${indent}<chord ${chordAttrs}>\n`;
+	let result = `${indent}<chord ${chordAttrs}>\n`;
 
 	for (const p of event.pitches) {
 		const pitch = encodePitch(p);
@@ -479,6 +475,7 @@ const noteEventToMEI = (
 		trill: markOptions.trill,
 		mordent: markOptions.mordent,
 		turn: markOptions.turn,
+		dynamic: markOptions.dynamic,
 	};
 };
 
@@ -606,6 +603,11 @@ interface TurnRef {
 	startid: string;
 }
 
+interface DynamRef {
+	startid: string;
+	label: string;  // p, pp, ppp, f, ff, fff, mf, mp, sfz, rfz
+}
+
 // Layer result type
 interface LayerResult {
 	xml: string;
@@ -617,6 +619,7 @@ interface LayerResult {
 	trills: TrillRef[];
 	mordents: MordentRef[];
 	turns: TurnRef[];
+	dynamics: DynamRef[];
 }
 
 // Encode a layer (voice)
@@ -649,6 +652,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): LayerResult 
 	const trills: TrillRef[] = [];
 	const mordents: MordentRef[] = [];
 	const turns: TurnRef[] = [];
+	const dynamics: DynamRef[] = [];
 
 	// Track current stem direction from context changes
 	let currentStemDirection: StemDirection | undefined = undefined;
@@ -758,6 +762,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): LayerResult 
 				if (result.turn) {
 					turns.push({ startid: result.elementId });
 				}
+				if (result.dynamic) {
+					dynamics.push({ startid: result.elementId, label: result.dynamic });
+				}
 				break;
 			}
 			case 'rest':
@@ -821,7 +828,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): LayerResult 
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, arpeggios, fermatas, trills, mordents, turns };
+	return { xml, hairpins, pedals, octaves, arpeggios, fermatas, trills, mordents, turns, dynamics };
 };
 
 // Staff result type
@@ -835,6 +842,7 @@ interface StaffResult {
 	trills: TrillRef[];
 	mordents: MordentRef[];
 	turns: TurnRef[];
+	dynamics: DynamRef[];
 }
 
 // Encode a staff
@@ -849,6 +857,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): StaffResu
 	const allTrills: TrillRef[] = [];
 	const allMordents: MordentRef[] = [];
 	const allTurns: TurnRef[] = [];
+	const allDynamics: DynamRef[] = [];
 
 	if (voices.length === 0) {
 		xml += `${indent}    <layer xml:id="${generateId('layer')}" n="1" />\n`;
@@ -864,6 +873,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): StaffResu
 			allTrills.push(...result.trills);
 			allMordents.push(...result.mordents);
 			allTurns.push(...result.turns);
+			allDynamics.push(...result.dynamics);
 		});
 	}
 
@@ -878,6 +888,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): StaffResu
 		trills: allTrills,
 		mordents: allMordents,
 		turns: allTurns,
+		dynamics: allDynamics,
 	};
 };
 
@@ -923,6 +934,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	const allTrills: TrillRef[] = [];
 	const allMordents: MordentRef[] = [];
 	const allTurns: TurnRef[] = [];
+	const allDynamics: DynamRef[] = [];
 
 	// Extract tempo from context changes
 	let measureTempo: Tempo | undefined;
@@ -960,6 +972,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 		allTrills.push(...result.trills);
 		allMordents.push(...result.mordents);
 		allTurns.push(...result.turns);
+		allDynamics.push(...result.dynamics);
 	}
 
 	// Generate tempo element if present
@@ -1007,6 +1020,11 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	// Generate turn control events
 	for (const tu of allTurns) {
 		xml += `${indent}    <turn xml:id="${generateId('turn')}" startid="#${tu.startid}" />\n`;
+	}
+
+	// Generate dynamic control events
+	for (const dyn of allDynamics) {
+		xml += `${indent}    <dynam xml:id="${generateId('dynam')}" startid="#${dyn.startid}">${dyn.label}</dynam>\n`;
 	}
 
 	xml += `${indent}</measure>\n`;
