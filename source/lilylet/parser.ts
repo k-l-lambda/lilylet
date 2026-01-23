@@ -24,6 +24,9 @@ interface PitchEnv {
  */
 const resolveRelativePitch = (env: PitchEnv, pitch: Pitch): void => {
 	const step = PHONETS.indexOf(pitch.phonet);
+	if (step === -1) {
+		throw new Error(`Invalid phonet: "${pitch.phonet}". Expected one of: c, d, e, f, g, a, b`);
+	}
 	const interval = step - env.step;
 
 	// Calculate octave adjustment based on interval

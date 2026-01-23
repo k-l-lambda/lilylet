@@ -124,14 +124,17 @@ export interface Hairpin {
 }
 
 export interface Tie {
+	markType: 'tie';
 	start: boolean;
 }
 
 export interface Slur {
+	markType: 'slur';
 	start: boolean;
 }
 
 export interface Beam {
+	markType: 'beam';
 	start: boolean;
 }
 
