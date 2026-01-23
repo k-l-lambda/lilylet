@@ -548,14 +548,15 @@ const serializeEvent = (
 
 
 // Serialize a voice with pitch environment tracking
-const serializeVoice = (voice: Voice): string => {
+// Takes currentStaff (what parser thinks staff is) and returns { str, newStaff }
+const serializeVoice = (voice: Voice, currentStaff: number): { str: string; newStaff: number } => {
 	const parts: string[] = [];
 	let prevDuration: Duration | undefined;
 	// Each voice starts fresh from middle C (step=0, octave=0)
 	let pitchEnv: PitchEnv = { step: 0, octave: 0 };
 
-	// Staff indicator if not staff 1
-	if (voice.staff > 1) {
+	// Output staff command if voice staff differs from current parser staff
+	if (voice.staff !== currentStaff) {
 		parts.push('\\staff "' + voice.staff + '" ');
 	}
 
@@ -575,27 +576,32 @@ const serializeVoice = (voice: Voice): string => {
 		}
 	}
 
-	return parts.join(' ');
+	return { str: parts.join(' '), newStaff: voice.staff };
 };
 
 
-// Serialize a part
-const serializePart = (part: Part): string => {
+// Serialize a part, tracking staff state across voices
+const serializePart = (part: Part, currentStaff: number): { str: string; newStaff: number } => {
 	if (part.voices.length === 0) {
-		return '';
+		return { str: '', newStaff: currentStaff };
 	}
 
-	if (part.voices.length === 1) {
-		return serializeVoice(part.voices[0]);
+	const voiceStrs: string[] = [];
+	let staff = currentStaff;
+
+	for (const voice of part.voices) {
+		const { str, newStaff } = serializeVoice(voice, staff);
+		voiceStrs.push(str);
+		staff = newStaff;
 	}
 
 	// Multiple voices: separated by \\ with newline
-	return part.voices.map(serializeVoice).join(' \\\\\n');
+	return { str: voiceStrs.join(' \\\\\n'), newStaff: staff };
 };
 
 
-// Serialize a measure
-const serializeMeasure = (measure: Measure, isFirst: boolean): string => {
+// Serialize a measure, tracking staff state across parts
+const serializeMeasure = (measure: Measure, isFirst: boolean, currentStaff: number): { str: string; newStaff: number } => {
 	const parts: string[] = [];
 
 	// Key signature (usually only on first measure or when changed)
@@ -614,18 +620,27 @@ const serializeMeasure = (measure: Measure, isFirst: boolean): string => {
 	}
 
 	// Parts
+	let staff = currentStaff;
 	if (measure.parts.length === 1) {
-		const partStr = serializePart(measure.parts[0]);
+		const { str: partStr, newStaff } = serializePart(measure.parts[0], staff);
 		if (partStr) {
 			parts.push(partStr);
 		}
+		staff = newStaff;
 	} else if (measure.parts.length > 1) {
 		// Multiple parts: separated by \\\ with newline
-		const partStrs = measure.parts.map(serializePart).filter(s => s);
+		const partStrs: string[] = [];
+		for (const part of measure.parts) {
+			const { str, newStaff } = serializePart(part, staff);
+			if (str) {
+				partStrs.push(str);
+			}
+			staff = newStaff;
+		}
 		parts.push(partStrs.join(' \\\\\\\\\n'));
 	}
 
-	return parts.join(' ');
+	return { str: parts.join(' '), newStaff: staff };
 };
 
 
@@ -669,12 +684,14 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 	}
 
 	// Measures with bar lines, measure numbers, and double newlines
+	// Track staff state across measures (parser remembers staff across bar lines)
 	const measureStrs: string[] = [];
+	let currentStaff = 1; // Parser starts at staff 1
 	for (let i = 0; i < doc.measures.length; i++) {
-		const measureStr = serializeMeasure(doc.measures[i], i === 0);
-		if (measureStr) {
-			measureStrs.push(measureStr);
-		}
+		const { str: measureStr, newStaff } = serializeMeasure(doc.measures[i], i === 0, currentStaff);
+		// Always include measure, even if empty (use space rest for empty measures)
+		measureStrs.push(measureStr || 's1');
+		currentStaff = newStaff;
 	}
 
 	// Join measures with bar, measure number comment, and double newline

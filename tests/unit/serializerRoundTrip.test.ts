@@ -32,10 +32,43 @@ const isEmptyContextChange = (event: Event): boolean => {
 
 
 /**
- * Filter out empty context changes from events array
+ * Check if a context change only has key or time (from measure-level serialization)
  */
-const filterEvents = (events: Event[]): Event[] => {
-	return events.filter(e => !isEmptyContextChange(e));
+const isKeyOrTimeOnlyContext = (event: Event): boolean => {
+	if (event.type !== 'context') return false;
+	const ctx = event as ContextChange;
+	// Only has key or time, nothing else
+	const hasKey = !!ctx.key;
+	const hasTime = !!ctx.time;
+	const hasOther = !!ctx.clef || !!ctx.tempo || ctx.ottava !== undefined || !!ctx.stemDirection;
+	return (hasKey || hasTime) && !hasOther;
+};
+
+
+/**
+ * Check if an event is a space rest (invisible rest, used for empty measures)
+ */
+const isSpaceRest = (event: Event): boolean => {
+	if (event.type !== 'rest') return false;
+	const rest = event as RestEvent;
+	return !!rest.invisible;
+};
+
+
+/**
+ * Filter out empty context changes and key/time-only context changes from events array
+ * Key/time context changes may come from measure-level properties during serialization
+ * Also filters space rests that were added to preserve empty measures
+ */
+const filterEvents = (events: Event[], isFirstMeasure: boolean = false, filterSpaceRests: boolean = false): Event[] => {
+	return events.filter(e => {
+		if (isEmptyContextChange(e)) return false;
+		// In first measure, key/time context events may come from measure properties
+		if (isFirstMeasure && isKeyOrTimeOnlyContext(e)) return false;
+		// Filter space rests if requested (for comparing with originally empty voices)
+		if (filterSpaceRests && isSpaceRest(e)) return false;
+		return true;
+	});
 };
 
 
@@ -79,14 +112,20 @@ const compareDocs = (original: LilyletDoc, roundTrip: LilyletDoc): string[] => {
 				const origVoice = origPart.voices[v];
 				const rtVoice = rtPart.voices[v];
 
-				// Compare staff
-				if (origVoice.staff !== rtVoice.staff) {
+				// Filter out empty context changes (created by \staff command)
+				// Also filter key/time context in first measure (from measure properties)
+				const isFirstMeasure = m === 0;
+				// If original voice was empty, filter space rests from round-trip
+				// (they were added to preserve empty measures)
+				const origWasEmpty = origVoice.events.length === 0;
+				const origEvents = filterEvents(origVoice.events, isFirstMeasure, false);
+				const rtEvents = filterEvents(rtVoice.events, isFirstMeasure, origWasEmpty);
+
+				// Compare staff (skip for empty voices - staff number is semantically irrelevant)
+				const voiceIsEmpty = origEvents.length === 0 && rtEvents.length === 0;
+				if (origVoice.staff !== rtVoice.staff && !voiceIsEmpty) {
 					diffs.push(`Measure ${m + 1}, Part ${p + 1}, Voice ${v + 1}: staff ${origVoice.staff} vs ${rtVoice.staff}`);
 				}
-
-				// Filter out empty context changes (created by \staff command)
-				const origEvents = filterEvents(origVoice.events);
-				const rtEvents = filterEvents(rtVoice.events);
 
 				// Compare event count
 				if (origEvents.length !== rtEvents.length) {
