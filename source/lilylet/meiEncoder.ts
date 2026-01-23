@@ -608,6 +608,9 @@ interface DynamRef {
 	label: string;  // p, pp, ppp, f, ff, fff, mf, mp, sfz, rfz
 }
 
+// Tie state for cross-measure ties - maps staff:layer to pending pitches
+type TieState = Record<string, Pitch[]>;
+
 // Layer result type
 interface LayerResult {
 	xml: string;
@@ -620,10 +623,11 @@ interface LayerResult {
 	mordents: MordentRef[];
 	turns: TurnRef[];
 	dynamics: DynamRef[];
+	pendingTiePitches: Pitch[];  // For cross-measure tie tracking
 }
 
 // Encode a layer (voice)
-const encodeLayer = (voice: Voice, layerN: number, indent: string): LayerResult => {
+const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = []): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -657,8 +661,8 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): LayerResult 
 	// Track current stem direction from context changes
 	let currentStemDirection: StemDirection | undefined = undefined;
 
-	// Track pending tie pitches (for tie="t" on next note)
-	let pendingTiePitches: Pitch[] = [];
+	// Track pending tie pitches (for tie="t" on next note) - initialized from previous measure
+	let pendingTiePitches: Pitch[] = [...initialTiePitches];
 
 	// Helper to check if pitches match for tie continuation
 	const pitchesMatch = (p1: Pitch[], p2: Pitch[]): boolean => {
@@ -828,7 +832,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): LayerResult 
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, arpeggios, fermatas, trills, mordents, turns, dynamics };
+	return { xml, hairpins, pedals, octaves, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches };
 };
 
 // Staff result type
@@ -843,10 +847,11 @@ interface StaffResult {
 	mordents: MordentRef[];
 	turns: TurnRef[];
 	dynamics: DynamRef[];
+	pendingTies: TieState;  // For cross-measure tie tracking
 }
 
 // Encode a staff
-const encodeStaff = (voices: Voice[], staffN: number, indent: string): StaffResult => {
+const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}): StaffResult => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -858,12 +863,16 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): StaffResu
 	const allMordents: MordentRef[] = [];
 	const allTurns: TurnRef[] = [];
 	const allDynamics: DynamRef[] = [];
+	const pendingTies: TieState = {};
 
 	if (voices.length === 0) {
 		xml += `${indent}    <layer xml:id="${generateId('layer')}" n="1" />\n`;
 	} else {
 		voices.forEach((voice, vi) => {
-			const result = encodeLayer(voice, vi + 1, indent + '    ');
+			const layerN = vi + 1;
+			const tieKey = `${staffN}-${layerN}`;
+			const initialTies = tieState[tieKey] || [];
+			const result = encodeLayer(voice, layerN, indent + '    ', initialTies);
 			xml += result.xml;
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
@@ -874,6 +883,10 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): StaffResu
 			allMordents.push(...result.mordents);
 			allTurns.push(...result.turns);
 			allDynamics.push(...result.dynamics);
+			// Track pending ties for this layer
+			if (result.pendingTiePitches.length > 0) {
+				pendingTies[tieKey] = result.pendingTiePitches;
+			}
 		});
 	}
 
@@ -889,6 +902,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): StaffResu
 		mordents: allMordents,
 		turns: allTurns,
 		dynamics: allDynamics,
+		pendingTies,
 	};
 };
 
@@ -923,7 +937,8 @@ const generateTempoElement = (tempo: Tempo, indent: string): string => {
 };
 
 // Encode a measure
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxStaff: number): string => {
+// encodeMeasure accepts a mutable tieState that persists across measures
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxStaff: number, tieState: TieState): string => {
 	const measureId = generateId("measure");
 	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -959,10 +974,10 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 		voicesByStaff[staffNum].push(voice);
 	}
 
-	// Encode each staff
+	// Encode each staff, passing and updating tie state
 	for (let si = 1; si <= maxStaff; si++) {
 		const voices = voicesByStaff[si] || [];
-		const result = encodeStaff(voices, si, indent + '    ');
+		const result = encodeStaff(voices, si, indent + '    ', tieState);
 		xml += result.xml;
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
@@ -973,6 +988,8 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 		allMordents.push(...result.mordents);
 		allTurns.push(...result.turns);
 		allDynamics.push(...result.dynamics);
+		// Update tie state with pending ties from this staff
+		Object.assign(tieState, result.pendingTies);
 	}
 
 	// Generate tempo element if present
@@ -1164,9 +1181,12 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, maxStaff, staffClefs, `${indent}${indent}${indent}${indent}${indent}`);
 	mei += `${indent}${indent}${indent}${indent}${indent}<section xml:id="${generateId("section")}">\n`;
 
+	// Track tie state across measures for cross-measure ties
+	const tieState: TieState = {};
+
 	// Encode measures
 	doc.measures.forEach((measure, mi) => {
-		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, maxStaff);
+		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, maxStaff, tieState);
 	});
 
 	mei += `${indent}${indent}${indent}${indent}${indent}</section>\n`;
