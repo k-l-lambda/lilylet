@@ -1,6 +1,8 @@
 [title "An Example Lilylet File"]
 [subtitle "Demonstrating Headers"]
 [composer "Calvin X"]
+[arranger "Claude Opus"]
+[lyricist "Claude Sonnet"]
 [opus "1"]
 [instrument "Piano"]
 [genre "Modern"]

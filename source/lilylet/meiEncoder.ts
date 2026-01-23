@@ -1128,6 +1128,26 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	const title = doc.metadata?.title || "Lilylet Export";
 	mei += `${indent}${indent}${indent}${indent}<title>${escapeXml(title)}</title>\n`;
 
+	// Add subtitle as second title (verovio reads subsequent titles as subtitle)
+	if (doc.metadata?.subtitle) {
+		mei += `${indent}${indent}${indent}${indent}<title>${escapeXml(doc.metadata.subtitle)}</title>\n`;
+	}
+
+	// Add composer (right-aligned in verovio)
+	if (doc.metadata?.composer) {
+		mei += `${indent}${indent}${indent}${indent}<composer>${escapeXml(doc.metadata.composer)}</composer>\n`;
+	}
+
+	// Add arranger (right-aligned in verovio)
+	if (doc.metadata?.arranger) {
+		mei += `${indent}${indent}${indent}${indent}<arranger>${escapeXml(doc.metadata.arranger)}</arranger>\n`;
+	}
+
+	// Add lyricist (left-aligned in verovio)
+	if (doc.metadata?.lyricist) {
+		mei += `${indent}${indent}${indent}${indent}<lyricist>${escapeXml(doc.metadata.lyricist)}</lyricist>\n`;
+	}
+
 	mei += `${indent}${indent}${indent}</titleStmt>\n`;
 	mei += `${indent}${indent}${indent}<pubStmt />\n`;
 	mei += `${indent}${indent}</fileDesc>\n`;

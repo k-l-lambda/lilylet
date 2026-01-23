@@ -222,6 +222,8 @@ export interface Metadata {
 	title?: string;
 	subtitle?: string;
 	composer?: string;
+	arranger?: string;
+	lyricist?: string;
 	opus?: string;
 	instrument?: string;
 	genre?: string;

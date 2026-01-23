@@ -143,6 +143,8 @@
 \[title							return 'HEADER_TITLE'
 \[subtitle						return 'HEADER_SUBTITLE'
 \[composer						return 'HEADER_COMPOSER'
+\[arranger						return 'HEADER_ARRANGER'
+\[lyricist						return 'HEADER_LYRICIST'
 \[opus							return 'HEADER_OPUS'
 \[instrument					return 'HEADER_INSTRUMENT'
 \[genre							return 'HEADER_GENRE'
@@ -265,6 +267,8 @@ header
 	: HEADER_TITLE STRING ']'					-> ({ title: $2.slice(1, -1) })
 	| HEADER_SUBTITLE STRING ']'				-> ({ subtitle: $2.slice(1, -1) })
 	| HEADER_COMPOSER STRING ']'				-> ({ composer: $2.slice(1, -1) })
+	| HEADER_ARRANGER STRING ']'				-> ({ arranger: $2.slice(1, -1) })
+	| HEADER_LYRICIST STRING ']'				-> ({ lyricist: $2.slice(1, -1) })
 	| HEADER_OPUS STRING ']'					-> ({ opus: $2.slice(1, -1) })
 	| HEADER_INSTRUMENT STRING ']'				-> ({ instrument: $2.slice(1, -1) })
 	| HEADER_GENRE STRING ']'					-> ({ genre: $2.slice(1, -1) })
