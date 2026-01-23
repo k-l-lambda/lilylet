@@ -172,12 +172,7 @@ const buildNoteElement = (
 		staff?: number;
 		layerStaff?: number;
 		slur?: string;
-		artics?: string[];
-		fermata?: 'normal' | 'short' | false;
-		trill?: boolean;
-		arpeggio?: boolean;
-		turn?: boolean;
-		mordent?: boolean;
+		artics?: { type: string; placement?: 'above' | 'below' }[];
 		tremolo?: number;
 	} = {},
 	noteId?: string
@@ -202,12 +197,8 @@ const buildNoteElement = (
 		if (stemMod) attrs += ` stem.mod="${stemMod}"`;
 	}
 
-	// Arpeggio is handled as a control event, not inline
-	const hasChildren = !inChord && (
-		(options.artics && options.artics.length > 0) ||
-		options.fermata || options.trill ||
-		options.turn || options.mordent
-	);
+	// Only artics remain as child elements; ornaments are control events
+	const hasChildren = !inChord && options.artics && options.artics.length > 0;
 
 	if (!hasChildren) {
 		return `${indent}<note ${attrs} />\n`;
@@ -216,21 +207,20 @@ const buildNoteElement = (
 	let result = `${indent}<note ${attrs}>\n`;
 
 	if (options.artics && options.artics.length > 0) {
-		result += `${indent}    <artic artic="${options.artics.join(' ')}" />\n`;
-	}
-	if (options.fermata) {
-		const fermataAttrs = options.fermata === 'short' ? ` shape="angular"` : '';
-		result += `${indent}    <fermata xml:id="${generateId('fermata')}"${fermataAttrs} />\n`;
-	}
-	if (options.trill) {
-		result += `${indent}    <trill xml:id="${generateId('trill')}" />\n`;
-	}
-	// Arpeggio is handled as a control event at measure level, not inline
-	if (options.turn) {
-		result += `${indent}    <turn xml:id="${generateId('turn')}" />\n`;
-	}
-	if (options.mordent) {
-		result += `${indent}    <mordent xml:id="${generateId('mordent')}" />\n`;
+		// Group artics by placement
+		const aboveArtics = options.artics.filter(a => a.placement === 'above').map(a => a.type);
+		const belowArtics = options.artics.filter(a => a.placement === 'below').map(a => a.type);
+		const defaultArtics = options.artics.filter(a => !a.placement).map(a => a.type);
+
+		if (aboveArtics.length > 0) {
+			result += `${indent}    <artic artic="${aboveArtics.join(' ')}" place="above" />\n`;
+		}
+		if (belowArtics.length > 0) {
+			result += `${indent}    <artic artic="${belowArtics.join(' ')}" place="below" />\n`;
+		}
+		if (defaultArtics.length > 0) {
+			result += `${indent}    <artic artic="${defaultArtics.join(' ')}" />\n`;
+		}
 	}
 
 	result += `${indent}</note>\n`;
@@ -240,12 +230,12 @@ const buildNoteElement = (
 
 // Extract mark properties from note event
 const extractMarkOptions = (marks?: Mark[]): {
-	artics: string[];
+	artics: { type: string; placement?: 'above' | 'below' }[];
 	fermata: 'normal' | 'short' | false;
 	trill: boolean;
 	arpeggio: boolean;
 	turn: boolean;
-	mordent: boolean;
+	mordent: 'lower' | 'upper' | false;  // lower = mordent, upper = prall
 	slurStart: boolean;
 	slurEnd: boolean;
 	tieStart: boolean;
@@ -257,12 +247,12 @@ const extractMarkOptions = (marks?: Mark[]): {
 	tremolo?: number;
 } => {
 	const result = {
-		artics: [] as string[],
+		artics: [] as { type: string; placement?: 'above' | 'below' }[],
 		fermata: false as 'normal' | 'short' | false,
 		trill: false,
 		arpeggio: false,
 		turn: false,
-		mordent: false,
+		mordent: false as 'lower' | 'upper' | false,  // lower = mordent, upper = prall
 		slurStart: false,
 		slurEnd: false,
 		tieStart: false,
@@ -279,7 +269,10 @@ const extractMarkOptions = (marks?: Mark[]): {
 	for (const mark of marks) {
 		// Articulations
 		if ('type' in mark && ARTIC_MAP[(mark as any).type]) {
-			result.artics.push(ARTIC_MAP[(mark as any).type]);
+			result.artics.push({
+				type: ARTIC_MAP[(mark as any).type],
+				placement: (mark as any).placement,
+			});
 		}
 
 		// Ornaments
@@ -294,8 +287,10 @@ const extractMarkOptions = (marks?: Mark[]): {
 			result.arpeggio = true;
 		} else if (ornamentType === OrnamentType.turn) {
 			result.turn = true;
-		} else if (ornamentType === OrnamentType.mordent || ornamentType === OrnamentType.prall) {
-			result.mordent = true;
+		} else if (ornamentType === OrnamentType.mordent) {
+			result.mordent = 'lower';
+		} else if (ornamentType === OrnamentType.prall) {
+			result.mordent = 'upper';
 		}
 
 		// Dynamics
@@ -349,14 +344,29 @@ const extractMarkOptions = (marks?: Mark[]): {
 };
 
 
-// Convert NoteEvent to MEI - returns { xml, elementId, hairpin, pedal, hasTieStart, pitches, arpeggio }
+// NoteEventResult - return type for noteEventToMEI
+interface NoteEventResult {
+	xml: string;
+	elementId: string;
+	hairpin?: string;
+	pedal?: string;
+	hasTieStart: boolean;
+	pitches: Pitch[];
+	arpeggio: boolean;
+	fermata: 'normal' | 'short' | false;
+	trill: boolean;
+	mordent: 'lower' | 'upper' | false;  // lower = mordent, upper = prall
+	turn: boolean;
+}
+
+// Convert NoteEvent to MEI
 const noteEventToMEI = (
 	event: NoteEvent,
 	indent: string,
 	layerStaff?: number,
 	tieEnd?: boolean,
 	contextStemDir?: StemDirection
-): { xml: string; elementId: string; hairpin?: string; pedal?: string; hasTieStart: boolean; pitches: Pitch[]; arpeggio: boolean } => {
+): NoteEventResult => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
 	const markOptions = extractMarkOptions(event.marks);
@@ -383,6 +393,7 @@ const noteEventToMEI = (
 		tie = 't';  // End only = terminal
 	}
 
+	// Note options - ornaments are now control events, not inline
 	const noteOptions = {
 		grace: event.grace,
 		tie,
@@ -391,11 +402,6 @@ const noteEventToMEI = (
 		layerStaff,
 		slur,
 		artics: markOptions.artics,
-		fermata: markOptions.fermata,
-		trill: markOptions.trill,
-		arpeggio: markOptions.arpeggio,
-		turn: markOptions.turn,
-		mordent: markOptions.mordent,
 		tremolo: markOptions.tremolo,
 	};
 
@@ -417,6 +423,10 @@ const noteEventToMEI = (
 			hasTieStart: markOptions.tieStart,
 			pitches: event.pitches,
 			arpeggio: markOptions.arpeggio,
+			fermata: markOptions.fermata,
+			trill: markOptions.trill,
+			mordent: markOptions.mordent,
+			turn: markOptions.turn,
 		};
 	}
 
@@ -439,22 +449,21 @@ const noteEventToMEI = (
 		result += buildNoteElement(pitch, dur, dots, indent + '    ', true);
 	}
 
+	// Artics for chord - group by placement
 	if (noteOptions.artics.length > 0) {
-		result += `${indent}    <artic artic="${noteOptions.artics.join(' ')}" />\n`;
-	}
-	if (noteOptions.fermata) {
-		const fermataAttrs = noteOptions.fermata === 'short' ? ` shape="angular"` : '';
-		result += `${indent}    <fermata xml:id="${generateId('fermata')}"${fermataAttrs} />\n`;
-	}
-	if (noteOptions.trill) {
-		result += `${indent}    <trill xml:id="${generateId('trill')}" />\n`;
-	}
-	// Arpeggio is handled as a control event at measure level, not inline
-	if (noteOptions.turn) {
-		result += `${indent}    <turn xml:id="${generateId('turn')}" />\n`;
-	}
-	if (noteOptions.mordent) {
-		result += `${indent}    <mordent xml:id="${generateId('mordent')}" />\n`;
+		const aboveArtics = noteOptions.artics.filter(a => a.placement === 'above').map(a => a.type);
+		const belowArtics = noteOptions.artics.filter(a => a.placement === 'below').map(a => a.type);
+		const defaultArtics = noteOptions.artics.filter(a => !a.placement).map(a => a.type);
+
+		if (aboveArtics.length > 0) {
+			result += `${indent}    <artic artic="${aboveArtics.join(' ')}" place="above" />\n`;
+		}
+		if (belowArtics.length > 0) {
+			result += `${indent}    <artic artic="${belowArtics.join(' ')}" place="below" />\n`;
+		}
+		if (defaultArtics.length > 0) {
+			result += `${indent}    <artic artic="${defaultArtics.join(' ')}" />\n`;
+		}
 	}
 
 	result += `${indent}</chord>\n`;
@@ -466,6 +475,10 @@ const noteEventToMEI = (
 		hasTieStart: markOptions.tieStart,
 		pitches: event.pitches,
 		arpeggio: markOptions.arpeggio,
+		fermata: markOptions.fermata,
+		trill: markOptions.trill,
+		mordent: markOptions.mordent,
+		turn: markOptions.turn,
 	};
 };
 
@@ -575,8 +588,39 @@ interface ArpegRef {
 	plist: string;  // Reference to chord/notes that have arpeggio
 }
 
-// Encode a layer (voice) - returns xml, hairpin spans, pedal spans, octave spans, and arpeggio refs
-const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[]; octaves: OctaveSpan[]; arpeggios: ArpegRef[] } => {
+interface FermataRef {
+	startid: string;
+	shape?: 'angular';  // For short fermata
+}
+
+interface TrillRef {
+	startid: string;
+}
+
+interface MordentRef {
+	startid: string;
+	form?: 'upper';  // prall = upper mordent
+}
+
+interface TurnRef {
+	startid: string;
+}
+
+// Layer result type
+interface LayerResult {
+	xml: string;
+	hairpins: HairpinSpan[];
+	pedals: PedalSpan[];
+	octaves: OctaveSpan[];
+	arpeggios: ArpegRef[];
+	fermatas: FermataRef[];
+	trills: TrillRef[];
+	mordents: MordentRef[];
+	turns: TurnRef[];
+}
+
+// Encode a layer (voice)
+const encodeLayer = (voice: Voice, layerN: number, indent: string): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -599,6 +643,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 
 	// Track arpeggio refs
 	const arpeggios: ArpegRef[] = [];
+
+	// Track ornament refs
+	const fermatas: FermataRef[] = [];
+	const trills: TrillRef[] = [];
+	const mordents: MordentRef[] = [];
+	const turns: TurnRef[] = [];
 
 	// Track current stem direction from context changes
 	let currentStemDirection: StemDirection | undefined = undefined;
@@ -688,6 +738,26 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 				if (result.arpeggio) {
 					arpeggios.push({ plist: result.elementId });
 				}
+
+				// Track ornament refs (fermata, trill, mordent, turn)
+				if (result.fermata) {
+					fermatas.push({
+						startid: result.elementId,
+						shape: result.fermata === 'short' ? 'angular' : undefined,
+					});
+				}
+				if (result.trill) {
+					trills.push({ startid: result.elementId });
+				}
+				if (result.mordent) {
+					mordents.push({
+						startid: result.elementId,
+						form: result.mordent === 'upper' ? 'upper' : undefined,
+					});
+				}
+				if (result.turn) {
+					turns.push({ startid: result.elementId });
+				}
 				break;
 			}
 			case 'rest':
@@ -751,18 +821,34 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, arpeggios };
+	return { xml, hairpins, pedals, octaves, arpeggios, fermatas, trills, mordents, turns };
 };
 
+// Staff result type
+interface StaffResult {
+	xml: string;
+	hairpins: HairpinSpan[];
+	pedals: PedalSpan[];
+	octaves: OctaveSpan[];
+	arpeggios: ArpegRef[];
+	fermatas: FermataRef[];
+	trills: TrillRef[];
+	mordents: MordentRef[];
+	turns: TurnRef[];
+}
 
-// Encode a staff - returns xml, hairpin spans, pedal spans, octave spans, and arpeggio refs
-const encodeStaff = (voices: Voice[], staffN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[]; octaves: OctaveSpan[]; arpeggios: ArpegRef[] } => {
+// Encode a staff
+const encodeStaff = (voices: Voice[], staffN: number, indent: string): StaffResult => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
 	const allPedals: PedalSpan[] = [];
 	const allOctaves: OctaveSpan[] = [];
 	const allArpeggios: ArpegRef[] = [];
+	const allFermatas: FermataRef[] = [];
+	const allTrills: TrillRef[] = [];
+	const allMordents: MordentRef[] = [];
+	const allTurns: TurnRef[] = [];
 
 	if (voices.length === 0) {
 		xml += `${indent}    <layer xml:id="${generateId('layer')}" n="1" />\n`;
@@ -774,11 +860,25 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): { xml: st
 			allPedals.push(...result.pedals);
 			allOctaves.push(...result.octaves);
 			allArpeggios.push(...result.arpeggios);
+			allFermatas.push(...result.fermatas);
+			allTrills.push(...result.trills);
+			allMordents.push(...result.mordents);
+			allTurns.push(...result.turns);
 		});
 	}
 
 	xml += `${indent}</staff>\n`;
-	return { xml, hairpins: allHairpins, pedals: allPedals, octaves: allOctaves, arpeggios: allArpeggios };
+	return {
+		xml,
+		hairpins: allHairpins,
+		pedals: allPedals,
+		octaves: allOctaves,
+		arpeggios: allArpeggios,
+		fermatas: allFermatas,
+		trills: allTrills,
+		mordents: allMordents,
+		turns: allTurns,
+	};
 };
 
 
@@ -819,6 +919,10 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	const allPedals: PedalSpan[] = [];
 	const allOctaves: OctaveSpan[] = [];
 	const allArpeggios: ArpegRef[] = [];
+	const allFermatas: FermataRef[] = [];
+	const allTrills: TrillRef[] = [];
+	const allMordents: MordentRef[] = [];
+	const allTurns: TurnRef[] = [];
 
 	// Extract tempo from context changes
 	let measureTempo: Tempo | undefined;
@@ -852,6 +956,10 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 		allPedals.push(...result.pedals);
 		allOctaves.push(...result.octaves);
 		allArpeggios.push(...result.arpeggios);
+		allFermatas.push(...result.fermatas);
+		allTrills.push(...result.trills);
+		allMordents.push(...result.mordents);
+		allTurns.push(...result.turns);
 	}
 
 	// Generate tempo element if present
@@ -877,6 +985,28 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	// Generate arpeggio control events
 	for (const arp of allArpeggios) {
 		xml += `${indent}    <arpeg xml:id="${generateId('arpeg')}" plist="#${arp.plist}" />\n`;
+	}
+
+	// Generate fermata control events
+	for (const ferm of allFermatas) {
+		const shapeAttr = ferm.shape ? ` shape="${ferm.shape}"` : '';
+		xml += `${indent}    <fermata xml:id="${generateId('fermata')}" startid="#${ferm.startid}"${shapeAttr} />\n`;
+	}
+
+	// Generate trill control events
+	for (const tr of allTrills) {
+		xml += `${indent}    <trill xml:id="${generateId('trill')}" startid="#${tr.startid}" />\n`;
+	}
+
+	// Generate mordent control events
+	for (const mord of allMordents) {
+		const formAttr = mord.form ? ` form="${mord.form}"` : '';
+		xml += `${indent}    <mordent xml:id="${generateId('mordent')}" startid="#${mord.startid}"${formAttr} />\n`;
+	}
+
+	// Generate turn control events
+	for (const tu of allTurns) {
+		xml += `${indent}    <turn xml:id="${generateId('turn')}" startid="#${tu.startid}" />\n`;
 	}
 
 	xml += `${indent}</measure>\n`;

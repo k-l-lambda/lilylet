@@ -78,7 +78,7 @@
 	});
 
 	// Articulation/mark helpers
-	const articulation = (type) => ({ type });
+	const articulation = (type, placement) => ({ type, placement });
 	const ornament = (type) => ({ type });
 	const dynamic = (type) => ({ type });
 	const hairpin = (type) => ({ type });
@@ -508,6 +508,6 @@ tremolo_mark
 	;
 
 direction_mark
-	: '^' post_event							-> $2
-	| '_' post_event							-> $2
+	: '^' post_event							-> ({ ...$2, placement: 'above' })
+	| '_' post_event							-> ({ ...$2, placement: 'below' })
 	;

@@ -97,10 +97,18 @@ export interface Duration {
 	tuplet?: Fraction; // e.g., {numerator: 2, denominator: 3} for triplet
 }
 
+// === Placement Direction ===
+
+export enum Placement {
+	above = 'above',
+	below = 'below',
+}
+
 // === Expressive Marks ===
 
 export interface Articulation {
 	type: ArticulationType;
+	placement?: Placement;
 }
 
 export interface Ornament {
