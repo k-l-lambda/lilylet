@@ -1,15 +1,635 @@
 
-import { LilyletDoc } from "./types";
+import {
+	LilyletDoc,
+	Measure,
+	Voice,
+	NoteEvent,
+	RestEvent,
+	ContextChange,
+	TupletEvent,
+	Pitch,
+	Clef,
+	Accidental,
+	OrnamentType,
+	StemDirection,
+	Mark,
+} from "./types";
 
 
-
-const encode = (doc: LilyletDoc): string => {
-	// TODO: implement MEI encoding
-	throw new Error("meiEncoder.encode not implemented");
+// MEI key signatures: positive = sharps, negative = flats
+const KEY_SIGS: Record<number, string> = {
+	0: "0",
+	1: "1s",
+	2: "2s",
+	3: "3s",
+	4: "4s",
+	5: "5s",
+	6: "6s",
+	7: "7s",
+	[-1]: "1f",
+	[-2]: "2f",
+	[-3]: "3f",
+	[-4]: "4f",
+	[-5]: "5f",
+	[-6]: "6f",
+	[-7]: "7f",
 };
 
+
+// Key signature to fifths number
+const keyToFifths = (key?: { pitch: string; accidental?: Accidental; mode: string }): number => {
+	if (!key) return 0;
+
+	// Major keys
+	const majorKeys: Record<string, number> = {
+		'c': 0, 'd': 2, 'e': 4, 'f': -1, 'g': 1, 'a': 3, 'b': 5,
+	};
+
+	let fifths = majorKeys[key.pitch] || 0;
+
+	if (key.accidental === Accidental.sharp) fifths += 7;
+	else if (key.accidental === Accidental.flat) fifths -= 7;
+
+	if (key.mode === 'minor') fifths -= 3;
+
+	return fifths;
+};
+
+
+const CLEF_SHAPES: Record<string, { shape: string; line: number }> = {
+	treble: { shape: "G", line: 2 },
+	bass: { shape: "F", line: 4 },
+	alto: { shape: "C", line: 3 },
+};
+
+
+// Lilylet duration division to MEI dur
+// division: 1=whole, 2=half, 4=quarter, 8=eighth, etc.
+const DURATIONS: Record<number, string> = {
+	1: "1",      // whole
+	2: "2",      // half
+	4: "4",      // quarter
+	8: "8",      // eighth
+	16: "16",
+	32: "32",
+	64: "64",
+	128: "128",
+};
+
+
+// Accidental mapping
+const ACCIDENTALS: Record<string, string> = {
+	natural: "n",
+	sharp: "s",
+	flat: "f",
+	doubleSharp: "x",
+	doubleFlat: "ff",
+};
+
+
+// Articulation to MEI artic
+const ARTIC_MAP: Record<string, string> = {
+	staccato: "stacc",
+	staccatissimo: "stacciss",
+	tenuto: "ten",
+	marcato: "marc",
+	accent: "acc",
+	portato: "ten-stacc",
+};
+
+
+// Dynamic to MEI
+const DYNAMIC_MAP: Record<string, string> = {
+	ppp: "ppp",
+	pp: "pp",
+	p: "p",
+	mp: "mp",
+	mf: "mf",
+	f: "f",
+	ff: "ff",
+	fff: "fff",
+	sfz: "sfz",
+	rfz: "rfz",
+};
+
+
+let idCounter = 0;
+
+const generateId = (prefix: string): string => {
+	return `${prefix}-${String(++idCounter).padStart(10, "0")}`;
+};
+
+const resetIdCounter = (): void => {
+	idCounter = 0;
+};
+
+
+interface MEIEncoderOptions {
+	indent?: string;
+	xmlDeclaration?: boolean;
+}
+
+
+// Convert Pitch to MEI attributes
+const encodePitch = (pitch: Pitch): { pname: string; oct: number; accid?: string } => {
+	// Lilylet octave: 0 = middle C octave (C4), positive = higher, negative = lower
+	const oct = 4 + pitch.octave;
+	const accid = pitch.accidental ? ACCIDENTALS[pitch.accidental] : undefined;
+
+	return { pname: pitch.phonet, oct, accid };
+};
+
+
+// Build note element
+const buildNoteElement = (
+	pitch: { pname: string; oct: number; accid?: string },
+	dur: string,
+	dots: number,
+	indent: string,
+	inChord: boolean,
+	options: {
+		grace?: boolean;
+		tie?: 'i' | 'm' | 't';
+		stemDir?: string;
+		staff?: number;
+		layerStaff?: number;
+		slur?: string;
+		artics?: string[];
+		fermata?: boolean;
+		trill?: boolean;
+		arpeggio?: boolean;
+		turn?: boolean;
+		mordent?: boolean;
+	} = {}
+): string => {
+	let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
+
+	if (!inChord) {
+		attrs += ` dur="${dur}"`;
+	}
+	if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+	if (!inChord && dots > 0) attrs += ` dots="${dots}"`;
+	if (!inChord && options.grace) attrs += ` grace="unacc"`;
+	if (!inChord && options.tie) attrs += ` tie="${options.tie}"`;
+	if (!inChord && options.stemDir) attrs += ` stem.dir="${options.stemDir}"`;
+	if (!inChord && options.layerStaff && options.staff && options.staff !== options.layerStaff) {
+		attrs += ` staff="${options.staff}"`;
+	}
+	if (!inChord && options.slur) attrs += ` slur="${options.slur}"`;
+
+	const hasChildren = !inChord && (
+		(options.artics && options.artics.length > 0) ||
+		options.fermata || options.trill || options.arpeggio ||
+		options.turn || options.mordent
+	);
+
+	if (!hasChildren) {
+		return `${indent}<note ${attrs} />\n`;
+	}
+
+	let result = `${indent}<note ${attrs}>\n`;
+
+	if (options.artics && options.artics.length > 0) {
+		result += `${indent}    <artic artic="${options.artics.join(' ')}" />\n`;
+	}
+	if (options.fermata) {
+		result += `${indent}    <fermata xml:id="${generateId('fermata')}" />\n`;
+	}
+	if (options.trill) {
+		result += `${indent}    <trill xml:id="${generateId('trill')}" />\n`;
+	}
+	if (options.arpeggio) {
+		result += `${indent}    <arpeg xml:id="${generateId('arpeg')}" />\n`;
+	}
+	if (options.turn) {
+		result += `${indent}    <turn xml:id="${generateId('turn')}" />\n`;
+	}
+	if (options.mordent) {
+		result += `${indent}    <mordent xml:id="${generateId('mordent')}" />\n`;
+	}
+
+	result += `${indent}</note>\n`;
+	return result;
+};
+
+
+// Extract mark properties from note event
+const extractMarkOptions = (marks?: Mark[]): {
+	artics: string[];
+	fermata: boolean;
+	trill: boolean;
+	arpeggio: boolean;
+	turn: boolean;
+	mordent: boolean;
+	slurStart: boolean;
+	slurEnd: boolean;
+	tieStart: boolean;
+	dynamic?: string;
+	hairpin?: string;
+} => {
+	const result = {
+		artics: [] as string[],
+		fermata: false,
+		trill: false,
+		arpeggio: false,
+		turn: false,
+		mordent: false,
+		slurStart: false,
+		slurEnd: false,
+		tieStart: false,
+		dynamic: undefined as string | undefined,
+		hairpin: undefined as string | undefined,
+	};
+
+	if (!marks) return result;
+
+	for (const mark of marks) {
+		// Articulations
+		if ('type' in mark && ARTIC_MAP[(mark as any).type]) {
+			result.artics.push(ARTIC_MAP[(mark as any).type]);
+		}
+
+		// Ornaments
+		const ornamentType = (mark as any).type;
+		if (ornamentType === OrnamentType.fermata || ornamentType === OrnamentType.shortFermata) {
+			result.fermata = true;
+		} else if (ornamentType === OrnamentType.trill) {
+			result.trill = true;
+		} else if (ornamentType === OrnamentType.arpeggio) {
+			result.arpeggio = true;
+		} else if (ornamentType === OrnamentType.turn) {
+			result.turn = true;
+		} else if (ornamentType === OrnamentType.mordent || ornamentType === OrnamentType.prall) {
+			result.mordent = true;
+		}
+
+		// Dynamics
+		if (DYNAMIC_MAP[ornamentType]) {
+			result.dynamic = DYNAMIC_MAP[ornamentType];
+		}
+
+		// Slurs
+		if ('start' in mark && (mark as any).start !== undefined) {
+			const slurMark = mark as { start: boolean };
+			if ('type' in mark === false || (mark as any).type === undefined) {
+				// It's a Slur or Tie
+				if (slurMark.start) {
+					// Check if it's a tie based on object structure
+					result.slurStart = true;
+				} else {
+					result.slurEnd = true;
+				}
+			}
+		}
+
+		// Ties
+		if ((mark as any).start === true && !result.slurStart) {
+			result.tieStart = true;
+		}
+	}
+
+	return result;
+};
+
+
+// Convert NoteEvent to MEI
+const noteEventToMEI = (event: NoteEvent, indent: string, layerStaff?: number): string => {
+	const dur = DURATIONS[event.duration.division] || "4";
+	const dots = event.duration.dots || 0;
+	const markOptions = extractMarkOptions(event.marks);
+
+	// Build slur attribute
+	const slurParts: string[] = [];
+	if (markOptions.slurStart) slurParts.push('i');
+	if (markOptions.slurEnd) slurParts.push('t');
+	const slur = slurParts.length > 0 ? slurParts.join(' ') : undefined;
+
+	// Stem direction
+	let stemDir: string | undefined;
+	if (event.stemDirection === StemDirection.up) stemDir = 'up';
+	else if (event.stemDirection === StemDirection.down) stemDir = 'down';
+
+	const noteOptions = {
+		grace: event.grace,
+		tie: markOptions.tieStart ? 'i' as const : undefined,
+		stemDir,
+		staff: event.staff,
+		layerStaff,
+		slur,
+		artics: markOptions.artics,
+		fermata: markOptions.fermata,
+		trill: markOptions.trill,
+		arpeggio: markOptions.arpeggio,
+		turn: markOptions.turn,
+		mordent: markOptions.mordent,
+	};
+
+	// Handle dynamic before note
+	let dynamicXml = '';
+	if (markOptions.dynamic) {
+		dynamicXml = `${indent}<dynam xml:id="${generateId('dynam')}">${markOptions.dynamic}</dynam>\n`;
+	}
+
+	// Single note
+	if (event.pitches.length === 1) {
+		const pitch = encodePitch(event.pitches[0]);
+		return dynamicXml + buildNoteElement(pitch, dur, dots, indent, false, noteOptions);
+	}
+
+	// Chord
+	let chordAttrs = `xml:id="${generateId('chord')}" dur="${dur}"`;
+	if (dots > 0) chordAttrs += ` dots="${dots}"`;
+	if (noteOptions.grace) chordAttrs += ` grace="unacc"`;
+	if (noteOptions.tie) chordAttrs += ` tie="${noteOptions.tie}"`;
+	if (noteOptions.stemDir) chordAttrs += ` stem.dir="${noteOptions.stemDir}"`;
+	if (layerStaff && noteOptions.staff && noteOptions.staff !== layerStaff) {
+		chordAttrs += ` staff="${noteOptions.staff}"`;
+	}
+	if (slur) chordAttrs += ` slur="${slur}"`;
+
+	let result = dynamicXml + `${indent}<chord ${chordAttrs}>\n`;
+
+	for (const p of event.pitches) {
+		const pitch = encodePitch(p);
+		result += buildNoteElement(pitch, dur, dots, indent + '    ', true);
+	}
+
+	if (noteOptions.artics.length > 0) {
+		result += `${indent}    <artic artic="${noteOptions.artics.join(' ')}" />\n`;
+	}
+	if (noteOptions.fermata) {
+		result += `${indent}    <fermata xml:id="${generateId('fermata')}" />\n`;
+	}
+	if (noteOptions.trill) {
+		result += `${indent}    <trill xml:id="${generateId('trill')}" />\n`;
+	}
+	if (noteOptions.arpeggio) {
+		result += `${indent}    <arpeg xml:id="${generateId('arpeg')}" />\n`;
+	}
+	if (noteOptions.turn) {
+		result += `${indent}    <turn xml:id="${generateId('turn')}" />\n`;
+	}
+	if (noteOptions.mordent) {
+		result += `${indent}    <mordent xml:id="${generateId('mordent')}" />\n`;
+	}
+
+	result += `${indent}</chord>\n`;
+	return result;
+};
+
+
+// Convert RestEvent to MEI
+const restEventToMEI = (event: RestEvent, indent: string): string => {
+	const dur = DURATIONS[event.duration.division] || "4";
+	let attrs = `xml:id="${generateId('rest')}" dur="${dur}"`;
+	if (event.duration.dots > 0) attrs += ` dots="${event.duration.dots}"`;
+
+	// Space rest (invisible)
+	if (event.invisible) {
+		return `${indent}<space ${attrs} />\n`;
+	}
+
+	// Full measure rest
+	if (event.fullMeasure) {
+		return `${indent}<mRest xml:id="${generateId('mrest')}" />\n`;
+	}
+
+	return `${indent}<rest ${attrs} />\n`;
+};
+
+
+// Convert TupletEvent to MEI
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number): string => {
+	const numbase = event.ratio.denominator;
+	const num = event.ratio.numerator;
+
+	let result = `${indent}<tuplet xml:id="${generateId('tuplet')}" num="${num}" numbase="${numbase}">\n`;
+
+	for (const e of event.events) {
+		if (e.type === 'note') {
+			result += noteEventToMEI(e as NoteEvent, indent + '    ', layerStaff);
+		} else if (e.type === 'rest') {
+			result += restEventToMEI(e as RestEvent, indent + '    ');
+		}
+	}
+
+	result += `${indent}</tuplet>\n`;
+	return result;
+};
+
+
+// Encode a layer (voice)
+const encodeLayer = (voice: Voice, layerN: number, indent: string): string => {
+	const layerId = generateId("layer");
+	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
+
+	for (const event of voice.events) {
+		switch (event.type) {
+			case 'note':
+				xml += noteEventToMEI(event as NoteEvent, indent + '    ', voice.staff);
+				break;
+			case 'rest':
+				xml += restEventToMEI(event as RestEvent, indent + '    ');
+				break;
+			case 'tuplet':
+				xml += tupletEventToMEI(event as TupletEvent, indent + '    ', voice.staff);
+				break;
+			case 'context':
+				// Context changes are handled at measure level
+				break;
+		}
+	}
+
+	xml += `${indent}</layer>\n`;
+	return xml;
+};
+
+
+// Encode a staff
+const encodeStaff = (voices: Voice[], staffN: number, indent: string): string => {
+	const staffId = generateId("staff");
+	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
+
+	if (voices.length === 0) {
+		xml += `${indent}    <layer xml:id="${generateId('layer')}" n="1" />\n`;
+	} else {
+		voices.forEach((voice, vi) => {
+			xml += encodeLayer(voice, vi + 1, indent + '    ');
+		});
+	}
+
+	xml += `${indent}</staff>\n`;
+	return xml;
+};
+
+
+// Encode a measure
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxStaff: number): string => {
+	const measureId = generateId("measure");
+	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
+
+	// Group voices by staff
+	const voicesByStaff: Record<number, Voice[]> = {};
+	for (const voice of measure.voices) {
+		const staffNum = voice.staff || 1;
+		if (!voicesByStaff[staffNum]) {
+			voicesByStaff[staffNum] = [];
+		}
+		voicesByStaff[staffNum].push(voice);
+	}
+
+	// Encode each staff
+	for (let si = 1; si <= maxStaff; si++) {
+		const voices = voicesByStaff[si] || [];
+		xml += encodeStaff(voices, si, indent + '    ');
+	}
+
+	xml += `${indent}</measure>\n`;
+	return xml;
+};
+
+
+// Encode scoreDef
+const encodeScoreDef = (
+	keySig: string,
+	timeNum: number,
+	timeDen: number,
+	staffCount: number,
+	staffClefs: Record<number, Clef>,
+	indent: string
+): string => {
+	const scoreDefId = generateId("scoredef");
+
+	let xml = `${indent}<scoreDef xml:id="${scoreDefId}" key.sig="${keySig}" meter.count="${timeNum}" meter.unit="${timeDen}">\n`;
+	xml += `${indent}    <staffGrp xml:id="${generateId("staffgrp")}">\n`;
+
+	for (let s = 1; s <= staffCount; s++) {
+		const clef = staffClefs[s] || Clef.treble;
+		const clefInfo = CLEF_SHAPES[clef] || CLEF_SHAPES.treble;
+		xml += `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${s}" lines="5" clef.shape="${clefInfo.shape}" clef.line="${clefInfo.line}" />\n`;
+	}
+
+	xml += `${indent}    </staffGrp>\n`;
+	xml += `${indent}</scoreDef>\n`;
+	return xml;
+};
+
+
+// Main encode function
+const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
+	const indent = options.indent || "    ";
+	resetIdCounter();
+
+	if (!doc.measures || doc.measures.length === 0) {
+		return "";
+	}
+
+	// Determine staff count and collect initial context
+	let maxStaff = 1;
+	let currentKey = 0;
+	let currentTimeNum = 4;
+	let currentTimeDen = 4;
+	const staffClefs: Record<number, Clef> = { 1: Clef.treble };
+
+	for (const measure of doc.measures) {
+		// Get key signature
+		if (measure.key) {
+			currentKey = keyToFifths(measure.key);
+		}
+
+		// Get time signature
+		if (measure.timeSig) {
+			currentTimeNum = measure.timeSig.numerator;
+			currentTimeDen = measure.timeSig.denominator;
+		}
+
+		// Count staves and get clefs from context changes
+		for (const voice of measure.voices) {
+			maxStaff = Math.max(maxStaff, voice.staff || 1);
+
+			for (const event of voice.events) {
+				if (event.type === 'context') {
+					const ctx = event as ContextChange;
+					if (ctx.clef) {
+						staffClefs[voice.staff || 1] = ctx.clef;
+					}
+				}
+			}
+		}
+	}
+
+	// Use first measure's key/time if set
+	const firstMeasure = doc.measures[0];
+	if (firstMeasure.key) {
+		currentKey = keyToFifths(firstMeasure.key);
+	}
+	if (firstMeasure.timeSig) {
+		currentTimeNum = firstMeasure.timeSig.numerator;
+		currentTimeDen = firstMeasure.timeSig.denominator;
+	}
+
+	const keySig = KEY_SIGS[currentKey] || "0";
+
+	// Build MEI document
+	const xmlDecl = options.xmlDeclaration !== false
+		? '<?xml version="1.0" encoding="UTF-8"?>\n'
+		: "";
+
+	let mei = xmlDecl;
+	mei += '<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.0">\n';
+	mei += `${indent}<meiHead>\n`;
+	mei += `${indent}${indent}<fileDesc>\n`;
+	mei += `${indent}${indent}${indent}<titleStmt>\n`;
+
+	// Add title from metadata if available
+	const title = doc.metadata?.title || "Lilylet Export";
+	mei += `${indent}${indent}${indent}${indent}<title>${escapeXml(title)}</title>\n`;
+
+	mei += `${indent}${indent}${indent}</titleStmt>\n`;
+	mei += `${indent}${indent}${indent}<pubStmt />\n`;
+	mei += `${indent}${indent}</fileDesc>\n`;
+	mei += `${indent}${indent}<encodingDesc>\n`;
+	mei += `${indent}${indent}${indent}<projectDesc>\n`;
+	mei += `${indent}${indent}${indent}${indent}<p>Encoded with Lilylet MEIEncoder</p>\n`;
+	mei += `${indent}${indent}${indent}</projectDesc>\n`;
+	mei += `${indent}${indent}</encodingDesc>\n`;
+	mei += `${indent}</meiHead>\n`;
+	mei += `${indent}<music>\n`;
+	mei += `${indent}${indent}<body>\n`;
+	mei += `${indent}${indent}${indent}<mdiv xml:id="${generateId("mdiv")}">\n`;
+	mei += `${indent}${indent}${indent}${indent}<score xml:id="${generateId("score")}">\n`;
+	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, maxStaff, staffClefs, `${indent}${indent}${indent}${indent}${indent}`);
+	mei += `${indent}${indent}${indent}${indent}${indent}<section xml:id="${generateId("section")}">\n`;
+
+	// Encode measures
+	doc.measures.forEach((measure, mi) => {
+		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, maxStaff);
+	});
+
+	mei += `${indent}${indent}${indent}${indent}${indent}</section>\n`;
+	mei += `${indent}${indent}${indent}${indent}</score>\n`;
+	mei += `${indent}${indent}${indent}</mdiv>\n`;
+	mei += `${indent}${indent}</body>\n`;
+	mei += `${indent}</music>\n`;
+	mei += '</mei>\n';
+
+	return mei;
+};
+
+
+// Escape XML special characters
+const escapeXml = (text: string): string => {
+	return text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&apos;');
+};
 
 
 export {
 	encode,
+	resetIdCounter,
+	MEIEncoderOptions,
 };

@@ -224,7 +224,7 @@
 %%
 
 document
-	: content EOF								-> ({ metadata: $1.metadata, measures: $1.measures })
+	: content EOF								{ return { metadata: $1.metadata, measures: $1.measures }; }
 	;
 
 content
