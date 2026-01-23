@@ -138,11 +138,49 @@ interface MEIEncoderOptions {
 }
 
 
-// Convert Pitch to MEI attributes
-const encodePitch = (pitch: Pitch): { pname: string; oct: number; accid?: string } => {
+// Sharp and flat order for key signatures (circle of fifths)
+const SHARP_ORDER = ['f', 'c', 'g', 'd', 'a', 'e', 'b'];
+const FLAT_ORDER = ['b', 'e', 'a', 'd', 'g', 'c', 'f'];
+
+// Get the accidentals implied by a key signature
+// fifths > 0 = sharps, fifths < 0 = flats
+const getKeyAccidentals = (fifths: number): Record<string, string> => {
+	const result: Record<string, string> = {};
+	if (fifths > 0) {
+		// Sharps
+		for (let i = 0; i < Math.min(fifths, 7); i++) {
+			result[SHARP_ORDER[i]] = 's';  // sharp
+		}
+	} else if (fifths < 0) {
+		// Flats
+		for (let i = 0; i < Math.min(-fifths, 7); i++) {
+			result[FLAT_ORDER[i]] = 'f';  // flat
+		}
+	}
+	return result;
+};
+
+// Convert Pitch to MEI attributes, checking against key signature
+const encodePitch = (pitch: Pitch, keyFifths: number = 0): { pname: string; oct: number; accid?: string } => {
 	// Lilylet octave: 0 = middle C octave (C4), positive = higher, negative = lower
 	const oct = 4 + pitch.octave;
-	const accid = pitch.accidental ? ACCIDENTALS[pitch.accidental] : undefined;
+
+	// Get the accidental implied by the key signature for this note
+	const keyAccidentals = getKeyAccidentals(keyFifths);
+	const keyAccid = keyAccidentals[pitch.phonet];
+
+	// Determine if we need to output an accid attribute
+	let accid: string | undefined;
+	if (pitch.accidental) {
+		const noteAccid = ACCIDENTALS[pitch.accidental];
+		// Only output accid if it's different from what the key implies
+		if (noteAccid !== keyAccid) {
+			accid = noteAccid;
+		}
+	} else if (keyAccid) {
+		// Note has no accidental but key implies one - output natural
+		accid = 'n';
+	}
 
 	return { pname: pitch.phonet, oct, accid };
 };
@@ -366,7 +404,8 @@ const noteEventToMEI = (
 	indent: string,
 	layerStaff?: number,
 	tieEnd?: boolean,
-	contextStemDir?: StemDirection
+	contextStemDir?: StemDirection,
+	keyFifths: number = 0
 ): NoteEventResult => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
@@ -408,7 +447,7 @@ const noteEventToMEI = (
 
 	// Single note
 	if (event.pitches.length === 1) {
-		const pitch = encodePitch(event.pitches[0]);
+		const pitch = encodePitch(event.pitches[0], keyFifths);
 		const noteId = generateId('note');
 		return {
 			xml: buildNoteElement(pitch, dur, dots, indent, false, noteOptions, noteId),
@@ -441,7 +480,7 @@ const noteEventToMEI = (
 	let result = `${indent}<chord ${chordAttrs}>\n`;
 
 	for (const p of event.pitches) {
-		const pitch = encodePitch(p);
+		const pitch = encodePitch(p, keyFifths);
 		result += buildNoteElement(pitch, dur, dots, indent + '    ', true);
 	}
 
@@ -481,14 +520,14 @@ const noteEventToMEI = (
 
 
 // Convert RestEvent to MEI
-const restEventToMEI = (event: RestEvent, indent: string): string => {
+const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0): string => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	let attrs = `xml:id="${generateId('rest')}" dur="${dur}"`;
 	if (event.duration.dots > 0) attrs += ` dots="${event.duration.dots}"`;
 
 	// Pitched rest (positioned at specific pitch)
 	if (event.pitch) {
-		const pitch = encodePitch(event.pitch);
+		const pitch = encodePitch(event.pitch, keyFifths);
 		attrs += ` ploc="${pitch.pname}" oloc="${pitch.oct}"`;
 	}
 
@@ -507,7 +546,7 @@ const restEventToMEI = (event: RestEvent, indent: string): string => {
 
 
 // Convert TupletEvent to MEI
-const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number): string => {
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0): string => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
 	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
 	// MEI: num = number of notes written, numbase = normal equivalent
@@ -538,9 +577,9 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 		const currentIndent = inBeam ? baseIndent + '    ' : baseIndent;
 
 		if (e.type === 'note') {
-			result += noteEventToMEI(e as NoteEvent, currentIndent, layerStaff).xml;
+			result += noteEventToMEI(e as NoteEvent, currentIndent, layerStaff, false, undefined, keyFifths).xml;
 		} else if (e.type === 'rest') {
-			result += restEventToMEI(e as RestEvent, currentIndent);
+			result += restEventToMEI(e as RestEvent, currentIndent, keyFifths);
 		}
 
 		// Close beam element if beam ends
@@ -561,7 +600,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 
 // Convert TremoloEvent to MEI (fingered tremolo - alternating between two notes)
-const tremoloEventToMEI = (event: TremoloEvent, indent: string): string => {
+const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: number = 0): string => {
 	const ftremId = generateId('fTrem');
 
 	// For \repeat tremolo 4 { c16 d16 }:
@@ -585,14 +624,14 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string): string => {
 
 	// First note (or chord)
 	if (event.pitchA.length === 1) {
-		const pitch = encodePitch(event.pitchA[0]);
+		const pitch = encodePitch(event.pitchA[0], keyFifths);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		result += `${indent}    <note ${attrs} />\n`;
 	} else if (event.pitchA.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
 		for (const p of event.pitchA) {
-			const pitch = encodePitch(p);
+			const pitch = encodePitch(p, keyFifths);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 			result += `${indent}        <note ${attrs} />\n`;
@@ -602,14 +641,14 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string): string => {
 
 	// Second note (or chord)
 	if (event.pitchB.length === 1) {
-		const pitch = encodePitch(event.pitchB[0]);
+		const pitch = encodePitch(event.pitchB[0], keyFifths);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		result += `${indent}    <note ${attrs} />\n`;
 	} else if (event.pitchB.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
 		for (const p of event.pitchB) {
-			const pitch = encodePitch(p);
+			const pitch = encodePitch(p, keyFifths);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 			result += `${indent}        <note ${attrs} />\n`;
@@ -687,7 +726,7 @@ interface LayerResult {
 }
 
 // Encode a layer (voice)
-const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = []): LayerResult => {
+const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -758,7 +797,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				// Check if this note should have tie="t" (matches pending tie)
 				const tieEnd = pendingTiePitches.length > 0 && pitchesMatch(pendingTiePitches, noteEvent.pitches);
 
-				const result = noteEventToMEI(noteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection);
+				const result = noteEventToMEI(noteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths);
 				xml += result.xml;
 				lastNoteId = result.elementId;
 
@@ -832,13 +871,13 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				break;
 			}
 			case 'rest':
-				xml += restEventToMEI(event as RestEvent, currentIndent);
+				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths);
 				break;
 			case 'tuplet':
-				xml += tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff);
+				xml += tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths);
 				break;
 			case 'tremolo':
-				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent);
+				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths);
 				break;
 			case 'context': {
 				// Check for ottava changes
@@ -911,7 +950,7 @@ interface StaffResult {
 }
 
 // Encode a staff
-const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}): StaffResult => {
+const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, keyFifths: number = 0): StaffResult => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -932,7 +971,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			const layerN = vi + 1;
 			const tieKey = `${staffN}-${layerN}`;
 			const initialTies = tieState[tieKey] || [];
-			const result = encodeLayer(voice, layerN, indent + '    ', initialTies);
+			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths);
 			xml += result.xml;
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
@@ -998,7 +1037,7 @@ const generateTempoElement = (tempo: Tempo, indent: string): string => {
 
 // Encode a measure
 // encodeMeasure accepts a mutable tieState that persists across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxStaff: number, tieState: TieState): string => {
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxStaff: number, tieState: TieState, keyFifths: number = 0): string => {
 	const measureId = generateId("measure");
 	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -1037,7 +1076,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	// Encode each staff, passing and updating tie state
 	for (let si = 1; si <= maxStaff; si++) {
 		const voices = voicesByStaff[si] || [];
-		const result = encodeStaff(voices, si, indent + '    ', tieState);
+		const result = encodeStaff(voices, si, indent + '    ', tieState, keyFifths);
 		xml += result.xml;
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
@@ -1246,7 +1285,11 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 
 	// Encode measures
 	doc.measures.forEach((measure, mi) => {
-		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, maxStaff, tieState);
+		// Update key signature if measure has one
+		if (measure.key) {
+			currentKey = keyToFifths(measure.key);
+		}
+		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, maxStaff, tieState, currentKey);
 	});
 
 	mei += `${indent}${indent}${indent}${indent}${indent}</section>\n`;
