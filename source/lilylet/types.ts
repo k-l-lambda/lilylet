@@ -211,13 +211,6 @@ export interface Voice {
 	events: Event[];
 }
 
-export interface Measure {
-	key?: KeySignature;
-	timeSig?: Fraction;
-	voices: Voice[];
-	partial?: boolean;
-}
-
 export interface Metadata {
 	title?: string;
 	subtitle?: string;
@@ -229,22 +222,23 @@ export interface Metadata {
 	genre?: string;
 }
 
-// Measurewise structure: document contains measures directly
-// Each measure contains voices from all staves
+// Part within a measure: can be a single staff or grand staff (multiple staves)
+// When voices have staff > 1, it's a grand staff
+export interface Part {
+	name?: string;
+	voices: Voice[];
+}
+
+// Measure contains parts separated by \\\
+export interface Measure {
+	key?: KeySignature;
+	timeSig?: Fraction;
+	parts: Part[];
+	partial?: boolean;
+}
+
+// Document structure
 export interface LilyletDoc {
 	metadata?: Metadata;
 	measures: Measure[];
-}
-
-// === Partwise conversion (for export to MusicXML, etc.) ===
-
-export interface Part {
-	name?: string;
-	staff: number;
-	measures: Measure[];
-}
-
-export interface LilyletDocPartwise {
-	metadata?: Metadata;
-	parts: Part[];
 }

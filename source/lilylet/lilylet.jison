@@ -56,10 +56,15 @@
 		events,
 	});
 
-	const measure = (voices, key, timeSig, partial) => ({
+	const part = (voices, name) => ({
+		name: name || undefined,
+		voices,
+	});
+
+	const measure = (parts, key, timeSig, partial) => ({
 		key: key || undefined,
 		timeSig: timeSig || undefined,
-		voices,
+		parts,
 		partial: partial || undefined,
 	});
 
@@ -204,6 +209,7 @@
 
 "\\rest"						return 'CMD_REST'
 
+"\\\\\\"						return 'PART_SEP'
 "\\\\"							return 'VOICE_SEP'
 
 "tremolo"						return 'TREMOLO'
@@ -281,12 +287,21 @@ measures
 	;
 
 measure_content
-	: voices									-> measure($1, currentKey, currentTimeSig)
+	: parts										-> measure($1, currentKey, currentTimeSig)
 	;
 
-voices
+parts
+	: part_voices								{ $$ = [part($1)]; }
+	| parts PART_SEP part_start part_voices		{ $$ = $1.concat([part($4)]); }
+	;
+
+part_start
+	: /* empty */								%{ currentStaff = 1; %}
+	;
+
+part_voices
 	: voice_events								{ $$ = [voice(currentStaff, $1)]; }
-	| voices VOICE_SEP voice_events				{ $$ = $1.concat([voice(currentStaff, $3)]); }
+	| part_voices VOICE_SEP voice_events		{ $$ = $1.concat([voice(currentStaff, $3)]); }
 	;
 
 voice_events

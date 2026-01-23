@@ -42,93 +42,91 @@ const resolveRelativePitch = (env: PitchEnv, pitch: Pitch): void => {
 
 
 /**
- * Process all pitches in a document to resolve relative pitch mode.
- *
- * For each measure:
- * - Start with middle C as base (step=0, octave=0)
- * - Process each note/chord sequentially
- * - For chords: use first pitch of previous chord as base for current chord's first pitch
- *               within chord, each pitch is relative to the previous
+ * Process events in a voice to resolve relative pitches.
  */
-const resolveDocumentPitches = (doc: LilyletDoc): void => {
-	for (const measure of doc.measures) {
-		// Reset to middle C at start of each measure
-		const env: PitchEnv = { step: 0, octave: 0 };
+const resolveVoicePitches = (events: any[], env: PitchEnv): void => {
+	for (const event of events) {
+		if (event.type === 'note') {
+			const noteEvent = event as NoteEvent;
+			const pitches = noteEvent.pitches;
 
-		for (const voice of measure.voices) {
-			// Each voice in a measure starts fresh from middle C
-			env.step = 0;
-			env.octave = 0;
+			if (pitches.length > 0) {
+				// First pitch is relative to previous note/chord's first pitch
+				resolveRelativePitch(env, pitches[0]);
 
-			for (const event of voice.events) {
-				if (event.type === 'note') {
-					const noteEvent = event as NoteEvent;
-					const pitches = noteEvent.pitches;
-
+				// For chord: subsequent pitches are relative to each other
+				if (pitches.length > 1) {
+					const chordEnv: PitchEnv = { step: env.step, octave: env.octave };
+					for (let i = 1; i < pitches.length; i++) {
+						resolveRelativePitch(chordEnv, pitches[i]);
+					}
+				}
+			}
+		} else if (event.type === 'rest') {
+			// Rest with pitch (e.g., a''\rest) should update the pitch environment
+			const restEvent = event as RestEvent;
+			if (restEvent.pitch) {
+				resolveRelativePitch(env, restEvent.pitch);
+			}
+		} else if (event.type === 'tuplet') {
+			// Process tuplet events
+			for (const tupletEvent of event.events) {
+				if (tupletEvent.type === 'note') {
+					const pitches = tupletEvent.pitches;
 					if (pitches.length > 0) {
-						// First pitch is relative to previous note/chord's first pitch
 						resolveRelativePitch(env, pitches[0]);
-
-						// For chord: subsequent pitches are relative to each other
 						if (pitches.length > 1) {
 							const chordEnv: PitchEnv = { step: env.step, octave: env.octave };
 							for (let i = 1; i < pitches.length; i++) {
 								resolveRelativePitch(chordEnv, pitches[i]);
 							}
 						}
-
-						// Base for next note is first pitch of this chord
-						// env already updated by first resolveRelativePitch call
 					}
-				} else if (event.type === 'rest') {
-					// Rest with pitch (e.g., a''\rest) should update the pitch environment
-					const restEvent = event as RestEvent;
+				} else if (tupletEvent.type === 'rest') {
+					const restEvent = tupletEvent as RestEvent;
 					if (restEvent.pitch) {
 						resolveRelativePitch(env, restEvent.pitch);
 					}
-				} else if (event.type === 'tuplet') {
-					// Process tuplet events
-					for (const tupletEvent of event.events) {
-						if (tupletEvent.type === 'note') {
-							const pitches = tupletEvent.pitches;
-							if (pitches.length > 0) {
-								resolveRelativePitch(env, pitches[0]);
-								if (pitches.length > 1) {
-									const chordEnv: PitchEnv = { step: env.step, octave: env.octave };
-									for (let i = 1; i < pitches.length; i++) {
-										resolveRelativePitch(chordEnv, pitches[i]);
-									}
-								}
-							}
-						} else if (tupletEvent.type === 'rest') {
-							// Rest with pitch inside tuplet
-							const restEvent = tupletEvent as RestEvent;
-							if (restEvent.pitch) {
-								resolveRelativePitch(env, restEvent.pitch);
-							}
-						}
-					}
-				} else if (event.type === 'tremolo') {
-					// Process tremolo pitches
-					if (event.pitchA.length > 0) {
-						resolveRelativePitch(env, event.pitchA[0]);
-						if (event.pitchA.length > 1) {
-							const chordEnv: PitchEnv = { step: env.step, octave: env.octave };
-							for (let i = 1; i < event.pitchA.length; i++) {
-								resolveRelativePitch(chordEnv, event.pitchA[i]);
-							}
-						}
-					}
-					if (event.pitchB.length > 0) {
-						resolveRelativePitch(env, event.pitchB[0]);
-						if (event.pitchB.length > 1) {
-							const chordEnv: PitchEnv = { step: env.step, octave: env.octave };
-							for (let i = 1; i < event.pitchB.length; i++) {
-								resolveRelativePitch(chordEnv, event.pitchB[i]);
-							}
-						}
+				}
+			}
+		} else if (event.type === 'tremolo') {
+			// Process tremolo pitches
+			if (event.pitchA.length > 0) {
+				resolveRelativePitch(env, event.pitchA[0]);
+				if (event.pitchA.length > 1) {
+					const chordEnv: PitchEnv = { step: env.step, octave: env.octave };
+					for (let i = 1; i < event.pitchA.length; i++) {
+						resolveRelativePitch(chordEnv, event.pitchA[i]);
 					}
 				}
+			}
+			if (event.pitchB.length > 0) {
+				resolveRelativePitch(env, event.pitchB[0]);
+				if (event.pitchB.length > 1) {
+					const chordEnv: PitchEnv = { step: env.step, octave: env.octave };
+					for (let i = 1; i < event.pitchB.length; i++) {
+						resolveRelativePitch(chordEnv, event.pitchB[i]);
+					}
+				}
+			}
+		}
+	}
+};
+
+/**
+ * Process all pitches in a document to resolve relative pitch mode.
+ *
+ * Structure: measure > part > voice
+ * - Each voice in a part starts fresh from middle C
+ * - Voice can cross staves within a part but not across parts
+ */
+const resolveDocumentPitches = (doc: LilyletDoc): void => {
+	for (const measure of doc.measures) {
+		for (const part of measure.parts) {
+			for (const voice of part.voices) {
+				// Each voice starts fresh from middle C
+				const env: PitchEnv = { step: 0, octave: 0 };
+				resolveVoicePitches(voice.events, env);
 			}
 		}
 	}

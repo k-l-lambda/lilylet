@@ -2,6 +2,7 @@
 import {
 	LilyletDoc,
 	Measure,
+	Part,
 	Voice,
 	NoteEvent,
 	RestEvent,
@@ -1037,7 +1038,7 @@ const generateTempoElement = (tempo: Tempo, indent: string): string => {
 
 // Encode a measure
 // encodeMeasure accepts a mutable tieState that persists across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxStaff: number, tieState: TieState, keyFifths: number = 0): string => {
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, keyFifths: number = 0, partInfos: PartInfo[] = []): string => {
 	const measureId = generateId("measure");
 	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -1052,29 +1053,36 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 
 	// Extract tempo from context changes
 	let measureTempo: Tempo | undefined;
-	for (const voice of measure.voices) {
-		for (const event of voice.events) {
-			if (event.type === 'context') {
-				const ctx = event as ContextChange;
-				if (ctx.tempo) {
-					measureTempo = ctx.tempo;
+	for (const part of measure.parts) {
+		for (const voice of part.voices) {
+			for (const event of voice.events) {
+				if (event.type === 'context') {
+					const ctx = event as ContextChange;
+					if (ctx.tempo) {
+						measureTempo = ctx.tempo;
+					}
 				}
 			}
 		}
 	}
 
-	// Group voices by staff
+	// Group voices by global staff (local staff + part offset)
 	const voicesByStaff: Record<number, Voice[]> = {};
-	for (const voice of measure.voices) {
-		const staffNum = voice.staff || 1;
-		if (!voicesByStaff[staffNum]) {
-			voicesByStaff[staffNum] = [];
+	for (let pi = 0; pi < measure.parts.length; pi++) {
+		const part = measure.parts[pi];
+		const partOffset = partInfos[pi]?.staffOffset || 0;
+		for (const voice of part.voices) {
+			const localStaff = voice.staff || 1;
+			const globalStaff = partOffset + localStaff;
+			if (!voicesByStaff[globalStaff]) {
+				voicesByStaff[globalStaff] = [];
+			}
+			voicesByStaff[globalStaff].push(voice);
 		}
-		voicesByStaff[staffNum].push(voice);
 	}
 
 	// Encode each staff, passing and updating tie state
-	for (let si = 1; si <= maxStaff; si++) {
+	for (let si = 1; si <= totalStaves; si++) {
 		const voices = voicesByStaff[si] || [];
 		const result = encodeStaff(voices, si, indent + '    ', tieState, keyFifths);
 		xml += result.xml;
@@ -1148,13 +1156,64 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 };
 
 
-// Encode scoreDef
+// Part structure info for encoding
+interface PartInfo {
+	maxStaff: number;      // Maximum staff number within this part
+	staffOffset: number;   // Global staff number offset (0-based)
+	clefs: Record<number, Clef>;  // Local staff -> clef mapping
+}
+
+// Analyze document to get part structure
+const analyzePartStructure = (doc: LilyletDoc): PartInfo[] => {
+	// Find maximum number of parts in any measure
+	let maxParts = 0;
+	for (const measure of doc.measures) {
+		maxParts = Math.max(maxParts, measure.parts.length);
+	}
+
+	// Initialize part info
+	const partInfos: PartInfo[] = [];
+	for (let i = 0; i < maxParts; i++) {
+		partInfos.push({ maxStaff: 1, staffOffset: 0, clefs: { 1: Clef.treble } });
+	}
+
+	// Analyze each measure to find max staff per part and clefs
+	for (const measure of doc.measures) {
+		for (let pi = 0; pi < measure.parts.length; pi++) {
+			const part = measure.parts[pi];
+			for (const voice of part.voices) {
+				const localStaff = voice.staff || 1;
+				partInfos[pi].maxStaff = Math.max(partInfos[pi].maxStaff, localStaff);
+
+				// Get clef from context changes
+				for (const event of voice.events) {
+					if (event.type === 'context') {
+						const ctx = event as ContextChange;
+						if (ctx.clef) {
+							partInfos[pi].clefs[localStaff] = ctx.clef;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Calculate staff offsets
+	let offset = 0;
+	for (const info of partInfos) {
+		info.staffOffset = offset;
+		offset += info.maxStaff;
+	}
+
+	return partInfos;
+};
+
+// Encode scoreDef with part groups
 const encodeScoreDef = (
 	keySig: string,
 	timeNum: number,
 	timeDen: number,
-	staffCount: number,
-	staffClefs: Record<number, Clef>,
+	partInfos: PartInfo[],
 	indent: string
 ): string => {
 	const scoreDefId = generateId("scoredef");
@@ -1162,10 +1221,26 @@ const encodeScoreDef = (
 	let xml = `${indent}<scoreDef xml:id="${scoreDefId}" key.sig="${keySig}" meter.count="${timeNum}" meter.unit="${timeDen}">\n`;
 	xml += `${indent}    <staffGrp xml:id="${generateId("staffgrp")}">\n`;
 
-	for (let s = 1; s <= staffCount; s++) {
-		const clef = staffClefs[s] || Clef.treble;
-		const clefInfo = CLEF_SHAPES[clef] || CLEF_SHAPES.treble;
-		xml += `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${s}" lines="5" clef.shape="${clefInfo.shape}" clef.line="${clefInfo.line}" />\n`;
+	for (let pi = 0; pi < partInfos.length; pi++) {
+		const info = partInfos[pi];
+
+		// If part has multiple staves (grand staff), wrap in staffGrp with brace
+		if (info.maxStaff > 1) {
+			xml += `${indent}        <staffGrp xml:id="${generateId("staffgrp")}" symbol="brace" bar.thru="true">\n`;
+			for (let ls = 1; ls <= info.maxStaff; ls++) {
+				const globalStaff = info.staffOffset + ls;
+				const clef = info.clefs[ls] || Clef.treble;
+				const clefInfo = CLEF_SHAPES[clef] || CLEF_SHAPES.treble;
+				xml += `${indent}            <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" clef.shape="${clefInfo.shape}" clef.line="${clefInfo.line}" />\n`;
+			}
+			xml += `${indent}        </staffGrp>\n`;
+		} else {
+			// Single staff part
+			const globalStaff = info.staffOffset + 1;
+			const clef = info.clefs[1] || Clef.treble;
+			const clefInfo = CLEF_SHAPES[clef] || CLEF_SHAPES.treble;
+			xml += `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" clef.shape="${clefInfo.shape}" clef.line="${clefInfo.line}" />\n`;
+		}
 	}
 
 	xml += `${indent}    </staffGrp>\n`;
@@ -1183,41 +1258,17 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		return "";
 	}
 
-	// Determine staff count and collect initial context
-	let maxStaff = 1;
+	// Analyze part structure to get staff offsets
+	const partInfos = analyzePartStructure(doc);
+
+	// Calculate total staff count
+	const totalStaves = partInfos.reduce((sum, info) => sum + info.maxStaff, 0);
+
+	// Collect initial key/time from first measure
 	let currentKey = 0;
 	let currentTimeNum = 4;
 	let currentTimeDen = 4;
-	const staffClefs: Record<number, Clef> = { 1: Clef.treble };
 
-	for (const measure of doc.measures) {
-		// Get key signature
-		if (measure.key) {
-			currentKey = keyToFifths(measure.key);
-		}
-
-		// Get time signature
-		if (measure.timeSig) {
-			currentTimeNum = measure.timeSig.numerator;
-			currentTimeDen = measure.timeSig.denominator;
-		}
-
-		// Count staves and get clefs from context changes
-		for (const voice of measure.voices) {
-			maxStaff = Math.max(maxStaff, voice.staff || 1);
-
-			for (const event of voice.events) {
-				if (event.type === 'context') {
-					const ctx = event as ContextChange;
-					if (ctx.clef) {
-						staffClefs[voice.staff || 1] = ctx.clef;
-					}
-				}
-			}
-		}
-	}
-
-	// Use first measure's key/time if set
 	const firstMeasure = doc.measures[0];
 	if (firstMeasure.key) {
 		currentKey = keyToFifths(firstMeasure.key);
@@ -1277,7 +1328,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += `${indent}${indent}<body>\n`;
 	mei += `${indent}${indent}${indent}<mdiv xml:id="${generateId("mdiv")}">\n`;
 	mei += `${indent}${indent}${indent}${indent}<score xml:id="${generateId("score")}">\n`;
-	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, maxStaff, staffClefs, `${indent}${indent}${indent}${indent}${indent}`);
+	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`);
 	mei += `${indent}${indent}${indent}${indent}${indent}<section xml:id="${generateId("section")}">\n`;
 
 	// Track tie state across measures for cross-measure ties
@@ -1289,7 +1340,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		if (measure.key) {
 			currentKey = keyToFifths(measure.key);
 		}
-		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, maxStaff, tieState, currentKey);
+		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, currentKey, partInfos);
 	});
 
 	mei += `${indent}${indent}${indent}${indent}${indent}</section>\n`;
