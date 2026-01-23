@@ -560,35 +560,64 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 };
 
 
-// Convert TremoloEvent to MEI (bowed tremolo between two notes)
+// Convert TremoloEvent to MEI (fingered tremolo - alternating between two notes)
 const tremoloEventToMEI = (event: TremoloEvent, indent: string): string => {
-	const btremId = generateId('btrem');
+	const ftremId = generateId('fTrem');
 
-	// Calculate the duration of each note based on count and division
-	// For \repeat tremolo 4 { c16 d16 }, the visual duration is a quarter note (4 * 16th = quarter)
-	const totalDuration = event.count * event.division;
-	const noteDur = totalDuration >= 1 ? totalDuration : 4;  // Default to quarter if calculation fails
+	// For \repeat tremolo 4 { c16 d16 }:
+	// - count = 4 (repetitions)
+	// - division = 16 (note value)
+	// - Total duration = 4 × 2 × 16th = 8 × 16th = half note
+	// - Each visible note = half of total = quarter note
 
-	// unitdur is the tremolo stroke speed (the division value)
-	let result = `${indent}<bTrem xml:id="${btremId}" unitdur="${event.division}">\n`;
+	// Calculate beams (tremolo strokes) based on division
+	// 8th = 1 beam, 16th = 2 beams, 32nd = 3 beams
+	const beams = Math.max(1, Math.log2(event.division / 8) + 1);
 
-	// First note
+	// Calculate visual duration for each note
+	// For \repeat tremolo 4 { c16 d16 }:
+	// - Total strokes = 4 × 2 = 8 sixteenth notes = 1/2 whole note
+	// - Each visible note = 1/4 whole note = quarter note (dur="4")
+	// Formula: dur = division / count (e.g., 16 / 4 = 4 for quarter note)
+	const noteDur = Math.round(event.division / event.count) || 4;  // Default to quarter if calculation fails
+
+	let result = `${indent}<fTrem xml:id="${ftremId}" beams="${beams}">\n`;
+
+	// First note (or chord)
 	if (event.pitchA.length === 1) {
 		const pitch = encodePitch(event.pitchA[0]);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		result += `${indent}    <note ${attrs} />\n`;
+	} else if (event.pitchA.length > 1) {
+		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
+		for (const p of event.pitchA) {
+			const pitch = encodePitch(p);
+			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
+			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+			result += `${indent}        <note ${attrs} />\n`;
+		}
+		result += `${indent}    </chord>\n`;
 	}
 
-	// Second note
+	// Second note (or chord)
 	if (event.pitchB.length === 1) {
 		const pitch = encodePitch(event.pitchB[0]);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		result += `${indent}    <note ${attrs} />\n`;
+	} else if (event.pitchB.length > 1) {
+		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
+		for (const p of event.pitchB) {
+			const pitch = encodePitch(p);
+			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
+			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+			result += `${indent}        <note ${attrs} />\n`;
+		}
+		result += `${indent}    </chord>\n`;
 	}
 
-	result += `${indent}</bTrem>\n`;
+	result += `${indent}</fTrem>\n`;
 	return result;
 };
 

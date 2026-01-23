@@ -1,1 +1,1 @@
-\clef "treble" \times 3/4 { c8 d e f }
+\time 3/8 \clef "treble" \times 3/4 { c8[ d e f] }
