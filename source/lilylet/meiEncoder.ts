@@ -15,6 +15,7 @@ import {
 	Mark,
 	HairpinType,
 	PedalType,
+	Tempo,
 } from "./types";
 
 
@@ -142,6 +143,16 @@ const encodePitch = (pitch: Pitch): { pname: string; oct: number; accid?: string
 };
 
 
+// Convert tremolo division to stem.mod value
+const tremoloToStemMod = (division: number): string | undefined => {
+	// 8 = 1slash (eighth note strokes), 16 = 2slash, 32 = 3slash, etc.
+	const slashes = Math.log2(division) - 2;  // 8->1, 16->2, 32->3
+	if (slashes >= 1 && slashes <= 6) {
+		return `${slashes}slash`;
+	}
+	return undefined;
+};
+
 // Build note element
 const buildNoteElement = (
 	pitch: { pname: string; oct: number; accid?: string },
@@ -162,6 +173,7 @@ const buildNoteElement = (
 		arpeggio?: boolean;
 		turn?: boolean;
 		mordent?: boolean;
+		tremolo?: number;
 	} = {},
 	noteId?: string
 ): string => {
@@ -180,6 +192,10 @@ const buildNoteElement = (
 		attrs += ` staff="${options.staff}"`;
 	}
 	if (!inChord && options.slur) attrs += ` slur="${options.slur}"`;
+	if (!inChord && options.tremolo) {
+		const stemMod = tremoloToStemMod(options.tremolo);
+		if (stemMod) attrs += ` stem.mod="${stemMod}"`;
+	}
 
 	const hasChildren = !inChord && (
 		(options.artics && options.artics.length > 0) ||
@@ -234,6 +250,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 	dynamic?: string;
 	hairpin?: string;
 	pedal?: string;
+	tremolo?: number;
 } => {
 	const result = {
 		artics: [] as string[],
@@ -250,6 +267,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 		dynamic: undefined as string | undefined,
 		hairpin: undefined as string | undefined,
 		pedal: undefined as string | undefined,
+		tremolo: undefined as number | undefined,
 	};
 
 	if (!marks) return result;
@@ -295,6 +313,11 @@ const extractMarkOptions = (marks?: Mark[]): {
 			result.pedal = 'down';
 		} else if (ornamentType === PedalType.sustainOff) {
 			result.pedal = 'up';
+		}
+
+		// Tremolo
+		if ('tremolo' in mark && typeof (mark as any).tremolo === 'number') {
+			result.tremolo = (mark as any).tremolo;
 		}
 
 		// Check markType for tie/slur/beam distinction
@@ -367,6 +390,7 @@ const noteEventToMEI = (
 		arpeggio: markOptions.arpeggio,
 		turn: markOptions.turn,
 		mordent: markOptions.mordent,
+		tremolo: markOptions.tremolo,
 	};
 
 	// Handle dynamic before note
@@ -498,8 +522,15 @@ interface PedalSpan {
 	endId: string;
 }
 
-// Encode a layer (voice) - returns both xml, hairpin spans, and pedal spans
-const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[] } => {
+interface OctaveSpan {
+	dis: 8 | 15;  // 8 = octave, 15 = double octave (not commonly used)
+	disPlace: 'above' | 'below';
+	startId: string;
+	endId: string;
+}
+
+// Encode a layer (voice) - returns xml, hairpin spans, pedal spans, and octave spans
+const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[]; octaves: OctaveSpan[] } => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -513,6 +544,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 	// Track pedal spans
 	const pedals: PedalSpan[] = [];
 	let currentPedal: { startId: string } | null = null;
+
+	// Track octave spans
+	const octaves: OctaveSpan[] = [];
+	let currentOctave: { dis: 8 | 15; disPlace: 'above' | 'below'; startId: string } | null = null;
+	let pendingOttava: number | null = null;  // Track ottava to apply to next note
+	let lastNoteId: string | null = null;  // Track last note id for ending ottava spans
 
 	// Track pending tie pitches (for tie="t" on next note)
 	let pendingTiePitches: Pitch[] = [];
@@ -553,6 +590,15 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 
 				const result = noteEventToMEI(noteEvent, currentIndent, voice.staff, tieEnd);
 				xml += result.xml;
+				lastNoteId = result.elementId;
+
+				// If there's a pending ottava, start the span on this note
+				if (pendingOttava !== null && pendingOttava !== 0) {
+					const dis: 8 | 15 = Math.abs(pendingOttava) === 2 ? 15 : 8;
+					const disPlace: 'above' | 'below' = pendingOttava > 0 ? 'above' : 'below';
+					currentOctave = { dis, disPlace, startId: result.elementId };
+					pendingOttava = null;
+				}
 
 				// Update pending tie pitches
 				if (result.hasTieStart) {
@@ -593,9 +639,29 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 			case 'tuplet':
 				xml += tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff);
 				break;
-			case 'context':
-				// Context changes are handled at measure level
+			case 'context': {
+				// Check for ottava changes
+				const ctx = event as ContextChange;
+				if (ctx.ottava !== undefined) {
+					if (ctx.ottava === 0) {
+						// End current ottava span
+						if (currentOctave && lastNoteId) {
+							octaves.push({
+								dis: currentOctave.dis,
+								disPlace: currentOctave.disPlace,
+								startId: currentOctave.startId,
+								endId: lastNoteId,
+							});
+							currentOctave = null;
+						}
+					} else {
+						// Start new ottava span - will be applied to next note
+						pendingOttava = ctx.ottava;
+					}
+				}
+				// Other context changes are handled at measure level
 				break;
+			}
 		}
 
 		// Close beam element if beam ends
@@ -610,17 +676,28 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 		xml += `${baseIndent}</beam>\n`;
 	}
 
+	// Close any unclosed ottava span at end of layer
+	if (currentOctave && lastNoteId) {
+		octaves.push({
+			dis: currentOctave.dis,
+			disPlace: currentOctave.disPlace,
+			startId: currentOctave.startId,
+			endId: lastNoteId,
+		});
+	}
+
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals };
+	return { xml, hairpins, pedals, octaves };
 };
 
 
-// Encode a staff - returns both xml, hairpin spans, and pedal spans
-const encodeStaff = (voices: Voice[], staffN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[] } => {
+// Encode a staff - returns both xml, hairpin spans, pedal spans, and octave spans
+const encodeStaff = (voices: Voice[], staffN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[]; octaves: OctaveSpan[] } => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
 	const allPedals: PedalSpan[] = [];
+	const allOctaves: OctaveSpan[] = [];
 
 	if (voices.length === 0) {
 		xml += `${indent}    <layer xml:id="${generateId('layer')}" n="1" />\n`;
@@ -630,13 +707,43 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): { xml: st
 			xml += result.xml;
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
+			allOctaves.push(...result.octaves);
 		});
 	}
 
 	xml += `${indent}</staff>\n`;
-	return { xml, hairpins: allHairpins, pedals: allPedals };
+	return { xml, hairpins: allHairpins, pedals: allPedals, octaves: allOctaves };
 };
 
+
+// Generate tempo element
+const generateTempoElement = (tempo: Tempo, indent: string): string => {
+	let attrs = `xml:id="${generateId('tempo')}" tstamp="1"`;
+
+	// Add BPM if specified
+	if (tempo.bpm) {
+		attrs += ` midi.bpm="${tempo.bpm}"`;
+		if (tempo.beat) {
+			attrs += ` mm="${tempo.bpm}" mm.unit="${tempo.beat.division}"`;
+		}
+	}
+
+	// Generate content
+	let content = '';
+	if (tempo.text) {
+		content = escapeXml(tempo.text);
+	}
+	if (tempo.beat && tempo.bpm) {
+		const beatSymbol = tempo.beat.division === 4 ? '♩' : tempo.beat.division === 2 ? '𝅗𝅥' : '♪';
+		if (content) content += ' ';
+		content += `${beatSymbol} = ${tempo.bpm}`;
+	}
+
+	if (content) {
+		return `${indent}<tempo ${attrs}>${content}</tempo>\n`;
+	}
+	return `${indent}<tempo ${attrs} />\n`;
+};
 
 // Encode a measure
 const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxStaff: number): string => {
@@ -644,6 +751,20 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
 	const allPedals: PedalSpan[] = [];
+	const allOctaves: OctaveSpan[] = [];
+
+	// Extract tempo from context changes
+	let measureTempo: Tempo | undefined;
+	for (const voice of measure.voices) {
+		for (const event of voice.events) {
+			if (event.type === 'context') {
+				const ctx = event as ContextChange;
+				if (ctx.tempo) {
+					measureTempo = ctx.tempo;
+				}
+			}
+		}
+	}
 
 	// Group voices by staff
 	const voicesByStaff: Record<number, Voice[]> = {};
@@ -662,6 +783,12 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 		xml += result.xml;
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
+		allOctaves.push(...result.octaves);
+	}
+
+	// Generate tempo element if present
+	if (measureTempo) {
+		xml += generateTempoElement(measureTempo, indent + '    ');
 	}
 
 	// Generate hairpin control events
@@ -672,6 +799,11 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	// Generate pedal control events
 	for (const ped of allPedals) {
 		xml += `${indent}    <pedal xml:id="${generateId('pedal')}" dir="down" startid="#${ped.startId}" endid="#${ped.endId}" />\n`;
+	}
+
+	// Generate octave control events
+	for (const oct of allOctaves) {
+		xml += `${indent}    <octave xml:id="${generateId('octave')}" dis="${oct.dis}" dis.place="${oct.disPlace}" startid="#${oct.startId}" endid="#${oct.endId}" />\n`;
 	}
 
 	xml += `${indent}</measure>\n`;
