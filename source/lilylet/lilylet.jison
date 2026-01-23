@@ -71,9 +71,9 @@
 	const dynamic = (type) => ({ type });
 	const hairpin = (type) => ({ type });
 	const pedal = (type) => ({ type });
-	const tie = (start) => ({ start });
-	const slur = (start) => ({ start });
-	const beam = (start) => ({ start });
+	const tie = (start) => ({ markType: 'tie', start });
+	const slur = (start) => ({ markType: 'slur', start });
+	const beam = (start) => ({ markType: 'beam', start });
 
 	// Parse PITCH token (e.g., "c", "cs", "bf", "css", "bff") into phonet and accidental
 	const parsePitch = (text, octave) => {
@@ -103,6 +103,18 @@
 	let currentStaff = 1;
 	let currentKey = null;
 	let currentTimeSig = null;
+	let currentDuration = { division: 4, dots: 0 }; // default quarter note
+
+	// Reset parser state - call before each parse
+	const resetParserState = () => {
+		currentStaff = 1;
+		currentKey = null;
+		currentTimeSig = null;
+		currentDuration = { division: 4, dots: 0 };
+	};
+
+	// Export reset function
+	parser.resetState = resetParserState;
 %}
 
 
@@ -276,10 +288,10 @@ event
 	;
 
 note_event
-	: chord duration post_events				-> noteEvent($1, $2, $3)
-	| pitch duration post_events				-> noteEvent($1, $2, $3)
-	| chord post_events							-> noteEvent($1, { division: 4, dots: 0 }, $2)
-	| pitch post_events							-> noteEvent($1, { division: 4, dots: 0 }, $2)
+	: chord duration post_events				%{ currentDuration = $2; $$ = noteEvent($1, $2, $3); %}
+	| pitch duration post_events				%{ currentDuration = $2; $$ = noteEvent($1, $2, $3); %}
+	| chord post_events							-> noteEvent($1, currentDuration, $2)
+	| pitch post_events							-> noteEvent($1, currentDuration, $2)
 	;
 
 chord
@@ -313,9 +325,10 @@ dots
 	;
 
 rest_event
-	: REST_CHAR duration post_events			-> restEvent($2, { fullMeasure: $1 === 'R' })
-	| SPACE_CHAR duration post_events			-> restEvent($2, { invisible: true })
-	| REST_CHAR post_events						-> restEvent({ division: 4, dots: 0 }, { fullMeasure: $1 === 'R' })
+	: REST_CHAR duration post_events			%{ currentDuration = $2; $$ = restEvent($2, { fullMeasure: $1 === 'R' }); %}
+	| SPACE_CHAR duration post_events			%{ currentDuration = $2; $$ = restEvent($2, { invisible: true }); %}
+	| REST_CHAR post_events						-> restEvent(currentDuration, { fullMeasure: $1 === 'R' })
+	| SPACE_CHAR post_events					-> restEvent(currentDuration, { invisible: true })
 	;
 
 context_event

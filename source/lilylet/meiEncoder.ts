@@ -224,6 +224,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 	slurStart: boolean;
 	slurEnd: boolean;
 	tieStart: boolean;
+	beamStart: boolean;
+	beamEnd: boolean;
 	dynamic?: string;
 	hairpin?: string;
 } => {
@@ -237,6 +239,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 		slurStart: false,
 		slurEnd: false,
 		tieStart: false,
+		beamStart: false,
+		beamEnd: false,
 		dynamic: undefined as string | undefined,
 		hairpin: undefined as string | undefined,
 	};
@@ -268,23 +272,24 @@ const extractMarkOptions = (marks?: Mark[]): {
 			result.dynamic = DYNAMIC_MAP[ornamentType];
 		}
 
-		// Slurs
-		if ('start' in mark && (mark as any).start !== undefined) {
-			const slurMark = mark as { start: boolean };
-			if ('type' in mark === false || (mark as any).type === undefined) {
-				// It's a Slur or Tie
-				if (slurMark.start) {
-					// Check if it's a tie based on object structure
-					result.slurStart = true;
-				} else {
-					result.slurEnd = true;
-				}
+		// Check markType for tie/slur/beam distinction
+		const markType = (mark as any).markType;
+		if (markType === 'tie') {
+			if ((mark as any).start) {
+				result.tieStart = true;
 			}
-		}
-
-		// Ties
-		if ((mark as any).start === true && !result.slurStart) {
-			result.tieStart = true;
+		} else if (markType === 'slur') {
+			if ((mark as any).start) {
+				result.slurStart = true;
+			} else {
+				result.slurEnd = true;
+			}
+		} else if (markType === 'beam') {
+			if ((mark as any).start) {
+				result.beamStart = true;
+			} else {
+				result.beamEnd = true;
+			}
 		}
 	}
 
@@ -423,21 +428,53 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): string => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
+	let inBeam = false;
+	const baseIndent = indent + '    ';
+
 	for (const event of voice.events) {
+		// Check for beam start/end in note events
+		let beamStart = false;
+		let beamEnd = false;
+		if (event.type === 'note') {
+			const noteEvent = event as NoteEvent;
+			const markOptions = extractMarkOptions(noteEvent.marks);
+			beamStart = markOptions.beamStart;
+			beamEnd = markOptions.beamEnd;
+		}
+
+		// Open beam element if beam starts
+		if (beamStart && !inBeam) {
+			xml += `${baseIndent}<beam xml:id="${generateId('beam')}">\n`;
+			inBeam = true;
+		}
+
+		const currentIndent = inBeam ? baseIndent + '    ' : baseIndent;
+
 		switch (event.type) {
 			case 'note':
-				xml += noteEventToMEI(event as NoteEvent, indent + '    ', voice.staff);
+				xml += noteEventToMEI(event as NoteEvent, currentIndent, voice.staff);
 				break;
 			case 'rest':
-				xml += restEventToMEI(event as RestEvent, indent + '    ');
+				xml += restEventToMEI(event as RestEvent, currentIndent);
 				break;
 			case 'tuplet':
-				xml += tupletEventToMEI(event as TupletEvent, indent + '    ', voice.staff);
+				xml += tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff);
 				break;
 			case 'context':
 				// Context changes are handled at measure level
 				break;
 		}
+
+		// Close beam element if beam ends
+		if (beamEnd && inBeam) {
+			xml += `${baseIndent}</beam>\n`;
+			inBeam = false;
+		}
+	}
+
+	// Close any unclosed beam
+	if (inBeam) {
+		xml += `${baseIndent}</beam>\n`;
 	}
 
 	xml += `${indent}</layer>\n`;
