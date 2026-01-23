@@ -14,13 +14,25 @@
 		dots: dots || 0,
 	});
 
-	const noteEvent = (pitches, dur, marks, options = {}) => ({
-		type: 'note',
-		pitches: Array.isArray(pitches) ? pitches : [pitches],
-		duration: dur,
-		marks: marks && marks.length ? marks : undefined,
-		...options,
-	});
+	const noteEvent = (pitches, dur, marks, options = {}) => {
+		// Check if this is a pitched rest (e.g., g'\rest)
+		const pitchedRestMark = marks && marks.find(m => m && m.pitchedRest);
+		if (pitchedRestMark) {
+			const pitch = Array.isArray(pitches) ? pitches[0] : pitches;
+			return {
+				type: 'rest',
+				duration: dur,
+				pitch: pitch,
+			};
+		}
+		return {
+			type: 'note',
+			pitches: Array.isArray(pitches) ? pitches : [pitches],
+			duration: dur,
+			marks: marks && marks.length ? marks : undefined,
+			...options,
+		};
+	};
 
 	const restEvent = (dur, options = {}) => ({
 		type: 'rest',

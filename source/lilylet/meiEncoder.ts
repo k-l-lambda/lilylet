@@ -13,6 +13,8 @@ import {
 	OrnamentType,
 	StemDirection,
 	Mark,
+	HairpinType,
+	PedalType,
 } from "./types";
 
 
@@ -155,14 +157,16 @@ const buildNoteElement = (
 		layerStaff?: number;
 		slur?: string;
 		artics?: string[];
-		fermata?: boolean;
+		fermata?: 'normal' | 'short' | false;
 		trill?: boolean;
 		arpeggio?: boolean;
 		turn?: boolean;
 		mordent?: boolean;
-	} = {}
+	} = {},
+	noteId?: string
 ): string => {
-	let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
+	const id = noteId || generateId('note');
+	let attrs = `xml:id="${id}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 
 	if (!inChord) {
 		attrs += ` dur="${dur}"`;
@@ -193,7 +197,8 @@ const buildNoteElement = (
 		result += `${indent}    <artic artic="${options.artics.join(' ')}" />\n`;
 	}
 	if (options.fermata) {
-		result += `${indent}    <fermata xml:id="${generateId('fermata')}" />\n`;
+		const fermataAttrs = options.fermata === 'short' ? ` shape="angular"` : '';
+		result += `${indent}    <fermata xml:id="${generateId('fermata')}"${fermataAttrs} />\n`;
 	}
 	if (options.trill) {
 		result += `${indent}    <trill xml:id="${generateId('trill')}" />\n`;
@@ -216,7 +221,7 @@ const buildNoteElement = (
 // Extract mark properties from note event
 const extractMarkOptions = (marks?: Mark[]): {
 	artics: string[];
-	fermata: boolean;
+	fermata: 'normal' | 'short' | false;
 	trill: boolean;
 	arpeggio: boolean;
 	turn: boolean;
@@ -228,10 +233,11 @@ const extractMarkOptions = (marks?: Mark[]): {
 	beamEnd: boolean;
 	dynamic?: string;
 	hairpin?: string;
+	pedal?: string;
 } => {
 	const result = {
 		artics: [] as string[],
-		fermata: false,
+		fermata: false as 'normal' | 'short' | false,
 		trill: false,
 		arpeggio: false,
 		turn: false,
@@ -243,6 +249,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 		beamEnd: false,
 		dynamic: undefined as string | undefined,
 		hairpin: undefined as string | undefined,
+		pedal: undefined as string | undefined,
 	};
 
 	if (!marks) return result;
@@ -255,8 +262,10 @@ const extractMarkOptions = (marks?: Mark[]): {
 
 		// Ornaments
 		const ornamentType = (mark as any).type;
-		if (ornamentType === OrnamentType.fermata || ornamentType === OrnamentType.shortFermata) {
-			result.fermata = true;
+		if (ornamentType === OrnamentType.fermata) {
+			result.fermata = 'normal';
+		} else if (ornamentType === OrnamentType.shortFermata) {
+			result.fermata = 'short';
 		} else if (ornamentType === OrnamentType.trill) {
 			result.trill = true;
 		} else if (ornamentType === OrnamentType.arpeggio) {
@@ -270,6 +279,22 @@ const extractMarkOptions = (marks?: Mark[]): {
 		// Dynamics
 		if (DYNAMIC_MAP[ornamentType]) {
 			result.dynamic = DYNAMIC_MAP[ornamentType];
+		}
+
+		// Hairpins
+		if (ornamentType === HairpinType.crescendoStart) {
+			result.hairpin = 'crescStart';
+		} else if (ornamentType === HairpinType.diminuendoStart) {
+			result.hairpin = 'dimStart';
+		} else if (ornamentType === HairpinType.crescendoEnd || ornamentType === HairpinType.diminuendoEnd) {
+			result.hairpin = 'end';
+		}
+
+		// Pedals
+		if (ornamentType === PedalType.sustainOn) {
+			result.pedal = 'down';
+		} else if (ornamentType === PedalType.sustainOff) {
+			result.pedal = 'up';
 		}
 
 		// Check markType for tie/slur/beam distinction
@@ -297,8 +322,13 @@ const extractMarkOptions = (marks?: Mark[]): {
 };
 
 
-// Convert NoteEvent to MEI
-const noteEventToMEI = (event: NoteEvent, indent: string, layerStaff?: number): string => {
+// Convert NoteEvent to MEI - returns { xml, elementId, hairpin, pedal, hasTieStart, pitches }
+const noteEventToMEI = (
+	event: NoteEvent,
+	indent: string,
+	layerStaff?: number,
+	tieEnd?: boolean
+): { xml: string; elementId: string; hairpin?: string; pedal?: string; hasTieStart: boolean; pitches: Pitch[] } => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
 	const markOptions = extractMarkOptions(event.marks);
@@ -314,9 +344,19 @@ const noteEventToMEI = (event: NoteEvent, indent: string, layerStaff?: number): 
 	if (event.stemDirection === StemDirection.up) stemDir = 'up';
 	else if (event.stemDirection === StemDirection.down) stemDir = 'down';
 
+	// Determine tie attribute: 'i' = initial, 'm' = medial, 't' = terminal
+	let tie: 'i' | 'm' | 't' | undefined;
+	if (markOptions.tieStart && tieEnd) {
+		tie = 'm';  // Both start and end = medial
+	} else if (markOptions.tieStart) {
+		tie = 'i';  // Start only = initial
+	} else if (tieEnd) {
+		tie = 't';  // End only = terminal
+	}
+
 	const noteOptions = {
 		grace: event.grace,
-		tie: markOptions.tieStart ? 'i' as const : undefined,
+		tie,
 		stemDir,
 		staff: event.staff,
 		layerStaff,
@@ -338,11 +378,20 @@ const noteEventToMEI = (event: NoteEvent, indent: string, layerStaff?: number): 
 	// Single note
 	if (event.pitches.length === 1) {
 		const pitch = encodePitch(event.pitches[0]);
-		return dynamicXml + buildNoteElement(pitch, dur, dots, indent, false, noteOptions);
+		const noteId = generateId('note');
+		return {
+			xml: dynamicXml + buildNoteElement(pitch, dur, dots, indent, false, noteOptions, noteId),
+			elementId: noteId,
+			hairpin: markOptions.hairpin,
+			pedal: markOptions.pedal,
+			hasTieStart: markOptions.tieStart,
+			pitches: event.pitches,
+		};
 	}
 
 	// Chord
-	let chordAttrs = `xml:id="${generateId('chord')}" dur="${dur}"`;
+	const chordId = generateId('chord');
+	let chordAttrs = `xml:id="${chordId}" dur="${dur}"`;
 	if (dots > 0) chordAttrs += ` dots="${dots}"`;
 	if (noteOptions.grace) chordAttrs += ` grace="unacc"`;
 	if (noteOptions.tie) chordAttrs += ` tie="${noteOptions.tie}"`;
@@ -363,7 +412,8 @@ const noteEventToMEI = (event: NoteEvent, indent: string, layerStaff?: number): 
 		result += `${indent}    <artic artic="${noteOptions.artics.join(' ')}" />\n`;
 	}
 	if (noteOptions.fermata) {
-		result += `${indent}    <fermata xml:id="${generateId('fermata')}" />\n`;
+		const fermataAttrs = noteOptions.fermata === 'short' ? ` shape="angular"` : '';
+		result += `${indent}    <fermata xml:id="${generateId('fermata')}"${fermataAttrs} />\n`;
 	}
 	if (noteOptions.trill) {
 		result += `${indent}    <trill xml:id="${generateId('trill')}" />\n`;
@@ -379,7 +429,14 @@ const noteEventToMEI = (event: NoteEvent, indent: string, layerStaff?: number): 
 	}
 
 	result += `${indent}</chord>\n`;
-	return result;
+	return {
+		xml: result,
+		elementId: chordId,
+		hairpin: markOptions.hairpin,
+		pedal: markOptions.pedal,
+		hasTieStart: markOptions.tieStart,
+		pitches: event.pitches,
+	};
 };
 
 
@@ -388,6 +445,12 @@ const restEventToMEI = (event: RestEvent, indent: string): string => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	let attrs = `xml:id="${generateId('rest')}" dur="${dur}"`;
 	if (event.duration.dots > 0) attrs += ` dots="${event.duration.dots}"`;
+
+	// Pitched rest (positioned at specific pitch)
+	if (event.pitch) {
+		const pitch = encodePitch(event.pitch);
+		attrs += ` ploc="${pitch.pname}" oloc="${pitch.oct}"`;
+	}
 
 	// Space rest (invisible)
 	if (event.invisible) {
@@ -412,7 +475,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 	for (const e of event.events) {
 		if (e.type === 'note') {
-			result += noteEventToMEI(e as NoteEvent, indent + '    ', layerStaff);
+			result += noteEventToMEI(e as NoteEvent, indent + '    ', layerStaff).xml;
 		} else if (e.type === 'rest') {
 			result += restEventToMEI(e as RestEvent, indent + '    ');
 		}
@@ -423,13 +486,45 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 };
 
 
-// Encode a layer (voice)
-const encodeLayer = (voice: Voice, layerN: number, indent: string): string => {
+// Hairpin span data
+interface HairpinSpan {
+	form: 'cres' | 'dim';
+	startId: string;
+	endId: string;
+}
+
+interface PedalSpan {
+	startId: string;
+	endId: string;
+}
+
+// Encode a layer (voice) - returns both xml, hairpin spans, and pedal spans
+const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[] } => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
 	let inBeam = false;
 	const baseIndent = indent + '    ';
+
+	// Track hairpin spans
+	const hairpins: HairpinSpan[] = [];
+	let currentHairpin: { form: 'cres' | 'dim'; startId: string } | null = null;
+
+	// Track pedal spans
+	const pedals: PedalSpan[] = [];
+	let currentPedal: { startId: string } | null = null;
+
+	// Track pending tie pitches (for tie="t" on next note)
+	let pendingTiePitches: Pitch[] = [];
+
+	// Helper to check if pitches match for tie continuation
+	const pitchesMatch = (p1: Pitch[], p2: Pitch[]): boolean => {
+		if (p1.length !== p2.length) return false;
+		for (let i = 0; i < p1.length; i++) {
+			if (p1[i].phonet !== p2[i].phonet || p1[i].octave !== p2[i].octave) return false;
+		}
+		return true;
+	};
 
 	for (const event of voice.events) {
 		// Check for beam start/end in note events
@@ -451,9 +546,47 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): string => {
 		const currentIndent = inBeam ? baseIndent + '    ' : baseIndent;
 
 		switch (event.type) {
-			case 'note':
-				xml += noteEventToMEI(event as NoteEvent, currentIndent, voice.staff);
+			case 'note': {
+				const noteEvent = event as NoteEvent;
+				// Check if this note should have tie="t" (matches pending tie)
+				const tieEnd = pendingTiePitches.length > 0 && pitchesMatch(pendingTiePitches, noteEvent.pitches);
+
+				const result = noteEventToMEI(noteEvent, currentIndent, voice.staff, tieEnd);
+				xml += result.xml;
+
+				// Update pending tie pitches
+				if (result.hasTieStart) {
+					pendingTiePitches = result.pitches;
+				} else if (tieEnd) {
+					pendingTiePitches = [];
+				}
+
+				// Track hairpin spans
+				if (result.hairpin === 'crescStart') {
+					currentHairpin = { form: 'cres', startId: result.elementId };
+				} else if (result.hairpin === 'dimStart') {
+					currentHairpin = { form: 'dim', startId: result.elementId };
+				} else if (result.hairpin === 'end' && currentHairpin) {
+					hairpins.push({
+						form: currentHairpin.form,
+						startId: currentHairpin.startId,
+						endId: result.elementId,
+					});
+					currentHairpin = null;
+				}
+
+				// Track pedal spans
+				if (result.pedal === 'down') {
+					currentPedal = { startId: result.elementId };
+				} else if (result.pedal === 'up' && currentPedal) {
+					pedals.push({
+						startId: currentPedal.startId,
+						endId: result.elementId,
+					});
+					currentPedal = null;
+				}
 				break;
+			}
 			case 'rest':
 				xml += restEventToMEI(event as RestEvent, currentIndent);
 				break;
@@ -478,25 +611,30 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): string => {
 	}
 
 	xml += `${indent}</layer>\n`;
-	return xml;
+	return { xml, hairpins, pedals };
 };
 
 
-// Encode a staff
-const encodeStaff = (voices: Voice[], staffN: number, indent: string): string => {
+// Encode a staff - returns both xml, hairpin spans, and pedal spans
+const encodeStaff = (voices: Voice[], staffN: number, indent: string): { xml: string; hairpins: HairpinSpan[]; pedals: PedalSpan[] } => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
+	const allHairpins: HairpinSpan[] = [];
+	const allPedals: PedalSpan[] = [];
 
 	if (voices.length === 0) {
 		xml += `${indent}    <layer xml:id="${generateId('layer')}" n="1" />\n`;
 	} else {
 		voices.forEach((voice, vi) => {
-			xml += encodeLayer(voice, vi + 1, indent + '    ');
+			const result = encodeLayer(voice, vi + 1, indent + '    ');
+			xml += result.xml;
+			allHairpins.push(...result.hairpins);
+			allPedals.push(...result.pedals);
 		});
 	}
 
 	xml += `${indent}</staff>\n`;
-	return xml;
+	return { xml, hairpins: allHairpins, pedals: allPedals };
 };
 
 
@@ -504,6 +642,8 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string): string =>
 const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxStaff: number): string => {
 	const measureId = generateId("measure");
 	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
+	const allHairpins: HairpinSpan[] = [];
+	const allPedals: PedalSpan[] = [];
 
 	// Group voices by staff
 	const voicesByStaff: Record<number, Voice[]> = {};
@@ -518,7 +658,20 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, maxSt
 	// Encode each staff
 	for (let si = 1; si <= maxStaff; si++) {
 		const voices = voicesByStaff[si] || [];
-		xml += encodeStaff(voices, si, indent + '    ');
+		const result = encodeStaff(voices, si, indent + '    ');
+		xml += result.xml;
+		allHairpins.push(...result.hairpins);
+		allPedals.push(...result.pedals);
+	}
+
+	// Generate hairpin control events
+	for (const hp of allHairpins) {
+		xml += `${indent}    <hairpin xml:id="${generateId('hairpin')}" form="${hp.form}" startid="#${hp.startId}" endid="#${hp.endId}" />\n`;
+	}
+
+	// Generate pedal control events
+	for (const ped of allPedals) {
+		xml += `${indent}    <pedal xml:id="${generateId('pedal')}" dir="down" startid="#${ped.startId}" endid="#${ped.endId}" />\n`;
 	}
 
 	xml += `${indent}</measure>\n`;
