@@ -2,6 +2,7 @@
  * Lilylet Document Serializer
  *
  * Converts LilyletDoc to Lilylet (.lyl) string format.
+ * Uses relative pitch mode matching the parser's behavior.
  */
 
 import {
@@ -30,6 +31,62 @@ import {
 	Tempo,
 	Placement,
 } from "./types";
+
+
+const PHONETS = "cdefgab";
+
+
+// Pitch environment for relative pitch serialization
+interface PitchEnv {
+	step: number;  // 0-6 for c-b
+	octave: number; // absolute octave (0 = middle C octave)
+}
+
+
+/**
+ * Calculate the octave markers needed to serialize a pitch in relative mode.
+ *
+ * The parser logic:
+ * - Calculate interval from previous pitch
+ * - If |interval| > 3, adjust octave (go the "short way")
+ * - Add explicit ' and , markers from the pitch
+ *
+ * We need to reverse this: given the target absolute octave,
+ * calculate what markers are needed.
+ */
+const getRelativeOctaveMarkers = (env: PitchEnv, pitch: Pitch): { markers: string; newEnv: PitchEnv } => {
+	const step = PHONETS.indexOf(pitch.phonet as string);
+	if (step === -1) {
+		return { markers: '', newEnv: env };
+	}
+
+	const interval = step - env.step;
+
+	// Parser's octave adjustment calculation
+	const octInc = Math.floor(Math.abs(interval) / 4) * -Math.sign(interval);
+
+	// Without any markers, parser would calculate:
+	// env.octave + 0 (marker) + octInc = base octave
+	const baseOctave = env.octave + octInc;
+
+	// We need markers to reach pitch.octave from baseOctave
+	const markerCount = pitch.octave - baseOctave;
+
+	let markers = '';
+	if (markerCount > 0) {
+		markers = "'".repeat(markerCount);
+	} else if (markerCount < 0) {
+		markers = ",".repeat(-markerCount);
+	}
+
+	// Update environment (mirrors parser behavior)
+	const newEnv: PitchEnv = {
+		step: step,
+		octave: pitch.octave
+	};
+
+	return { markers, newEnv };
+};
 
 
 // Accidental to Lilylet notation
@@ -108,8 +165,8 @@ const PEDAL_MAP: Record<string, string> = {
 };
 
 
-// Serialize a pitch to Lilylet notation
-const serializePitch = (pitch: Pitch): string => {
+// Serialize a pitch to Lilylet notation (absolute mode - for contexts like key signature)
+const serializePitchAbsolute = (pitch: Pitch): string => {
 	let result = String(pitch.phonet);
 
 	// Add accidental
@@ -125,6 +182,23 @@ const serializePitch = (pitch: Pitch): string => {
 	}
 
 	return result;
+};
+
+
+// Serialize a pitch in relative mode
+const serializePitchRelative = (pitch: Pitch, env: PitchEnv): { str: string; newEnv: PitchEnv } => {
+	let result = String(pitch.phonet);
+
+	// Add accidental
+	if (pitch.accidental) {
+		result += ACCIDENTAL_MAP[pitch.accidental] || '';
+	}
+
+	// Calculate relative octave markers
+	const { markers, newEnv } = getRelativeOctaveMarkers(env, pitch);
+	result += markers;
+
+	return { str: result, newEnv };
 };
 
 
@@ -191,9 +265,14 @@ const serializeMarks = (marks: Mark[]): string => {
 };
 
 
-// Serialize a note event
-const serializeNoteEvent = (event: NoteEvent, prevDuration?: Duration): string => {
+// Serialize a note event with pitch environment tracking
+const serializeNoteEvent = (
+	event: NoteEvent,
+	env: PitchEnv,
+	prevDuration?: Duration
+): { str: string; newEnv: PitchEnv } => {
 	const parts: string[] = [];
+	let currentEnv = env;
 
 	// Grace note prefix
 	if (event.grace) {
@@ -202,10 +281,25 @@ const serializeNoteEvent = (event: NoteEvent, prevDuration?: Duration): string =
 
 	// Single note or chord
 	if (event.pitches.length === 1) {
-		parts.push(serializePitch(event.pitches[0]));
+		const { str, newEnv } = serializePitchRelative(event.pitches[0], currentEnv);
+		parts.push(str);
+		currentEnv = newEnv;
 	} else if (event.pitches.length > 1) {
 		// Chord: <c e g>
-		const pitchStrs = event.pitches.map(serializePitch);
+		// First pitch is relative to previous note, subsequent pitches relative to each other
+		const pitchStrs: string[] = [];
+		const { str: firstStr, newEnv: firstEnv } = serializePitchRelative(event.pitches[0], currentEnv);
+		pitchStrs.push(firstStr);
+		currentEnv = firstEnv;
+
+		// Chord pitches are relative to each other within the chord
+		let chordEnv = { ...currentEnv };
+		for (let i = 1; i < event.pitches.length; i++) {
+			const { str, newEnv } = serializePitchRelative(event.pitches[i], chordEnv);
+			pitchStrs.push(str);
+			chordEnv = newEnv;
+		}
+
 		parts.push('<' + pitchStrs.join(' ') + '>');
 	}
 
@@ -227,13 +321,19 @@ const serializeNoteEvent = (event: NoteEvent, prevDuration?: Duration): string =
 		parts.push(serializeMarks(event.marks));
 	}
 
-	return parts.join('');
+	return { str: parts.join(''), newEnv: currentEnv };
 };
 
 
-// Serialize a rest event
-const serializeRestEvent = (event: RestEvent, prevDuration?: Duration): string => {
+// Serialize a rest event with pitch environment tracking
+const serializeRestEvent = (
+	event: RestEvent,
+	env: PitchEnv,
+	prevDuration?: Duration
+): { str: string; newEnv: PitchEnv } => {
 	const parts: string[] = [];
+	let currentEnv = env;
+	let isPitchedRest = false;
 
 	// Full measure rest
 	if (event.fullMeasure) {
@@ -243,10 +343,12 @@ const serializeRestEvent = (event: RestEvent, prevDuration?: Duration): string =
 	else if (event.invisible) {
 		parts.push('s');
 	}
-	// Normal rest or positioned rest
+	// Positioned rest: pitch + duration + \rest
 	else if (event.pitch) {
-		// Positioned rest: pitch\rest
-		parts.push(serializePitch(event.pitch) + '\\rest');
+		const { str, newEnv } = serializePitchRelative(event.pitch, currentEnv);
+		parts.push(str);
+		currentEnv = newEnv;
+		isPitchedRest = true;
 	} else {
 		parts.push('r');
 	}
@@ -259,7 +361,12 @@ const serializeRestEvent = (event: RestEvent, prevDuration?: Duration): string =
 		parts.push(durStr);
 	}
 
-	return parts.join('');
+	// \rest mark comes after duration for positioned rests
+	if (isPitchedRest) {
+		parts.push('\\rest');
+	}
+
+	return { str: parts.join(''), newEnv: currentEnv };
 };
 
 
@@ -269,7 +376,7 @@ const serializeContextChange = (event: ContextChange): string => {
 
 	// Clef
 	if (event.clef) {
-		parts.push('\\clef ' + CLEF_MAP[event.clef]);
+		parts.push('\\clef "' + CLEF_MAP[event.clef] + '"');
 	}
 
 	// Key signature
@@ -332,9 +439,13 @@ const serializeTempo = (tempo: Tempo): string => {
 };
 
 
-// Serialize a tuplet event
-const serializeTupletEvent = (event: TupletEvent): string => {
+// Serialize a tuplet event with pitch environment tracking
+const serializeTupletEvent = (
+	event: TupletEvent,
+	env: PitchEnv
+): { str: string; newEnv: PitchEnv } => {
 	const parts: string[] = [];
+	let currentEnv = env;
 
 	// \times numerator/denominator { ... }
 	parts.push('\\times ' + event.ratio.numerator + '/' + event.ratio.denominator + ' {');
@@ -342,76 +453,116 @@ const serializeTupletEvent = (event: TupletEvent): string => {
 	let prevDuration: Duration | undefined;
 	for (const e of event.events) {
 		if (e.type === 'note') {
-			parts.push(' ' + serializeNoteEvent(e as NoteEvent, prevDuration));
+			const { str, newEnv } = serializeNoteEvent(e as NoteEvent, currentEnv, prevDuration);
+			parts.push(' ' + str);
+			currentEnv = newEnv;
 			prevDuration = (e as NoteEvent).duration;
 		} else if (e.type === 'rest') {
-			parts.push(' ' + serializeRestEvent(e as RestEvent, prevDuration));
+			const { str, newEnv } = serializeRestEvent(e as RestEvent, currentEnv, prevDuration);
+			parts.push(' ' + str);
+			currentEnv = newEnv;
 			prevDuration = (e as RestEvent).duration;
 		}
 	}
 
 	parts.push(' }');
-	return parts.join('');
+	return { str: parts.join(''), newEnv: currentEnv };
 };
 
 
-// Serialize a tremolo event
-const serializeTremoloEvent = (event: TremoloEvent): string => {
+// Serialize a tremolo event with pitch environment tracking
+const serializeTremoloEvent = (
+	event: TremoloEvent,
+	env: PitchEnv
+): { str: string; newEnv: PitchEnv } => {
 	const parts: string[] = [];
+	let currentEnv = env;
 
 	// \repeat tremolo count { noteA noteB }
 	parts.push('\\repeat tremolo ' + event.count + ' {');
 
 	// First pitch/chord
 	if (event.pitchA.length === 1) {
-		parts.push(' ' + serializePitch(event.pitchA[0]) + event.division);
+		const { str, newEnv } = serializePitchRelative(event.pitchA[0], currentEnv);
+		parts.push(' ' + str + event.division);
+		currentEnv = newEnv;
 	} else {
-		parts.push(' <' + event.pitchA.map(serializePitch).join(' ') + '>' + event.division);
+		const pitchStrs: string[] = [];
+		const { str: firstStr, newEnv: firstEnv } = serializePitchRelative(event.pitchA[0], currentEnv);
+		pitchStrs.push(firstStr);
+		currentEnv = firstEnv;
+		let chordEnv = { ...currentEnv };
+		for (let i = 1; i < event.pitchA.length; i++) {
+			const { str, newEnv } = serializePitchRelative(event.pitchA[i], chordEnv);
+			pitchStrs.push(str);
+			chordEnv = newEnv;
+		}
+		parts.push(' <' + pitchStrs.join(' ') + '>' + event.division);
 	}
 
 	// Second pitch/chord
 	if (event.pitchB.length === 1) {
-		parts.push(' ' + serializePitch(event.pitchB[0]) + event.division);
+		const { str, newEnv } = serializePitchRelative(event.pitchB[0], currentEnv);
+		parts.push(' ' + str + event.division);
+		currentEnv = newEnv;
 	} else {
-		parts.push(' <' + event.pitchB.map(serializePitch).join(' ') + '>' + event.division);
+		const pitchStrs: string[] = [];
+		const { str: firstStr, newEnv: firstEnv } = serializePitchRelative(event.pitchB[0], currentEnv);
+		pitchStrs.push(firstStr);
+		currentEnv = firstEnv;
+		let chordEnv = { ...currentEnv };
+		for (let i = 1; i < event.pitchB.length; i++) {
+			const { str, newEnv } = serializePitchRelative(event.pitchB[i], chordEnv);
+			pitchStrs.push(str);
+			chordEnv = newEnv;
+		}
+		parts.push(' <' + pitchStrs.join(' ') + '>' + event.division);
 	}
 
 	parts.push(' }');
-	return parts.join('');
+	return { str: parts.join(''), newEnv: currentEnv };
 };
 
 
-// Serialize a single event
-const serializeEvent = (event: Event, prevDuration?: Duration): string => {
+// Serialize a single event with pitch environment tracking
+const serializeEvent = (
+	event: Event,
+	env: PitchEnv,
+	prevDuration?: Duration
+): { str: string; newEnv: PitchEnv } => {
 	switch (event.type) {
 		case 'note':
-			return serializeNoteEvent(event as NoteEvent, prevDuration);
+			return serializeNoteEvent(event as NoteEvent, env, prevDuration);
 		case 'rest':
-			return serializeRestEvent(event as RestEvent, prevDuration);
+			return serializeRestEvent(event as RestEvent, env, prevDuration);
 		case 'context':
-			return serializeContextChange(event as ContextChange);
+			return { str: serializeContextChange(event as ContextChange), newEnv: env };
 		case 'tuplet':
-			return serializeTupletEvent(event as TupletEvent);
+			return serializeTupletEvent(event as TupletEvent, env);
 		case 'tremolo':
-			return serializeTremoloEvent(event as TremoloEvent);
+			return serializeTremoloEvent(event as TremoloEvent, env);
 		default:
-			return '';
+			return { str: '', newEnv: env };
 	}
 };
 
 
-// Serialize a voice
+// Serialize a voice with pitch environment tracking
 const serializeVoice = (voice: Voice): string => {
 	const parts: string[] = [];
 	let prevDuration: Duration | undefined;
+	// Each voice starts fresh from middle C (step=0, octave=0)
+	let pitchEnv: PitchEnv = { step: 0, octave: 0 };
 
 	// Staff indicator if not staff 1
 	if (voice.staff > 1) {
-		parts.push('\\staff ' + voice.staff + ' ');
+		parts.push('\\staff "' + voice.staff + '" ');
 	}
 
 	for (const event of voice.events) {
-		const eventStr = serializeEvent(event, prevDuration);
+		const { str: eventStr, newEnv } = serializeEvent(event, pitchEnv, prevDuration);
+		pitchEnv = newEnv;
+
 		if (eventStr) {
 			parts.push(eventStr);
 		}
@@ -438,8 +589,8 @@ const serializePart = (part: Part): string => {
 		return serializeVoice(part.voices[0]);
 	}
 
-	// Multiple voices: separated by \\
-	return part.voices.map(serializeVoice).join(' \\\\ ');
+	// Multiple voices: separated by \\ with newline
+	return part.voices.map(serializeVoice).join(' \\\\\n');
 };
 
 
@@ -469,9 +620,9 @@ const serializeMeasure = (measure: Measure, isFirst: boolean): string => {
 			parts.push(partStr);
 		}
 	} else if (measure.parts.length > 1) {
-		// Multiple parts: separated by \\\
+		// Multiple parts: separated by \\\ with newline
 		const partStrs = measure.parts.map(serializePart).filter(s => s);
-		parts.push(partStrs.join(' \\\\\\\\ '));
+		parts.push(partStrs.join(' \\\\\\\\\n'));
 	}
 
 	return parts.join(' ');
@@ -517,7 +668,7 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 		}
 	}
 
-	// Measures
+	// Measures with bar lines, measure numbers, and double newlines
 	const measureStrs: string[] = [];
 	for (let i = 0; i < doc.measures.length; i++) {
 		const measureStr = serializeMeasure(doc.measures[i], i === 0);
@@ -526,7 +677,11 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 		}
 	}
 
-	parts.push(measureStrs.join(' | '));
+	// Join measures with bar, measure number comment, and double newline
+	const measuresOutput = measureStrs
+		.map((m, i) => m + ' | %' + (i + 1))
+		.join('\n\n');
+	parts.push(measuresOutput);
 
 	return parts.join('\n');
 };
