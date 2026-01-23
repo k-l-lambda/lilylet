@@ -24,6 +24,8 @@
     "prepublishOnly": "npm run build:grammar && npm run build",
     "test": "ts-node ./tests/parser.ts",
     "test:mei": "ts-node ./tests/mei.ts",
+    "test:unit": "ts-node ./tests/unit/encodePitch.test.ts",
+    "test:decoder": "ts-node ./tests/lilypondDecoder.ts",
     "ts": "ts-node"
   },
   "repository": {
@@ -37,12 +39,16 @@
   "license": "ISC",
   "homepage": "https://github.com/k-l-lambda/lilylet#readme",
   "devDependencies": {
+    "@k-l-lambda/lotus": "^1.0.3",
     "@types/node": "^20.11.20",
     "@types/yargs": "^17.0.32",
+    "formidable": "^3.5.4",
     "jison": "^0.4.18",
+    "sha1": "^1.1.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
     "verovio": "^5.7.0",
+    "xmldom": "^0.6.0",
     "yargs": "^17.7.2"
   }
 }
