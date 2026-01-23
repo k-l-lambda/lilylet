@@ -7,6 +7,7 @@ import {
 	RestEvent,
 	ContextChange,
 	TupletEvent,
+	TremoloEvent,
 	Pitch,
 	Clef,
 	Accidental,
@@ -354,7 +355,8 @@ const noteEventToMEI = (
 	event: NoteEvent,
 	indent: string,
 	layerStaff?: number,
-	tieEnd?: boolean
+	tieEnd?: boolean,
+	contextStemDir?: StemDirection
 ): { xml: string; elementId: string; hairpin?: string; pedal?: string; hasTieStart: boolean; pitches: Pitch[] } => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
@@ -366,10 +368,11 @@ const noteEventToMEI = (
 	if (markOptions.slurEnd) slurParts.push('t');
 	const slur = slurParts.length > 0 ? slurParts.join(' ') : undefined;
 
-	// Stem direction
+	// Stem direction - use event's own or context's
+	const effectiveStemDir = event.stemDirection ?? contextStemDir;
 	let stemDir: string | undefined;
-	if (event.stemDirection === StemDirection.up) stemDir = 'up';
-	else if (event.stemDirection === StemDirection.down) stemDir = 'down';
+	if (effectiveStemDir === StemDirection.up) stemDir = 'up';
+	else if (effectiveStemDir === StemDirection.down) stemDir = 'down';
 
 	// Determine tie attribute: 'i' = initial, 'm' = medial, 't' = terminal
 	let tie: 'i' | 'm' | 't' | undefined;
@@ -496,8 +499,11 @@ const restEventToMEI = (event: RestEvent, indent: string): string => {
 
 // Convert TupletEvent to MEI
 const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number): string => {
-	const numbase = event.ratio.denominator;
-	const num = event.ratio.numerator;
+	// LilyPond \times 2/3 means "multiply duration by 2/3"
+	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
+	// MEI: num = number of notes written, numbase = normal equivalent
+	const num = event.ratio.denominator;      // denominator = actual note count
+	const numbase = event.ratio.numerator;    // numerator = time equivalent
 
 	let result = `${indent}<tuplet xml:id="${generateId('tuplet')}" num="${num}" numbase="${numbase}">\n`;
 
@@ -510,6 +516,39 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	}
 
 	result += `${indent}</tuplet>\n`;
+	return result;
+};
+
+
+// Convert TremoloEvent to MEI (bowed tremolo between two notes)
+const tremoloEventToMEI = (event: TremoloEvent, indent: string): string => {
+	const btremId = generateId('btrem');
+
+	// Calculate the duration of each note based on count and division
+	// For \repeat tremolo 4 { c16 d16 }, the visual duration is a quarter note (4 * 16th = quarter)
+	const totalDuration = event.count * event.division;
+	const noteDur = totalDuration >= 1 ? totalDuration : 4;  // Default to quarter if calculation fails
+
+	// unitdur is the tremolo stroke speed (the division value)
+	let result = `${indent}<bTrem xml:id="${btremId}" unitdur="${event.division}">\n`;
+
+	// First note
+	if (event.pitchA.length === 1) {
+		const pitch = encodePitch(event.pitchA[0]);
+		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
+		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+		result += `${indent}    <note ${attrs} />\n`;
+	}
+
+	// Second note
+	if (event.pitchB.length === 1) {
+		const pitch = encodePitch(event.pitchB[0]);
+		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
+		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+		result += `${indent}    <note ${attrs} />\n`;
+	}
+
+	result += `${indent}</bTrem>\n`;
 	return result;
 };
 
@@ -555,6 +594,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 	let pendingOttava: number | null = null;  // Track ottava to apply to next note
 	let lastNoteId: string | null = null;  // Track last note id for ending ottava spans
 
+	// Track current stem direction from context changes
+	let currentStemDirection: StemDirection | undefined = undefined;
+
 	// Track pending tie pitches (for tie="t" on next note)
 	let pendingTiePitches: Pitch[] = [];
 
@@ -592,7 +634,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 				// Check if this note should have tie="t" (matches pending tie)
 				const tieEnd = pendingTiePitches.length > 0 && pitchesMatch(pendingTiePitches, noteEvent.pitches);
 
-				const result = noteEventToMEI(noteEvent, currentIndent, voice.staff, tieEnd);
+				const result = noteEventToMEI(noteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection);
 				xml += result.xml;
 				lastNoteId = result.elementId;
 
@@ -643,6 +685,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 			case 'tuplet':
 				xml += tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff);
 				break;
+			case 'tremolo':
+				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent);
+				break;
 			case 'context': {
 				// Check for ottava changes
 				const ctx = event as ContextChange;
@@ -662,6 +707,10 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string): { xml: strin
 						// Start new ottava span - will be applied to next note
 						pendingOttava = ctx.ottava;
 					}
+				}
+				// Check for stem direction changes
+				if (ctx.stemDirection !== undefined) {
+					currentStemDirection = ctx.stemDirection;
 				}
 				// Other context changes are handled at measure level
 				break;
