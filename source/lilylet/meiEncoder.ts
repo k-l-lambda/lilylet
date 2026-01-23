@@ -516,12 +516,43 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 	let result = `${indent}<tuplet xml:id="${generateId('tuplet')}" num="${num}" numbase="${numbase}">\n`;
 
+	let inBeam = false;
+	const baseIndent = indent + '    ';
+
 	for (const e of event.events) {
+		// Check for beam marks in note events
+		let beamStart = false;
+		let beamEnd = false;
 		if (e.type === 'note') {
-			result += noteEventToMEI(e as NoteEvent, indent + '    ', layerStaff).xml;
-		} else if (e.type === 'rest') {
-			result += restEventToMEI(e as RestEvent, indent + '    ');
+			const markOptions = extractMarkOptions((e as NoteEvent).marks);
+			beamStart = markOptions.beamStart;
+			beamEnd = markOptions.beamEnd;
 		}
+
+		// Open beam element if beam starts
+		if (beamStart && !inBeam) {
+			result += `${baseIndent}<beam xml:id="${generateId('beam')}">\n`;
+			inBeam = true;
+		}
+
+		const currentIndent = inBeam ? baseIndent + '    ' : baseIndent;
+
+		if (e.type === 'note') {
+			result += noteEventToMEI(e as NoteEvent, currentIndent, layerStaff).xml;
+		} else if (e.type === 'rest') {
+			result += restEventToMEI(e as RestEvent, currentIndent);
+		}
+
+		// Close beam element if beam ends
+		if (beamEnd && inBeam) {
+			result += `${baseIndent}</beam>\n`;
+			inBeam = false;
+		}
+	}
+
+	// Close any unclosed beam
+	if (inBeam) {
+		result += `${baseIndent}</beam>\n`;
 	}
 
 	result += `${indent}</tuplet>\n`;
