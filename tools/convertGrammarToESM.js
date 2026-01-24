@@ -10,13 +10,16 @@ let esm = cjs.replace(/\nif \(typeof require !== 'undefined' && typeof exports !
 // This ensures the IIFE result is captured and exported
 esm = esm.replace(/^var grammar = \(function\(\)\{/m, 'export const grammar = (function(){');
 
-// Add additional named exports that reference the grammar object
+// Add additional named exports with unique names to avoid conflicts with inner IIFE variables
+// The inner IIFE declares 'var parser' and 'function Parser()' which conflict with module-level exports
 esm += `
 
-// Additional ES module exports
-export const parser = grammar;
-export const Parser = grammar.Parser;
-export function parse() { return grammar.parse.apply(grammar, arguments); }
+// ES module exports - use aliases to avoid conflicts with inner IIFE variables
+const _$parser = grammar;
+const _$Parser = grammar.Parser;
+function _$parse() { return grammar.parse.apply(grammar, arguments); }
+
+export { _$parser as parser, _$Parser as Parser, _$parse as parse };
 export default grammar;
 `;
 
