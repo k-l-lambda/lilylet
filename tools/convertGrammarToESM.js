@@ -9,13 +9,16 @@ let esm = cjs.replace(/\nif \(typeof require !== 'undefined' && typeof exports !
 // Change var grammar to const grammar for better ES module compatibility
 esm = esm.replace(/^var grammar = /m, 'const grammar = ');
 
-// Add ES module exports
+// Add ES module exports with unique prefixed names to avoid conflicts with inner IIFE variables
+// The inner IIFE has 'var parser', 'function Parser()' so we use _esm_ prefix
 esm += `
 
 // ES module exports
-export const parser = grammar;
-export const Parser = grammar.Parser;
-export function parse() { return grammar.parse.apply(grammar, arguments); }
+const _esm_parser = grammar;
+const _esm_Parser = grammar.Parser;
+function _esm_parse() { return grammar.parse.apply(grammar, arguments); }
+
+export { _esm_parser as parser, _esm_Parser as Parser, _esm_parse as parse };
 export default grammar;
 `;
 
