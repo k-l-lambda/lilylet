@@ -1,7 +1,7 @@
 
 import { LilyletDoc, Pitch, NoteEvent, RestEvent } from "./types";
 // @ts-ignore - jison generated file
-import * as grammar from "./grammar.jison.js";
+import grammar, { parser, parse as grammarParse } from "./grammar.jison.js";
 
 
 const PHONETS = "cdefgab";
@@ -140,11 +140,11 @@ const resolveDocumentPitches = (doc: LilyletDoc): void => {
 
 const parseCode = async (code: string): Promise<LilyletDoc> => {
 	// Reset parser state before each parse to avoid contamination
-	if (grammar.parser && (grammar.parser as any).resetState) {
-		(grammar.parser as any).resetState();
+	if (parser && (parser as any).resetState) {
+		(parser as any).resetState();
 	}
 
-	const raw = grammar.parse(code);
+	const raw = grammarParse(code);
 
 	// Resolve relative pitch mode
 	resolveDocumentPitches(raw);
