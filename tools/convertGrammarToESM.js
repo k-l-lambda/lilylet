@@ -1,8 +1,5 @@
 // Convert jison-generated CommonJS grammar to ES module format
-// Strategy:
-// 1. Use const grammar to capture IIFE result
-// 2. Export grammar directly to prevent tree-shaking
-// 3. Use aliased names for parser/Parser to avoid conflicts with inner IIFE variables
+// Strategy: Use inline export const grammar = IIFE pattern
 const fs = require('fs');
 
 const cjs = fs.readFileSync('source/lilylet/grammar.jison.js', 'utf8');
@@ -10,18 +7,14 @@ const cjs = fs.readFileSync('source/lilylet/grammar.jison.js', 'utf8');
 // Remove the CommonJS exports section at the end
 let esm = cjs.replace(/\nif \(typeof require !== 'undefined' && typeof exports !== 'undefined'\)[\s\S]*$/, '');
 
-// Replace 'var grammar' with 'const grammar'
-esm = esm.replace(/^var grammar = /m, 'const grammar = ');
+// Replace 'var grammar =' with 'export const grammar =' for inline export
+esm = esm.replace(/^var grammar = /m, 'export const grammar = ');
 
-// Add named exports using aliased internal variables to avoid conflicts
+// Add additional named exports using aliased internal variables
 // The inner IIFE declares 'var parser' and 'function Parser()' which would conflict
 esm += `
 
-// ES module exports
-// Export grammar directly to prevent tree-shaking
-export { grammar };
-
-// Use unique internal names to avoid conflicts with IIFE internals
+// Additional ES module exports with aliased names
 const __parser__ = grammar;
 const __Parser__ = grammar.Parser;
 const __parse__ = function() { return grammar.parse.apply(grammar, arguments); };
