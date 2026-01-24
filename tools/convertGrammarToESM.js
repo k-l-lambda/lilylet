@@ -6,19 +6,17 @@ const cjs = fs.readFileSync('source/lilylet/grammar.jison.js', 'utf8');
 // Remove the CommonJS exports section at the end
 let esm = cjs.replace(/\nif \(typeof require !== 'undefined' && typeof exports !== 'undefined'\)[\s\S]*$/, '');
 
-// Change var grammar to const grammar for better ES module compatibility
-esm = esm.replace(/^var grammar = /m, 'const grammar = ');
+// Replace `var grammar = (function(){` with an export declaration to prevent tree-shaking
+// This ensures the IIFE result is captured and exported
+esm = esm.replace(/^var grammar = \(function\(\)\{/m, 'export const grammar = (function(){');
 
-// Add ES module exports with unique prefixed names to avoid conflicts with inner IIFE variables
-// The inner IIFE has 'var parser', 'function Parser()' so we use _esm_ prefix
+// Add additional named exports that reference the grammar object
 esm += `
 
-// ES module exports
-const _esm_parser = grammar;
-const _esm_Parser = grammar.Parser;
-function _esm_parse() { return grammar.parse.apply(grammar, arguments); }
-
-export { _esm_parser as parser, _esm_Parser as Parser, _esm_parse as parse };
+// Additional ES module exports
+export const parser = grammar;
+export const Parser = grammar.Parser;
+export function parse() { return grammar.parse.apply(grammar, arguments); }
 export default grammar;
 `;
 
