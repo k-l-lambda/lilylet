@@ -19,7 +19,7 @@
     "source"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"const fs=require('fs'); const cjs=fs.readFileSync('source/lilylet/grammar.jison.js','utf8'); const esm=cjs.replace(/if \\(typeof require.*$/s, '') + '\\nexport { grammar as parser };\\nexport const Parser = grammar.Parser;\\nexport function parse() { return grammar.parse.apply(grammar, arguments); }\\nexport default grammar;'; fs.writeFileSync('lib/grammar.jison.js', esm);\"",
+    "build": "tsc -p tsconfig.build.json && node tools/convertGrammarToESM.js",
     "build:grammar": "ts-node ./tools/buildJisonParser.ts",
     "prepublishOnly": "npm run build:grammar && npm run build",
     "test": "ts-node ./tests/parser.ts",
