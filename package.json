@@ -1,7 +1,8 @@
 {
   "name": "@k-l-lambda/lilylet",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "Lilylet is a lilyopnd-like sheet music language designed for Markdown rendering and symbolic music representation in AIGC applications.",
+  "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
@@ -19,7 +20,7 @@
     "source"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node tools/convertGrammarToESM.js",
+    "build": "tsc -p tsconfig.build.json && node tools/convertGrammarToESM.cjs && node tools/fixEsmExtensions.cjs",
     "build:grammar": "ts-node ./tools/buildJisonParser.ts",
     "prepublishOnly": "npm run build:grammar && npm run build",
     "test": "ts-node ./tests/parser.ts",
