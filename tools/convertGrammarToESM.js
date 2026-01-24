@@ -9,12 +9,12 @@ let esm = cjs.replace(/\nif \(typeof require !== 'undefined' && typeof exports !
 
 // The jison IIFE ends with "return new Parser;\n})();"
 // We need to:
-// 1. Replace "var grammar = (function(){" at the start
+// 1. Replace "var parser = (function(){" at the start (jison generates 'parser' not 'grammar')
 // 2. Replace "return new Parser;\n})();" at the end
 
 // Replace the start of IIFE
 esm = esm.replace(
-  /^var grammar = \(function\(\)\{/m,
+  /^var parser = \(function\(\)\{/m,
   'Object.defineProperty(globalThis, "__lilyletGrammar__", { value: (function(){'
 );
 
