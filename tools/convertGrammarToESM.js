@@ -1,7 +1,5 @@
 // Convert jison-generated CommonJS grammar to ES module format
-// Strategy:
-// 1. Use getters to prevent tree-shaking
-// 2. Use aliased export names to avoid conflicts with IIFE internals
+// Strategy: Store IIFE result on globalThis to prevent tree-shaking
 const fs = require('fs');
 
 const cjs = fs.readFileSync('source/lilylet/grammar.jison.js', 'utf8');
@@ -9,28 +7,21 @@ const cjs = fs.readFileSync('source/lilylet/grammar.jison.js', 'utf8');
 // Remove the CommonJS exports section at the end
 let esm = cjs.replace(/\nif \(typeof require !== 'undefined' && typeof exports !== 'undefined'\)[\s\S]*$/, '');
 
-// Rename the grammar variable to avoid any potential conflicts
+// Replace the IIFE assignment to store on globalThis
+// This prevents tree-shaking because it's an observable side effect
 esm = esm.replace(
   /^var grammar = (\(function\(\)\{)/m,
-  'const _jisonGrammar = $1'
+  'globalThis.__lilyletJisonGrammar__ = $1'
 );
 
-// Add exports using getters and aliased names
-// The getters prevent tree-shaking, the aliased internal names prevent conflicts
+// Add exports that read from globalThis
 esm += `
 
-// ES module exports
-// Use getters to prevent tree-shaking of the IIFE result
-const _grammarExport = { get value() { return _jisonGrammar; } };
-const _parserExport = { get value() { return _jisonGrammar; } };
-const _ParserExport = { get value() { return _jisonGrammar.Parser; } };
-const _parseExport = { get value() { return function() { return _jisonGrammar.parse.apply(_jisonGrammar, arguments); }; } };
-
-// Export with aliased internal variable names
-const __grammar = _grammarExport.value;
-const __parser = _parserExport.value;
-const __Parser = _ParserExport.value;
-const __parse = _parseExport.value;
+// ES module exports - read from globalThis to get the IIFE result
+const __grammar = globalThis.__lilyletJisonGrammar__;
+const __parser = globalThis.__lilyletJisonGrammar__;
+const __Parser = globalThis.__lilyletJisonGrammar__.Parser;
+const __parse = function() { return globalThis.__lilyletJisonGrammar__.parse.apply(globalThis.__lilyletJisonGrammar__, arguments); };
 
 export { __grammar as grammar, __parser as parser, __Parser as Parser, __parse as parse };
 export default __grammar;
