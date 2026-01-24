@@ -1,0 +1,12 @@
+{
+	"extends": "./tsconfig.json",
+	"include": [
+		"source/**/*"
+	],
+	"exclude": [
+		"node_modules",
+		"tests/**/*",
+		"tools/**/*",
+		"source/lilylet/lilypondDecoder.ts"
+	]
+}

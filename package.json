@@ -19,7 +19,7 @@
     "source"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && cp source/lilylet/grammar.jison.js lib/source/lilylet/ && cp source/abc/grammar.jison.js lib/source/abc/",
+    "build": "tsc -p tsconfig.build.json && cp source/lilylet/grammar.jison.js lib/",
     "build:grammar": "ts-node ./tools/buildJisonParser.ts",
     "prepublishOnly": "npm run build:grammar && npm run build",
     "test": "ts-node ./tests/parser.ts",
