@@ -10,11 +10,9 @@ package-lock.json
 
 # build this file by tools/buildJisonParser.ts
 *.jison.js
-# But allow the converted ES module version in lib
-!lib/grammar.jison.js
 
-# build output - lib is now tracked for consistent CI builds
-# /lib/
+# build output
+/lib/
 
 /footages/
 /tests/output/
