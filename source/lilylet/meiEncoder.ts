@@ -1381,8 +1381,8 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		for (const part of measure.parts) {
 			for (const voice of part.voices) {
 				for (const event of voice.events) {
-					// Check for actual musical content (not just context changes)
-					if (event.type === 'note' || event.type === 'rest' || event.type === 'chord' ||
+					// Check for actual musical content (not just context changes or pitch resets)
+					if (event.type === 'note' || event.type === 'rest' ||
 						event.type === 'tuplet' || event.type === 'tremolo') {
 						return true;
 					}
