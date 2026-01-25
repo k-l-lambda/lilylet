@@ -4,6 +4,12 @@ const fs = require('fs');
 
 const cjs = fs.readFileSync('source/lilylet/grammar.jison.js', 'utf8');
 
+// Check if already converted to ESM
+if (cjs.includes('export default __grammar')) {
+  console.log('grammar.jison.js already converted to ES module format');
+  process.exit(0);
+}
+
 // Remove the CommonJS exports section at the end
 let esm = cjs.replace(/\nif \(typeof require !== 'undefined' && typeof exports !== 'undefined'\)[\s\S]*$/, '');
 
