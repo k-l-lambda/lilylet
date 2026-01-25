@@ -1323,8 +1323,9 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += `${indent}${indent}${indent}<titleStmt>\n`;
 
 	// Add title from metadata if available
-	const title = doc.metadata?.title || "Lilylet Export";
-	mei += `${indent}${indent}${indent}${indent}<title>${escapeXml(title)}</title>\n`;
+	if (doc.metadata?.title) {
+		mei += `${indent}${indent}${indent}${indent}<title>${escapeXml(doc.metadata.title)}</title>\n`;
+	}
 
 	// Add subtitle as second title (verovio reads subsequent titles as subtitle)
 	if (doc.metadata?.subtitle) {
