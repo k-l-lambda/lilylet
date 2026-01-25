@@ -1,1 +1,8 @@
-\time 4/4 \clef "treble" c4 d e f | g' a b c | d' e f g | a'' b c b | a'' g f e | d' c b a | g' f e d | c1 |
+\time 4/4 \clef "treble" c4 d e f |
+g' a b c |
+d' e f g |
+a'' b c b |
+a'' g f e |
+d' c b a |
+g' f e d |
+c1 |

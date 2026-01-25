@@ -1,1 +1,8 @@
-\time 4/4 \clef "bass" c b a g | f, e d c | b, a g f | e,, d c d | e,, f g a | b, c d e | f, g a b | c1 |
+\time 4/4 \clef "bass" c b a g |
+f, e d c |
+b, a g f |
+e,, d c d |
+e,, f g a |
+b, c d e |
+f, g a b |
+c1 |

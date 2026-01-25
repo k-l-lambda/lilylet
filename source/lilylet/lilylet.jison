@@ -142,7 +142,8 @@
 
 %%
 
-\s+								{}
+[ \t]+							{}
+(\r?\n)+						return 'NEWLINE'
 \%.*							{}
 
 \[title							return 'HEADER_TITLE'
@@ -261,12 +262,21 @@ document
 
 content
 	: headers measures							-> ({ metadata: $1, measures: $2 })
+	| headers newlines measures					-> ({ metadata: $1, measures: $3 })
+	| newlines measures							-> ({ metadata: undefined, measures: $2 })
 	| measures									-> ({ metadata: undefined, measures: $1 })
+	;
+
+newlines
+	: NEWLINE
+	| newlines NEWLINE
 	;
 
 headers
 	: header									-> $1
 	| headers header							-> ({ ...$1, ...$2 })
+	| headers NEWLINE							-> $1
+	| headers NEWLINE header					-> ({ ...$1, ...$3 })
 	;
 
 header
@@ -316,6 +326,11 @@ event
 	| grace_event
 	| tuplet_event
 	| tremolo_event
+	| pitch_reset_event
+	;
+
+pitch_reset_event
+	: NEWLINE							-> ({ type: 'pitchReset' })
 	;
 
 note_event

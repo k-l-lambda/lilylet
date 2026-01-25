@@ -205,7 +205,11 @@ export interface TupletEvent {
 	events: (NoteEvent | RestEvent)[];
 }
 
-export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent;
+export interface PitchResetEvent {
+	type: 'pitchReset';
+}
+
+export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | PitchResetEvent;
 
 // === Structure ===
 

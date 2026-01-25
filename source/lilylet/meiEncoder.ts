@@ -9,6 +9,7 @@ import {
 	ContextChange,
 	TupletEvent,
 	TremoloEvent,
+	PitchResetEvent,
 	Pitch,
 	Clef,
 	Accidental,
@@ -907,6 +908,10 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				// Other context changes are handled at measure level
 				break;
 			}
+			case 'pitchReset':
+				// Pitch reset events are only used during pitch resolution in the parser.
+				// They don't produce any MEI output - just skip them.
+				break;
 		}
 
 		// Close beam element if beam ends

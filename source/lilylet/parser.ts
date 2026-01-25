@@ -1,5 +1,5 @@
 
-import { LilyletDoc, Pitch, NoteEvent, RestEvent } from "./types";
+import { LilyletDoc, Pitch, NoteEvent, RestEvent, PitchResetEvent } from "./types";
 // @ts-ignore - jison generated file
 import grammar, { parser, parse as grammarParse } from "./grammar.jison.js";
 
@@ -48,10 +48,15 @@ const resolveRelativePitch = (env: PitchEnv, pitch: Pitch): void => {
 
 /**
  * Process events in a voice to resolve relative pitches.
+ * Pitch reset events (from newlines) reset the pitch base to middle C.
  */
 const resolveVoicePitches = (events: any[], env: PitchEnv): void => {
 	for (const event of events) {
-		if (event.type === 'note') {
+		if (event.type === 'pitchReset') {
+			// Reset pitch base to middle C on newline
+			env.step = 0;
+			env.octave = 0;
+		} else if (event.type === 'note') {
 			const noteEvent = event as NoteEvent;
 			const pitches = noteEvent.pitches;
 
@@ -122,16 +127,30 @@ const resolveVoicePitches = (events: any[], env: PitchEnv): void => {
  * Process all pitches in a document to resolve relative pitch mode.
  *
  * Structure: measure > part > voice
- * - Each voice in a part starts fresh from middle C
- * - Voice can cross staves within a part but not across parts
+ * - Pitch environment is continuous across measures unless a pitchReset event is encountered
+ * - pitchReset events are generated from newlines in the source code
+ * - Each part/voice combination maintains its own pitch environment
  */
 const resolveDocumentPitches = (doc: LilyletDoc): void => {
+	// Track pitch environment per (part index, voice index) across all measures
+	// Key format: "partIndex-voiceIndex"
+	const envMap: Record<string, PitchEnv> = {};
+
 	for (const measure of doc.measures) {
-		for (const part of measure.parts) {
-			for (const voice of part.voices) {
-				// Each voice starts fresh from middle C
-				const env: PitchEnv = { step: 0, octave: 0 };
-				resolveVoicePitches(voice.events, env);
+		for (let pi = 0; pi < measure.parts.length; pi++) {
+			const part = measure.parts[pi];
+			for (let vi = 0; vi < part.voices.length; vi++) {
+				const voice = part.voices[vi];
+				const key = `${pi}-${vi}`;
+
+				// Get or create env for this part/voice combination
+				if (!envMap[key]) {
+					envMap[key] = { step: 0, octave: 0 };
+				}
+
+				// Process voice events with the persistent env
+				// pitchReset events within will reset the env to middle C
+				resolveVoicePitches(voice.events, envMap[key]);
 			}
 		}
 	}
