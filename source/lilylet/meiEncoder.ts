@@ -1375,8 +1375,30 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		}
 	}
 
+	// Helper to check if a measure has any musical content
+	const measureHasContent = (measure: Measure): boolean => {
+		for (const part of measure.parts) {
+			for (const voice of part.voices) {
+				for (const event of voice.events) {
+					// Check for actual musical content (not just context changes)
+					if (event.type === 'note' || event.type === 'rest' || event.type === 'chord' ||
+						event.type === 'tuplet' || event.type === 'tremolo') {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	};
+
+	// Filter out trailing empty measures
+	let measures = doc.measures;
+	while (measures.length > 0 && !measureHasContent(measures[measures.length - 1])) {
+		measures = measures.slice(0, -1);
+	}
+
 	// Encode measures
-	doc.measures.forEach((measure, mi) => {
+	measures.forEach((measure, mi) => {
 		// Update key signature if measure has one
 		if (measure.key) {
 			currentKey = keyToFifths(measure.key);
