@@ -211,7 +211,6 @@ const buildNoteElement = (
 		stemDir?: string;
 		staff?: number;
 		layerStaff?: number;
-		slur?: string;
 		artics?: { type: string; placement?: 'above' | 'below' }[];
 		tremolo?: number;
 	} = {},
@@ -231,7 +230,6 @@ const buildNoteElement = (
 	if (!inChord && options.layerStaff && options.staff && options.staff !== options.layerStaff) {
 		attrs += ` staff="${options.staff}"`;
 	}
-	if (!inChord && options.slur) attrs += ` slur="${options.slur}"`;
 	if (!inChord && options.tremolo) {
 		const stemMod = tremoloToStemMod(options.tremolo);
 		if (stemMod) attrs += ` stem.mod="${stemMod}"`;
@@ -398,6 +396,8 @@ interface NoteEventResult {
 	mordent: 'lower' | 'upper' | false;  // lower = mordent, upper = prall
 	turn: boolean;
 	dynamic?: string;  // dynamic marking (p, pp, f, ff, etc.)
+	slurStart: boolean;  // For tracking slur spans
+	slurEnd: boolean;    // For tracking slur spans
 }
 
 // Convert NoteEvent to MEI
@@ -412,12 +412,6 @@ const noteEventToMEI = (
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
 	const markOptions = extractMarkOptions(event.marks);
-
-	// Build slur attribute
-	const slurParts: string[] = [];
-	if (markOptions.slurStart) slurParts.push('i');
-	if (markOptions.slurEnd) slurParts.push('t');
-	const slur = slurParts.length > 0 ? slurParts.join(' ') : undefined;
 
 	// Stem direction - use event's own or context's
 	const effectiveStemDir = event.stemDirection ?? contextStemDir;
@@ -442,7 +436,6 @@ const noteEventToMEI = (
 		stemDir,
 		staff: event.staff,
 		layerStaff,
-		slur,
 		artics: markOptions.artics,
 		tremolo: markOptions.tremolo,
 	};
@@ -464,6 +457,8 @@ const noteEventToMEI = (
 			mordent: markOptions.mordent,
 			turn: markOptions.turn,
 			dynamic: markOptions.dynamic,
+			slurStart: markOptions.slurStart,
+			slurEnd: markOptions.slurEnd,
 		};
 	}
 
@@ -477,7 +472,6 @@ const noteEventToMEI = (
 	if (layerStaff && noteOptions.staff && noteOptions.staff !== layerStaff) {
 		chordAttrs += ` staff="${noteOptions.staff}"`;
 	}
-	if (slur) chordAttrs += ` slur="${slur}"`;
 
 	let result = `${indent}<chord ${chordAttrs}>\n`;
 
@@ -517,6 +511,8 @@ const noteEventToMEI = (
 		mordent: markOptions.mordent,
 		turn: markOptions.turn,
 		dynamic: markOptions.dynamic,
+		slurStart: markOptions.slurStart,
+		slurEnd: markOptions.slurEnd,
 	};
 };
 
@@ -709,6 +705,12 @@ interface DynamRef {
 	label: string;  // p, pp, ppp, f, ff, fff, mf, mp, sfz, rfz
 }
 
+// Slur span data - slurs must be encoded as control events in MEI
+interface SlurSpan {
+	startId: string;
+	endId: string;
+}
+
 // Tie state for cross-measure ties - maps staff:layer to pending pitches
 type TieState = Record<string, Pitch[]>;
 
@@ -718,6 +720,7 @@ interface LayerResult {
 	hairpins: HairpinSpan[];
 	pedals: PedalSpan[];
 	octaves: OctaveSpan[];
+	slurs: SlurSpan[];  // Slurs must be control events in MEI
 	arpeggios: ArpegRef[];
 	fermatas: FermataRef[];
 	trills: TrillRef[];
@@ -752,6 +755,10 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	let currentOctave: { dis: 8 | 15; disPlace: 'above' | 'below'; startId: string } | null = null;
 	let pendingOttava: number | null = null;  // Track ottava to apply to next note
 	let lastNoteId: string | null = null;  // Track last note id for ending ottava spans
+
+	// Track slur spans - slurs must be encoded as control events in MEI
+	const slurs: SlurSpan[] = [];
+	let currentSlur: { startId: string } | null = null;
 
 	// Track arpeggio refs
 	const arpeggios: ArpegRef[] = [];
@@ -845,6 +852,19 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 						endId: result.elementId,
 					});
 					currentPedal = null;
+				}
+
+				// Track slur spans - end must be processed before start
+				// in case a note ends one slur and starts another
+				if (result.slurEnd && currentSlur) {
+					slurs.push({
+						startId: currentSlur.startId,
+						endId: result.elementId,
+					});
+					currentSlur = null;
+				}
+				if (result.slurStart) {
+					currentSlur = { startId: result.elementId };
 				}
 
 				// Track arpeggio refs
@@ -947,7 +967,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches, endingClef: currentClef };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches, endingClef: currentClef };
 };
 
 // Staff result type
@@ -956,6 +976,7 @@ interface StaffResult {
 	hairpins: HairpinSpan[];
 	pedals: PedalSpan[];
 	octaves: OctaveSpan[];
+	slurs: SlurSpan[];
 	arpeggios: ArpegRef[];
 	fermatas: FermataRef[];
 	trills: TrillRef[];
@@ -973,6 +994,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const allHairpins: HairpinSpan[] = [];
 	const allPedals: PedalSpan[] = [];
 	const allOctaves: OctaveSpan[] = [];
+	const allSlurs: SlurSpan[] = [];
 	const allArpeggios: ArpegRef[] = [];
 	const allFermatas: FermataRef[] = [];
 	const allTrills: TrillRef[] = [];
@@ -994,6 +1016,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
 			allOctaves.push(...result.octaves);
+			allSlurs.push(...result.slurs);
 			allArpeggios.push(...result.arpeggios);
 			allFermatas.push(...result.fermatas);
 			allTrills.push(...result.trills);
@@ -1017,6 +1040,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		hairpins: allHairpins,
 		pedals: allPedals,
 		octaves: allOctaves,
+		slurs: allSlurs,
 		arpeggios: allArpeggios,
 		fermatas: allFermatas,
 		trills: allTrills,
@@ -1069,6 +1093,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	const allHairpins: HairpinSpan[] = [];
 	const allPedals: PedalSpan[] = [];
 	const allOctaves: OctaveSpan[] = [];
+	const allSlurs: SlurSpan[] = [];
 	const allArpeggios: ArpegRef[] = [];
 	const allFermatas: FermataRef[] = [];
 	const allTrills: TrillRef[] = [];
@@ -1115,6 +1140,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
 		allOctaves.push(...result.octaves);
+		allSlurs.push(...result.slurs);
 		allArpeggios.push(...result.arpeggios);
 		allFermatas.push(...result.fermatas);
 		allTrills.push(...result.trills);
@@ -1147,6 +1173,11 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	// Generate octave control events
 	for (const oct of allOctaves) {
 		xml += `${indent}    <octave xml:id="${generateId('octave')}" dis="${oct.dis}" dis.place="${oct.disPlace}" startid="#${oct.startId}" endid="#${oct.endId}" />\n`;
+	}
+
+	// Generate slur control events
+	for (const sl of allSlurs) {
+		xml += `${indent}    <slur xml:id="${generateId('slur')}" startid="#${sl.startId}" endid="#${sl.endId}" />\n`;
 	}
 
 	// Generate arpeggio control events
