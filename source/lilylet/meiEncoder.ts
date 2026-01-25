@@ -725,15 +725,19 @@ interface LayerResult {
 	turns: TurnRef[];
 	dynamics: DynamRef[];
 	pendingTiePitches: Pitch[];  // For cross-measure tie tracking
+	endingClef?: Clef;  // For cross-measure clef tracking
 }
 
 // Encode a layer (voice)
-const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0): LayerResult => {
+const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
 	let inBeam = false;
 	const baseIndent = indent + '    ';
+
+	// Track current clef to only emit changes
+	let currentClef: Clef | undefined = initialClef;
 
 	// Track hairpin spans
 	const hairpins: HairpinSpan[] = [];
@@ -883,10 +887,11 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				break;
 			case 'context': {
 				const ctx = event as ContextChange;
-				// Check for clef changes - emit <clef> element
-				if (ctx.clef) {
+				// Check for clef changes - emit <clef> element only if different from current
+				if (ctx.clef && ctx.clef !== currentClef) {
 					const clefInfo = CLEF_SHAPES[ctx.clef] || CLEF_SHAPES.treble;
 					xml += `${currentIndent}<clef xml:id="${generateId('clef')}" shape="${clefInfo.shape}" line="${clefInfo.line}" />\n`;
+					currentClef = ctx.clef;
 				}
 				// Check for ottava changes
 				if (ctx.ottava !== undefined) {
@@ -942,7 +947,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches };
+	return { xml, hairpins, pedals, octaves, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches, endingClef: currentClef };
 };
 
 // Staff result type
@@ -958,10 +963,11 @@ interface StaffResult {
 	turns: TurnRef[];
 	dynamics: DynamRef[];
 	pendingTies: TieState;  // For cross-measure tie tracking
+	endingClef?: Clef;  // For cross-measure clef tracking
 }
 
 // Encode a staff
-const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, keyFifths: number = 0): StaffResult => {
+const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, keyFifths: number = 0, initialClef?: Clef): StaffResult => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -974,6 +980,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const allTurns: TurnRef[] = [];
 	const allDynamics: DynamRef[] = [];
 	const pendingTies: TieState = {};
+	let endingClef: Clef | undefined = initialClef;
 
 	if (voices.length === 0) {
 		xml += `${indent}    <layer xml:id="${generateId('layer')}" n="1" />\n`;
@@ -982,7 +989,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			const layerN = vi + 1;
 			const tieKey = `${staffN}-${layerN}`;
 			const initialTies = tieState[tieKey] || [];
-			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths);
+			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef);
 			xml += result.xml;
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
@@ -996,6 +1003,10 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			// Track pending ties for this layer
 			if (result.pendingTiePitches.length > 0) {
 				pendingTies[tieKey] = result.pendingTiePitches;
+			}
+			// Track ending clef for cross-measure tracking
+			if (result.endingClef) {
+				endingClef = result.endingClef;
 			}
 		});
 	}
@@ -1013,6 +1024,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		turns: allTurns,
 		dynamics: allDynamics,
 		pendingTies,
+		endingClef,
 	};
 };
 
@@ -1046,9 +1058,12 @@ const generateTempoElement = (tempo: Tempo, indent: string): string => {
 	return `${indent}<tempo ${attrs} />\n`;
 };
 
+// Clef state for cross-measure clef tracking - maps staff number to current clef
+type ClefState = Record<number, Clef>;
+
 // Encode a measure
-// encodeMeasure accepts a mutable tieState that persists across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, keyFifths: number = 0, partInfos: PartInfo[] = []): string => {
+// encodeMeasure accepts mutable tieState and clefState that persist across measures
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}): string => {
 	const measureId = generateId("measure");
 	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -1091,10 +1106,11 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		}
 	}
 
-	// Encode each staff, passing and updating tie state
+	// Encode each staff, passing and updating tie state and clef state
 	for (let si = 1; si <= totalStaves; si++) {
 		const voices = voicesByStaff[si] || [];
-		const result = encodeStaff(voices, si, indent + '    ', tieState, keyFifths);
+		const initialClef = clefState[si];
+		const result = encodeStaff(voices, si, indent + '    ', tieState, keyFifths, initialClef);
 		xml += result.xml;
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
@@ -1107,6 +1123,10 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		allDynamics.push(...result.dynamics);
 		// Update tie state with pending ties from this staff
 		Object.assign(tieState, result.pendingTies);
+		// Update clef state with ending clef from this staff
+		if (result.endingClef) {
+			clefState[si] = result.endingClef;
+		}
 	}
 
 	// Generate tempo element if present
@@ -1345,13 +1365,23 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	// Track tie state across measures for cross-measure ties
 	const tieState: TieState = {};
 
+	// Initialize clef state from partInfos (convert local staff to global staff)
+	const clefState: ClefState = {};
+	for (let pi = 0; pi < partInfos.length; pi++) {
+		const partInfo = partInfos[pi];
+		for (const [localStaffStr, clef] of Object.entries(partInfo.clefs)) {
+			const globalStaff = partInfo.staffOffset + parseInt(localStaffStr);
+			clefState[globalStaff] = clef;
+		}
+	}
+
 	// Encode measures
 	doc.measures.forEach((measure, mi) => {
 		// Update key signature if measure has one
 		if (measure.key) {
 			currentKey = keyToFifths(measure.key);
 		}
-		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, currentKey, partInfos);
+		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, currentKey, partInfos, clefState);
 	});
 
 	mei += `${indent}${indent}${indent}${indent}${indent}</section>\n`;
