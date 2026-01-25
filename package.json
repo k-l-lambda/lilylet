@@ -21,13 +21,13 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node tools/convertGrammarToESM.cjs && node tools/fixEsmExtensions.cjs",
-    "build:grammar": "ts-node ./tools/buildJisonParser.ts",
+    "build:grammar": "npx tsx ./tools/buildJisonParser.ts",
     "prepublishOnly": "npm run build:grammar && npm run build",
-    "test": "ts-node ./tests/parser.ts",
-    "test:mei": "ts-node ./tests/mei.ts",
-    "test:unit": "ts-node ./tests/unit/encodePitch.test.ts",
-    "test:decoder": "ts-node ./tests/lilypondDecoder.ts",
-    "ts": "ts-node"
+    "test": "npx tsx ./tests/parser.ts",
+    "test:mei": "npx tsx ./tests/mei.ts",
+    "test:unit": "npx tsx ./tests/unit/encodePitch.test.ts",
+    "test:decoder": "npx tsx ./tests/lilypondDecoder.ts",
+    "ts": "npx tsx"
   },
   "repository": {
     "type": "git",
