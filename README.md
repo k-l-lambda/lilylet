@@ -2,6 +2,12 @@
 
 Lilylet is a LilyPond-like music notation language designed for Markdown rendering and symbolic music representation in AIGC applications.
 
+## Try It Online
+
+- [Live Editor](https://k-l-lambda.github.io/lilylet-live-editor/) - Interactive editor with real-time music notation rendering
+- [Markdown Editor](https://k-l-lambda.github.io/lilylet-live-editor/markdown) - Write documents with embedded Lilylet music snippets
+- [Tutorial](https://k-l-lambda.github.io/lilylet-live-editor/docs/lilylet-tutorial.html) - Comprehensive guide to Lilylet syntax
+
 ## Why a New Language?
 
 ### 1. Leveraging LilyPond's Excellent Syntax
