@@ -882,8 +882,13 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths);
 				break;
 			case 'context': {
-				// Check for ottava changes
 				const ctx = event as ContextChange;
+				// Check for clef changes - emit <clef> element
+				if (ctx.clef) {
+					const clefInfo = CLEF_SHAPES[ctx.clef] || CLEF_SHAPES.treble;
+					xml += `${currentIndent}<clef xml:id="${generateId('clef')}" shape="${clefInfo.shape}" line="${clefInfo.line}" />\n`;
+				}
+				// Check for ottava changes
 				if (ctx.ottava !== undefined) {
 					if (ctx.ottava === 0) {
 						// End current ottava span
@@ -1179,7 +1184,7 @@ const analyzePartStructure = (doc: LilyletDoc): PartInfo[] => {
 	// Initialize part info
 	const partInfos: PartInfo[] = [];
 	for (let i = 0; i < maxParts; i++) {
-		partInfos.push({ maxStaff: 1, staffOffset: 0, clefs: { 1: Clef.treble } });
+		partInfos.push({ maxStaff: 1, staffOffset: 0, clefs: {} });
 	}
 
 	// Analyze each measure to find max staff per part and clefs
@@ -1190,11 +1195,12 @@ const analyzePartStructure = (doc: LilyletDoc): PartInfo[] => {
 				const localStaff = voice.staff || 1;
 				partInfos[pi].maxStaff = Math.max(partInfos[pi].maxStaff, localStaff);
 
-				// Get clef from context changes
+				// Get FIRST clef from context changes (for initial staffDef)
 				for (const event of voice.events) {
 					if (event.type === 'context') {
 						const ctx = event as ContextChange;
-						if (ctx.clef) {
+						if (ctx.clef && !partInfos[pi].clefs[localStaff]) {
+							// Only set if not already set - take the FIRST clef
 							partInfos[pi].clefs[localStaff] = ctx.clef;
 						}
 					}

@@ -39,4 +39,5 @@ export default __grammar;
 `;
 
 fs.writeFileSync('lib/grammar.jison.js', esm);
+fs.writeFileSync('source/lilylet/grammar.jison.js', esm);
 console.log('Converted grammar.jison.js to ES module format');

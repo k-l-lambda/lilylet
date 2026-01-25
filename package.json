@@ -21,7 +21,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node tools/convertGrammarToESM.cjs && node tools/fixEsmExtensions.cjs",
-    "build:grammar": "npx tsx ./tools/buildJisonParser.ts",
+    "build:grammar": "npx tsx ./tools/buildJisonParser.ts && node tools/convertGrammarToESM.cjs",
     "prepublishOnly": "npm run build:grammar && npm run build",
     "test": "npx tsx ./tests/parser.ts",
     "test:mei": "npx tsx ./tests/mei.ts",

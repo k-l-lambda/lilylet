@@ -1,12 +1,14 @@
 
 import fs from "fs";
 // @ts-ignore
-import * as verovio from "verovio";
+import createVerovioModule from "verovio/wasm";
+// @ts-ignore
+import { VerovioToolkit } from "verovio/esm";
 
 import * as lilylet from "../source/lilylet";
 
 
-interface VerovioToolkit {
+interface IVerovioToolkit {
 	loadData(data: string): boolean;
 	renderToSVG(page?: number, options?: object): string;
 	getLog(): string;
@@ -21,16 +23,13 @@ interface TestResult {
 }
 
 
-const initVerovio = (): Promise<VerovioToolkit> => {
-	return new Promise((resolve) => {
-		verovio.module.onRuntimeInitialized = () => {
-			resolve(new verovio.toolkit() as VerovioToolkit);
-		};
-	});
+const initVerovio = async (): Promise<IVerovioToolkit> => {
+	const VerovioModule = await createVerovioModule();
+	return new VerovioToolkit(VerovioModule) as IVerovioToolkit;
 };
 
 
-const testFile = async (vrvToolkit: VerovioToolkit, filePath: string): Promise<TestResult> => {
+const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<TestResult> => {
 	const file = filePath.split("/").pop()!;
 
 	try {
