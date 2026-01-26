@@ -48,12 +48,25 @@ const main = async () => {
 		fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 	}
 
-	// Find .ly files
-	const lyFiles = fs.readdirSync(INPUT_DIR)
-		.filter(f => f.endsWith('.ly'))
+	// Find .ly files recursively
+	const findLyFiles = (dir: string): string[] => {
+		const entries = fs.readdirSync(dir, { withFileTypes: true });
+		const files: string[] = [];
+		for (const entry of entries) {
+			const fullPath = path.join(dir, entry.name);
+			if (entry.isDirectory()) {
+				files.push(...findLyFiles(fullPath));
+			} else if (entry.name.endsWith('.ly')) {
+				files.push(fullPath);
+			}
+		}
+		return files;
+	};
+
+	const lyFilePaths = findLyFiles(INPUT_DIR)
 		.slice(0, MAX_FILES > 0 ? MAX_FILES : undefined);
 
-	console.log(`Found ${lyFiles.length} .ly files in ${INPUT_DIR}\n`);
+	console.log(`Found ${lyFilePaths.length} .ly files in ${INPUT_DIR}\n`);
 
 	let passed = 0;
 	let failed = 0;
@@ -69,9 +82,9 @@ const main = async () => {
 		fs.mkdirSync(lylDir, { recursive: true });
 	}
 
-	for (let i = 0; i < lyFiles.length; i++) {
-		const filename = lyFiles[i];
-		const inputPath = path.join(INPUT_DIR, filename);
+	for (let i = 0; i < lyFilePaths.length; i++) {
+		const inputPath = lyFilePaths[i];
+		const filename = path.basename(inputPath);
 		const baseName = filename.replace('.ly', '');
 		const jsonPath = path.join(jsonDir, baseName + '.json');
 		const lylPath = path.join(lylDir, baseName + '.lyl');
@@ -102,7 +115,7 @@ const main = async () => {
 			const lylContent = serializeLilyletDoc(doc);
 			fs.writeFileSync(lylPath, lylContent);
 
-			console.log(`[${i + 1}/${lyFiles.length}] ✓ ${filename} -> ${baseName}.json, ${baseName}.lyl (${measureCount} measures, ${noteCount} notes)`);
+			console.log(`[${i + 1}/${lyFilePaths.length}] ✓ ${filename} -> ${baseName}.json, ${baseName}.lyl (${measureCount} measures, ${noteCount} notes)`);
 			passed++;
 			results.push({ file: filename, measures: measureCount, notes: noteCount });
 		} catch (e) {
@@ -110,14 +123,14 @@ const main = async () => {
 			console.assert = originalAssert;
 
 			const errorMsg = (e as Error).message.slice(0, 100);
-			console.log(`[${i + 1}/${lyFiles.length}] ✗ ${filename}: ${errorMsg}`);
+			console.log(`[${i + 1}/${lyFilePaths.length}] ✗ ${filename}: ${errorMsg}`);
 			failed++;
 			results.push({ file: filename, measures: 0, notes: 0, error: errorMsg });
 		}
 	}
 
 	console.log('\n========================================');
-	console.log(`Total: ${lyFiles.length}, Passed: ${passed}, Failed: ${failed}`);
+	console.log(`Total: ${lyFilePaths.length}, Passed: ${passed}, Failed: ${failed}`);
 	console.log(`JSON output: ${jsonDir}`);
 	console.log(`LYL output: ${lylDir}`);
 
@@ -126,7 +139,7 @@ const main = async () => {
 	fs.writeFileSync(summaryPath, JSON.stringify({
 		inputDir: INPUT_DIR,
 		outputDir: OUTPUT_DIR,
-		total: lyFiles.length,
+		total: lyFilePaths.length,
 		passed,
 		failed,
 		results,
