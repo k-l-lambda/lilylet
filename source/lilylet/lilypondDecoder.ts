@@ -54,6 +54,7 @@ import {
 	DynamicType,
 	HairpinType,
 	PedalType,
+	Metadata,
 } from "./types";
 
 
@@ -494,8 +495,135 @@ const hasRealContent = (events: Event[]): boolean => {
 };
 
 
+// Remove quotes from string literal
+const unquoteString = (str: string): string => {
+	if (str.startsWith('"') && str.endsWith('"')) {
+		return str.slice(1, -1);
+	}
+	return str;
+};
+
+
+// Extract text from lotus parser objects recursively
+const extractTextFromObject = (obj: any): string | undefined => {
+	if (!obj) return undefined;
+
+	// Simple string
+	if (typeof obj === 'string') {
+		return obj;
+	}
+
+	// Array - concatenate all text
+	if (Array.isArray(obj)) {
+		const texts: string[] = [];
+		for (const item of obj) {
+			const text = extractTextFromObject(item);
+			if (text) texts.push(text);
+		}
+		return texts.join(' ').trim() || undefined;
+	}
+
+	// Object with proto property (lotus parser objects)
+	if (obj && typeof obj === 'object' && obj.proto) {
+		switch (obj.proto) {
+			case 'LiteralString':
+				// exp contains quoted string like '"Hello"'
+				if (obj.exp) {
+					return unquoteString(obj.exp);
+				}
+				break;
+
+			case 'MarkupCommand':
+			case 'Command':
+				// Recursively extract from args
+				if (obj.args) {
+					return extractTextFromObject(obj.args);
+				}
+				break;
+
+			case 'InlineBlock':
+				// Extract from body, skip primitive commands
+				if (obj.body) {
+					const texts: string[] = [];
+					for (const item of obj.body) {
+						if (item.proto !== 'Primitive') {
+							const text = extractTextFromObject(item);
+							if (text) texts.push(text);
+						}
+					}
+					return texts.join(' ').trim() || undefined;
+				}
+				break;
+
+			case 'String':
+				if (obj.value) {
+					return obj.value;
+				}
+				break;
+		}
+	}
+
+	// Fallback: try value property
+	if (obj.value !== undefined) {
+		return extractTextFromObject(obj.value);
+	}
+
+	return undefined;
+};
+
+
+// Extract string value from header field
+const extractStringValue = (value: any): string | undefined => {
+	const text = extractTextFromObject(value);
+	return text ? text.trim() : undefined;
+};
+
+
+// Extract metadata from LilyDocument
+const extractMetadata = (lilyDocument: lilyParser.LilyDocument): Metadata | undefined => {
+	try {
+		const attrs = lilyDocument.globalAttributesReadOnly();
+
+		const metadata: Metadata = {};
+
+		// Extract each field, handling markup structures
+		if (attrs.title) {
+			metadata.title = extractStringValue(attrs.title);
+		}
+		if (attrs.subtitle) {
+			metadata.subtitle = extractStringValue(attrs.subtitle);
+		}
+		if (attrs.composer) {
+			metadata.composer = extractStringValue(attrs.composer);
+		}
+		if (attrs.arranger) {
+			metadata.arranger = extractStringValue(attrs.arranger);
+		}
+		if (attrs.poet) {
+			metadata.lyricist = extractStringValue(attrs.poet);
+		}
+		if (attrs.opus) {
+			metadata.opus = extractStringValue(attrs.opus);
+		}
+		if (attrs.instrument) {
+			metadata.instrument = extractStringValue(attrs.instrument);
+		}
+
+		// Return undefined if no metadata fields were populated
+		if (Object.keys(metadata).length === 0) {
+			return undefined;
+		}
+
+		return metadata;
+	} catch (e) {
+		// If metadata extraction fails, continue without it
+		return undefined;
+	}
+};
+
+
 // Convert parsed measures to LilyletDoc
-const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[]): LilyletDoc => {
+const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[], metadata?: Metadata): LilyletDoc => {
 	const measures: Measure[] = parsedMeasures.map(pm => {
 		// Filter out voices that only contain spacer rests and context changes
 		const voices = pm.voices
@@ -524,7 +652,11 @@ const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[]): LilyletDoc => {
 		return measure;
 	});
 
-	return { measures };
+	const doc: LilyletDoc = { measures };
+	if (metadata) {
+		doc.metadata = metadata;
+	}
+	return doc;
 };
 
 
@@ -536,7 +668,8 @@ const decode = async (lilypondSource: string): Promise<LilyletDoc> => {
 	const rawData = parser.parse(lilypondSource);
 	const lilyDocument = new lilyParser.LilyDocument(rawData);
 	const parsedMeasures = parseLilyDocument(lilyDocument);
-	return parsedMeasuresToDoc(parsedMeasures);
+	const metadata = extractMetadata(lilyDocument);
+	return parsedMeasuresToDoc(parsedMeasures, metadata);
 };
 
 
@@ -555,7 +688,8 @@ const decodeFile = async (filePath: string): Promise<LilyletDoc> => {
  */
 const decodeFromDocument = (lilyDocument: lilyParser.LilyDocument): LilyletDoc => {
 	const parsedMeasures = parseLilyDocument(lilyDocument);
-	return parsedMeasuresToDoc(parsedMeasures);
+	const metadata = extractMetadata(lilyDocument);
+	return parsedMeasuresToDoc(parsedMeasures, metadata);
 };
 
 
