@@ -382,7 +382,7 @@ context_event
 	| key_cmd									-> contextChange({ key: $1 })
 	| time_cmd									-> contextChange({ time: $1 })
 	| tempo_cmd									-> contextChange({ tempo: $1 })
-	| staff_cmd									-> contextChange({})
+	| staff_cmd									-> contextChange({ staff: $1 })
 	| ottava_cmd								-> contextChange({ ottava: $1 })
 	| stem_cmd									-> contextChange({ stemDirection: $1 })
 	;

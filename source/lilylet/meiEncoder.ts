@@ -544,7 +544,7 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0)
 
 
 // Convert TupletEvent to MEI
-const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0): string => {
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number): string => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
 	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
 	// MEI: num = number of notes written, numbase = normal equivalent
@@ -555,6 +555,9 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 	let inBeam = false;
 	const baseIndent = indent + '    ';
+
+	// Effective staff for cross-staff notation
+	const effectiveStaff = currentStaff ?? layerStaff;
 
 	for (const e of event.events) {
 		// Check for beam marks in note events
@@ -575,7 +578,12 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 		const currentIndent = inBeam ? baseIndent + '    ' : baseIndent;
 
 		if (e.type === 'note') {
-			result += noteEventToMEI(e as NoteEvent, currentIndent, layerStaff, false, undefined, keyFifths).xml;
+			// For cross-staff notation: set note's staff if different from layerStaff
+			const noteEvent = e as NoteEvent;
+			const effectiveNoteEvent = effectiveStaff && layerStaff && effectiveStaff !== layerStaff
+				? { ...noteEvent, staff: effectiveStaff }
+				: noteEvent;
+			result += noteEventToMEI(effectiveNoteEvent, currentIndent, layerStaff, false, undefined, keyFifths).xml;
 		} else if (e.type === 'rest') {
 			result += restEventToMEI(e as RestEvent, currentIndent, keyFifths);
 		}
@@ -773,6 +781,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	// Track current stem direction from context changes
 	let currentStemDirection: StemDirection | undefined = undefined;
 
+	// Track current staff for cross-staff notation
+	let currentStaff: number = voice.staff || 1;
+
 	// Track pending tie pitches (for tie="t" on next note) - initialized from previous measure
 	let pendingTiePitches: Pitch[] = [...initialTiePitches];
 
@@ -810,7 +821,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				// Check if this note should have tie="t" (matches pending tie)
 				const tieEnd = pendingTiePitches.length > 0 && pitchesMatch(pendingTiePitches, noteEvent.pitches);
 
-				const result = noteEventToMEI(noteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths);
+				// For cross-staff notation: set note's staff to currentStaff if different from voice.staff
+				const effectiveNoteEvent = currentStaff !== voice.staff
+					? { ...noteEvent, staff: currentStaff }
+					: noteEvent;
+
+				const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths);
 				xml += result.xml;
 				lastNoteId = result.elementId;
 
@@ -900,7 +916,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths);
 				break;
 			case 'tuplet':
-				xml += tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths);
+				xml += tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff);
 				break;
 			case 'tremolo':
 				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths);
@@ -934,6 +950,10 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				// Check for stem direction changes
 				if (ctx.stemDirection !== undefined) {
 					currentStemDirection = ctx.stemDirection;
+				}
+				// Check for staff changes (cross-staff notation)
+				if (ctx.staff !== undefined) {
+					currentStaff = ctx.staff;
 				}
 				// Other context changes are handled at measure level
 				break;

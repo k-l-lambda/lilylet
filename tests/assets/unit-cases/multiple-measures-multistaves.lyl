@@ -1,5 +1,5 @@
 \staff "1" \key g \major \time 3/4 \clef "treble" <a' b d>2. ~ \\
-\staff "2" \key g \major \clef "bass" g,8 d' g b g d |
+\staff "2" \key g \major \clef "bass" g,8( d' g b g d) |
 
 \staff "1" <a' b d>2. \\
-\staff "2" g,8 d' g b g d |
+\staff "2" g,8( d' g b g d) |

@@ -189,6 +189,7 @@ export interface ContextChange {
 	ottava?: number;				// -1, 0, 1
 	stemDirection?: StemDirection;
 	tempo?: Tempo;
+	staff?: number;					// Staff number for cross-staff notation
 }
 
 export interface TremoloEvent {
