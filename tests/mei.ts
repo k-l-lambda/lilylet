@@ -79,8 +79,8 @@ const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<
 
 
 const main = async (): Promise<void> => {
-	const lylDir = "./tests/assets";
-	const outputDir = "./tests/output";
+	const lylDir = "./tests/assets/unit-cases";
+	const outputDir = "./tests/output/unit-cases";
 
 	// Create output directory if not exists
 	if (!fs.existsSync(outputDir)) {

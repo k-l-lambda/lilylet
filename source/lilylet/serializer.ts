@@ -101,9 +101,9 @@ const ACCIDENTAL_MAP: Record<string, string> = {
 
 // Clef to Lilylet notation
 const CLEF_MAP: Record<string, string> = {
-	treble: 'G',
-	bass: 'F',
-	alto: 'C',
+	treble: 'treble',
+	bass: 'bass',
+	alto: 'alto',
 };
 
 
@@ -547,17 +547,46 @@ const serializeEvent = (
 };
 
 
+// Key/time signature info to inject into first voice
+interface MeasureContext {
+	key?: KeySignature;
+	time?: { numerator: number; denominator: number };
+}
+
 // Serialize a voice with pitch environment tracking
 // Takes currentStaff (what parser thinks staff is) and returns { str, newStaff }
-const serializeVoice = (voice: Voice, currentStaff: number): { str: string; newStaff: number } => {
+// If isGrandStaff is true, always output \staff command for clarity
+// If measureContext is provided, output key/time after \staff (for first voice only)
+const serializeVoice = (
+	voice: Voice,
+	currentStaff: number,
+	isGrandStaff: boolean = false,
+	measureContext?: MeasureContext
+): { str: string; newStaff: number } => {
 	const parts: string[] = [];
 	let prevDuration: Duration | undefined;
 	// Each voice starts fresh from middle C (step=0, octave=0)
 	let pitchEnv: PitchEnv = { step: 0, octave: 0 };
 
-	// Output staff command if voice staff differs from current parser staff
-	if (voice.staff !== currentStaff) {
-		parts.push('\\staff "' + voice.staff + '" ');
+	// Output staff command if voice staff differs from current parser staff,
+	// or always output if it's a grand staff score for clarity
+	if (isGrandStaff || voice.staff !== currentStaff) {
+		parts.push('\\staff "' + voice.staff + '"');
+	}
+
+	// Output key/time signatures after \staff (for first voice of first measure)
+	if (measureContext) {
+		if (measureContext.key) {
+			let keyStr = String(measureContext.key.pitch);
+			if (measureContext.key.accidental) {
+				keyStr += ACCIDENTAL_MAP[measureContext.key.accidental] || '';
+			}
+			keyStr += ' \\' + measureContext.key.mode;
+			parts.push('\\key ' + keyStr);
+		}
+		if (measureContext.time) {
+			parts.push('\\time ' + measureContext.time.numerator + '/' + measureContext.time.denominator);
+		}
 	}
 
 	for (const event of voice.events) {
@@ -581,7 +610,13 @@ const serializeVoice = (voice: Voice, currentStaff: number): { str: string; newS
 
 
 // Serialize a part, tracking staff state across voices
-const serializePart = (part: Part, currentStaff: number): { str: string; newStaff: number } => {
+// If measureContext is provided, pass it to the first voice only
+const serializePart = (
+	part: Part,
+	currentStaff: number,
+	isGrandStaff: boolean = false,
+	measureContext?: MeasureContext
+): { str: string; newStaff: number } => {
 	if (part.voices.length === 0) {
 		return { str: '', newStaff: currentStaff };
 	}
@@ -589,8 +624,11 @@ const serializePart = (part: Part, currentStaff: number): { str: string; newStaf
 	const voiceStrs: string[] = [];
 	let staff = currentStaff;
 
-	for (const voice of part.voices) {
-		const { str, newStaff } = serializeVoice(voice, staff);
+	for (let i = 0; i < part.voices.length; i++) {
+		const voice = part.voices[i];
+		// Only pass measureContext to first voice
+		const ctx = i === 0 ? measureContext : undefined;
+		const { str, newStaff } = serializeVoice(voice, staff, isGrandStaff, ctx);
 		voiceStrs.push(str);
 		staff = newStaff;
 	}
@@ -601,28 +639,19 @@ const serializePart = (part: Part, currentStaff: number): { str: string; newStaf
 
 
 // Serialize a measure, tracking staff state across parts
-const serializeMeasure = (measure: Measure, isFirst: boolean, currentStaff: number): { str: string; newStaff: number } => {
+const serializeMeasure = (measure: Measure, isFirst: boolean, currentStaff: number, isGrandStaff: boolean = false): { str: string; newStaff: number } => {
 	const parts: string[] = [];
 
-	// Key signature (usually only on first measure or when changed)
-	if (measure.key && isFirst) {
-		let keyStr = String(measure.key.pitch);
-		if (measure.key.accidental) {
-			keyStr += ACCIDENTAL_MAP[measure.key.accidental] || '';
-		}
-		keyStr += ' \\' + measure.key.mode;
-		parts.push('\\key ' + keyStr);
-	}
-
-	// Time signature (usually only on first measure or when changed)
-	if (measure.timeSig && isFirst) {
-		parts.push('\\time ' + measure.timeSig.numerator + '/' + measure.timeSig.denominator);
-	}
+	// Build measure context for first voice (key/time signatures)
+	const measureContext: MeasureContext | undefined = isFirst ? {
+		key: measure.key,
+		time: measure.timeSig,
+	} : undefined;
 
 	// Parts
 	let staff = currentStaff;
 	if (measure.parts.length === 1) {
-		const { str: partStr, newStaff } = serializePart(measure.parts[0], staff);
+		const { str: partStr, newStaff } = serializePart(measure.parts[0], staff, isGrandStaff, measureContext);
 		if (partStr) {
 			parts.push(partStr);
 		}
@@ -630,8 +659,11 @@ const serializeMeasure = (measure: Measure, isFirst: boolean, currentStaff: numb
 	} else if (measure.parts.length > 1) {
 		// Multiple parts: separated by \\\ with newline
 		const partStrs: string[] = [];
-		for (const part of measure.parts) {
-			const { str, newStaff } = serializePart(part, staff);
+		for (let i = 0; i < measure.parts.length; i++) {
+			const part = measure.parts[i];
+			// Only pass measureContext to first part
+			const ctx = i === 0 ? measureContext : undefined;
+			const { str, newStaff } = serializePart(part, staff, isGrandStaff, ctx);
 			if (str) {
 				partStrs.push(str);
 			}
@@ -683,12 +715,19 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 		}
 	}
 
+	// Detect grand staff: check if any voice has staff > 1
+	const isGrandStaff = doc.measures.some(m =>
+		m.parts.some(p =>
+			p.voices.some(v => v.staff > 1)
+		)
+	);
+
 	// Measures with bar lines, measure numbers, and double newlines
 	// Track staff state across measures (parser remembers staff across bar lines)
 	const measureStrs: string[] = [];
 	let currentStaff = 1; // Parser starts at staff 1
 	for (let i = 0; i < doc.measures.length; i++) {
-		const { str: measureStr, newStaff } = serializeMeasure(doc.measures[i], i === 0, currentStaff);
+		const { str: measureStr, newStaff } = serializeMeasure(doc.measures[i], i === 0, currentStaff, isGrandStaff);
 		// Always include measure, even if empty (use space rest for empty measures)
 		measureStrs.push(measureStr || 's1');
 		currentStaff = newStaff;

@@ -1,0 +1,98 @@
+\staff "1" \key g \major \time 3/4 \clef "treble" \stemDown d'4(\p \stemUp g,8[ a b c] \\
+\staff "2" \clef "bass" \stemDown <g b d>2( a4 | %1
+
+\staff "1" \stemDown \clef "treble" d'4) \stemUp g, g \\
+\staff "2" \clef "bass" \stemDown b2.) | %2
+
+\staff "1" \stemDown \clef "treble" e'4( c8[ d e fs] \\
+\staff "2" \clef "bass" \stemDown c2.( | %3
+
+\staff "1" \clef "treble" \stemDown g''4) \stemUp g, g \\
+\staff "2" \clef "bass" \stemDown b2.) | %4
+
+\staff "1" \stemDown \clef "treble" c'4( d8[ c b a] \\
+\staff "2" \clef "bass" \stemDown a2.( | %5
+
+\staff "1" \clef "treble" \stemDown b'4)( \stemUp c8[ b a g)] \\
+\staff "2" \clef "bass" \stemDown g2.) | %6
+
+\staff "1" \clef "treble" \stemUp fs4( g8[ a b g] \\
+\staff "2" \clef "bass" \stemDown d4 b g | %7
+
+\staff "1" \stemUp \clef "treble" \grace b'8 \stemUp a2.) \\
+\staff "2" \clef "bass" \stemDown d4( d,8[ c' b a] | %8
+
+\staff "1" \stemDown \clef "treble" d'4( \stemUp g,8[ a b c] \\
+\staff "2" \clef "bass" \stemDown b2)( a4 | %9
+
+\staff "1" \stemDown \clef "treble" d'4) \stemUp g, g \\
+\staff "2" \clef "bass" \stemDown g4) b g | %10
+
+\staff "1" \stemDown \clef "treble" e'4( c8[ d e fs] \\
+\staff "2" \clef "bass" \stemDown c2.( | %11
+
+\staff "1" \clef "treble" \stemDown g''4) \stemUp g, g \\
+\staff "2" \clef "bass" \stemDown b4 c8[ b a g] | %12
+
+\staff "1" \stemDown \clef "treble" c'4( d8[ c b a] \\
+\staff "2" \clef "bass" \stemDown a2 fs4 | %13
+
+\staff "1" \clef "treble" \stemDown b'4)( \stemUp c8[ b a g] \\
+\staff "2" \clef "bass" \stemDown g2)( b4 | %14
+
+\staff "1" \clef "treble" \stemUp a'4)( b8[ a g fs] \\
+\staff "2" \clef "bass" \stemDown c4 d) d, | %15
+
+\staff "1" \clef "treble" \stemUp g'2.) \\
+\staff "2" \clef "bass" \stemDown g2 \stemUp g,4 | %16
+
+\staff "1" \stemDown \clef "treble" b''4(\mf g8[ a b g] \\
+\staff "2" \stemDown \clef "bass" g2.( | %17
+
+\staff "1" \clef "treble" \stemDown a''4)( d,8[ e fs d] \\
+\staff "2" \clef "bass" \stemDown fs,2.) | %18
+
+\staff "1" \clef "treble" \stemDown g''4)( e8[ fs g d] \\
+\staff "2" \clef "bass" \stemDown e,4 g e | %19
+
+\staff "1" \clef "treble" \stemDown cs'4 b8[ cs] \stemUp a4) \\
+\staff "2" \clef "bass" \stemDown a2 \stemUp a,4 | %20
+
+\staff "1" \stemDown \clef "treble" a'8([ b cs d e fs] \\
+\staff "2" \stemDown \clef "bass" a2.( | %21
+
+\staff "1" \clef "treble" \stemDown g''4) fs e \\
+\staff "2" \clef "bass" \stemDown b4) d cs | %22
+
+\staff "1" \clef "treble" \stemDown fs'4 \stemUp a, \stemDown cs \\
+\staff "2" \clef "bass" \stemDown d4 fs, a | %23
+
+\staff "1" \clef "treble" \stemDown d'2. \\
+\staff "2" \clef "bass" \stemDown d4( d,) c' | %24
+
+\staff "1" \clef "treble" \stemDown d'4( \stemUp g,8[ fs] g4) \\
+\staff "2" \stemDown \clef "bass" b2 b4 \\
+\staff "2" \clef "bass" \stemDown g'4 \stemUp d2 | %25
+
+\staff "1" \stemDown \clef "treble" e'4( \stemUp g,8[ fs] g4) \\
+\staff "2" \clef "bass" \stemDown c2 c4 \\
+\staff "2" \clef "bass" \stemUp a'4 e2 | %26
+
+\staff "1" \stemDown \clef "treble" d'4( c b \\
+\staff "2" \stemDown \clef "bass" b4( a g | %27
+
+\staff "1" \stemUp \clef "treble" a'8[ g fs g] a4) \\
+\staff "2" \clef "bass" \stemDown d2) d4\rest | %28
+
+\staff "1" \clef "treble" \stemUp d8([ e fs g a b] \\
+\staff "2" \clef "bass" \stemDown d,2. \\
+\staff "2" \clef "bass" \stemDown c4 c \stemUp fs, | %29
+
+\staff "1" \stemDown \clef "treble" c'4) b \stemUp a \\
+\staff "2" \stemDown \clef "bass" e,4 g fs | %30
+
+\staff "1" \stemDown \clef "treble" b'8([ d] \stemUp g,4) fs \\
+\staff "2" \clef "bass" \stemDown g4( \stemUp b,) \stemDown d | %31
+
+\staff "1" \clef "treble" \stemUp <b d g>2. \\
+\staff "2" \clef "bass" \stemDown g4 d \stemUp g, | %32

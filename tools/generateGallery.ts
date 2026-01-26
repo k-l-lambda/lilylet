@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const assetsDir = './tests/assets';
-const outputDir = './tests/output';
+const assetsDir = './tests/assets/unit-cases';
+const outputDir = './tests/output/unit-cases';
 
 // Get all lyl files
 const lylFiles = fs.readdirSync(assetsDir)

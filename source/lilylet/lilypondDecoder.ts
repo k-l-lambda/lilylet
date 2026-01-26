@@ -16,8 +16,11 @@ const getParser = async () => {
 		// Load jison parser directly
 		const fs = await import('fs');
 		const path = await import('path');
+		const { createRequire } = await import('module');
 		const Jison = (await import('jison')).default;
 
+		// Use createRequire for ESM compatibility
+		const require = createRequire(import.meta.url);
 		const jisonPath = path.join(
 			path.dirname(require.resolve('@k-l-lambda/lotus/package.json')),
 			'jison/lilypond.jison'
@@ -166,10 +169,10 @@ const convertPitch = (phonetStep: number, alterValue: number, octave: number): P
 	const phonet = PHONET_NAMES[phonetStep % 7];
 	const accidental = alterValue !== 0 ? ALTER_TO_ACCIDENTAL[alterValue] : undefined;
 
-	// LilyPond octave: 0 = c', 1 = c'', -1 = c
-	// Lilylet octave: 0 = middle C octave (C4)
-	// LilyPond octave 1 = Lilylet octave 0
-	const lilyletOctave = octave;
+	// Lotus parser absolute octave: 0 = C3, 1 = C4, 2 = C5
+	// Lilylet octave: 0 = C4, 1 = C5, -1 = C3
+	// Conversion: lilyletOctave = lotusAbsoluteOctave - 1
+	const lilyletOctave = octave - 1;
 
 	return {
 		phonet,
@@ -374,7 +377,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 								pitches.push(convertPitch(
 									pitch.phonetStep,
 									pitch.alterValue || 0,
-									pitch.octave
+									pitch.absolutePitch.octave
 								));
 							}
 						}
@@ -479,15 +482,30 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 };
 
 
+// Check if a voice has real music content (not just spacer rests and context changes)
+const hasRealContent = (events: Event[]): boolean => {
+	return events.some(e => {
+		if (e.type === 'note') return true;
+		if (e.type === 'rest' && !(e as RestEvent).invisible) return true;
+		return false;
+	});
+};
+
+
 // Convert parsed measures to LilyletDoc
 const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[]): LilyletDoc => {
 	const measures: Measure[] = parsedMeasures.map(pm => {
+		// Filter out voices that only contain spacer rests and context changes
+		const voices = pm.voices
+			.filter(v => hasRealContent(v.events))
+			.map(v => ({
+				staff: v.staff,
+				events: v.events,
+			}));
+
 		const measure: Measure = {
 			parts: [{
-				voices: pm.voices.map(v => ({
-					staff: v.staff,
-					events: v.events,
-				})),
+				voices,
 			}],
 		};
 
