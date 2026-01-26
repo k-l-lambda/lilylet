@@ -35,7 +35,7 @@ const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<
 	try {
 		// Step 1: Parse .lyl file
 		const code = fs.readFileSync(filePath, { encoding: "utf-8" });
-		const doc = await lilylet.parseCode(code);
+		const doc = lilylet.parseCode(code);
 
 		// Step 2: Encode to MEI
 		const mei = lilylet.meiEncoder.encode(doc);

@@ -157,7 +157,7 @@ const resolveDocumentPitches = (doc: LilyletDoc): void => {
 };
 
 
-const parseCode = async (code: string): Promise<LilyletDoc> => {
+const parseCode = (code: string): LilyletDoc => {
 	// Reset parser state before each parse to avoid contamination
 	if (parser && (parser as any).resetState) {
 		(parser as any).resetState();

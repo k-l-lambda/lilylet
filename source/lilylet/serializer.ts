@@ -220,43 +220,43 @@ const serializeMarks = (marks: Mark[]): string => {
 	const parts: string[] = [];
 
 	for (const mark of marks) {
-		// Check for markType (tie, slur, beam)
-		if ('markType' in mark) {
-			if (mark.markType === 'tie' && mark.start) {
-				parts.push('~');
-			} else if (mark.markType === 'slur') {
+		switch (mark.markType) {
+			case 'tie':
+				if (mark.start) parts.push('~');
+				break;
+			case 'slur':
 				parts.push(mark.start ? '(' : ')');
-			} else if (mark.markType === 'beam') {
+				break;
+			case 'beam':
 				parts.push(mark.start ? '[' : ']');
+				break;
+			case 'articulation': {
+				const artStr = ARTICULATION_MAP[mark.type];
+				if (artStr) {
+					const prefix = mark.placement === 'above' ? '^' : mark.placement === 'below' ? '_' : '-';
+					parts.push(prefix + artStr);
+				}
+				break;
 			}
-			continue;
-		}
-
-		// Check for type field
-		if ('type' in mark) {
-			const type = mark.type as string;
-
-			// Articulation
-			if (ARTICULATION_MAP[type]) {
-				const placement = (mark as any).placement;
-				const prefix = placement === 'above' ? '^' : placement === 'below' ? '_' : '-';
-				parts.push(prefix + ARTICULATION_MAP[type]);
+			case 'ornament': {
+				const ornStr = ORNAMENT_MAP[mark.type];
+				if (ornStr) parts.push(ornStr);
+				break;
 			}
-			// Ornament
-			else if (ORNAMENT_MAP[type]) {
-				parts.push(ORNAMENT_MAP[type]);
+			case 'dynamic': {
+				const dynStr = DYNAMIC_MAP[mark.type];
+				if (dynStr) parts.push(dynStr);
+				break;
 			}
-			// Dynamic
-			else if (DYNAMIC_MAP[type]) {
-				parts.push(DYNAMIC_MAP[type]);
+			case 'hairpin': {
+				const hairpinStr = HAIRPIN_MAP[mark.type];
+				if (hairpinStr) parts.push(hairpinStr);
+				break;
 			}
-			// Hairpin
-			else if (HAIRPIN_MAP[type]) {
-				parts.push(HAIRPIN_MAP[type]);
-			}
-			// Pedal
-			else if (PEDAL_MAP[type]) {
-				parts.push(PEDAL_MAP[type]);
+			case 'pedal': {
+				const pedalStr = PEDAL_MAP[mark.type];
+				if (pedalStr) parts.push(pedalStr);
+				break;
 			}
 		}
 	}
@@ -676,24 +676,29 @@ const serializeMeasure = (measure: Measure, isFirst: boolean, currentStaff: numb
 };
 
 
+// Escape string for serialization (quotes and backslashes)
+const escapeString = (str: string): string => {
+	return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+};
+
 // Serialize metadata
 const serializeMetadata = (metadata: any): string => {
 	const lines: string[] = [];
 
 	if (metadata.title) {
-		lines.push('\\title "' + metadata.title + '"');
+		lines.push('[title "' + escapeString(metadata.title) + '"]');
 	}
 	if (metadata.subtitle) {
-		lines.push('\\subtitle "' + metadata.subtitle + '"');
+		lines.push('[subtitle "' + escapeString(metadata.subtitle) + '"]');
 	}
 	if (metadata.composer) {
-		lines.push('\\composer "' + metadata.composer + '"');
+		lines.push('[composer "' + escapeString(metadata.composer) + '"]');
 	}
 	if (metadata.arranger) {
-		lines.push('\\arranger "' + metadata.arranger + '"');
+		lines.push('[arranger "' + escapeString(metadata.arranger) + '"]');
 	}
 	if (metadata.lyricist) {
-		lines.push('\\lyricist "' + metadata.lyricist + '"');
+		lines.push('[lyricist "' + escapeString(metadata.lyricist) + '"]');
 	}
 
 	return lines.join('\n');

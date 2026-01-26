@@ -82,12 +82,12 @@
 		division,
 	});
 
-	// Articulation/mark helpers
-	const articulation = (type, placement) => ({ type, placement });
-	const ornament = (type) => ({ type });
-	const dynamic = (type) => ({ type });
-	const hairpin = (type) => ({ type });
-	const pedal = (type) => ({ type });
+	// Articulation/mark helpers - all marks have markType for discrimination
+	const articulation = (type, placement) => ({ markType: 'articulation', type, placement });
+	const ornament = (type) => ({ markType: 'ornament', type });
+	const dynamic = (type) => ({ markType: 'dynamic', type });
+	const hairpin = (type) => ({ markType: 'hairpin', type });
+	const pedal = (type) => ({ markType: 'pedal', type });
 	const tie = (start) => ({ markType: 'tie', start });
 	const slur = (start) => ({ markType: 'slur', start });
 	const beam = (start) => ({ markType: 'beam', start });

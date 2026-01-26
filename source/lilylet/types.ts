@@ -107,19 +107,23 @@ export enum Placement {
 // === Expressive Marks ===
 
 export interface Articulation {
+	markType: 'articulation';
 	type: ArticulationType;
 	placement?: Placement;
 }
 
 export interface Ornament {
+	markType: 'ornament';
 	type: OrnamentType;
 }
 
 export interface Dynamic {
+	markType: 'dynamic';
 	type: DynamicType;
 }
 
 export interface Hairpin {
+	markType: 'hairpin';
 	type: HairpinType;
 }
 
@@ -139,6 +143,7 @@ export interface Beam {
 }
 
 export interface Pedal {
+	markType: 'pedal';
 	type: PedalType;
 }
 

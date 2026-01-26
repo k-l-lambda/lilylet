@@ -123,14 +123,18 @@ const DYNAMIC_MAP: Record<string, string> = {
 };
 
 
+// ID generation state - uses session prefix to prevent collisions in concurrent encoding
 let idCounter = 0;
+let sessionPrefix = '';
 
 const generateId = (prefix: string): string => {
-	return `${prefix}-${String(++idCounter).padStart(10, "0")}`;
+	return `${prefix}-${sessionPrefix}${String(++idCounter).padStart(10, "0")}`;
 };
 
 const resetIdCounter = (): void => {
 	idCounter = 0;
+	// Generate a unique 4-char hex session prefix for this encode call
+	sessionPrefix = Math.random().toString(16).substring(2, 6);
 };
 
 
@@ -305,76 +309,81 @@ const extractMarkOptions = (marks?: Mark[]): {
 	if (!marks) return result;
 
 	for (const mark of marks) {
-		// Articulations
-		if ('type' in mark && ARTIC_MAP[(mark as any).type]) {
-			result.artics.push({
-				type: ARTIC_MAP[(mark as any).type],
-				placement: (mark as any).placement,
-			});
-		}
-
-		// Ornaments
-		const ornamentType = (mark as any).type;
-		if (ornamentType === OrnamentType.fermata) {
-			result.fermata = 'normal';
-		} else if (ornamentType === OrnamentType.shortFermata) {
-			result.fermata = 'short';
-		} else if (ornamentType === OrnamentType.trill) {
-			result.trill = true;
-		} else if (ornamentType === OrnamentType.arpeggio) {
-			result.arpeggio = true;
-		} else if (ornamentType === OrnamentType.turn) {
-			result.turn = true;
-		} else if (ornamentType === OrnamentType.mordent) {
-			result.mordent = 'lower';
-		} else if (ornamentType === OrnamentType.prall) {
-			result.mordent = 'upper';
-		}
-
-		// Dynamics
-		if (DYNAMIC_MAP[ornamentType]) {
-			result.dynamic = DYNAMIC_MAP[ornamentType];
-		}
-
-		// Hairpins
-		if (ornamentType === HairpinType.crescendoStart) {
-			result.hairpin = 'crescStart';
-		} else if (ornamentType === HairpinType.diminuendoStart) {
-			result.hairpin = 'dimStart';
-		} else if (ornamentType === HairpinType.crescendoEnd || ornamentType === HairpinType.diminuendoEnd) {
-			result.hairpin = 'end';
-		}
-
-		// Pedals
-		if (ornamentType === PedalType.sustainOn) {
-			result.pedal = 'down';
-		} else if (ornamentType === PedalType.sustainOff) {
-			result.pedal = 'up';
-		}
-
-		// Tremolo
-		if ('tremolo' in mark && typeof (mark as any).tremolo === 'number') {
-			result.tremolo = (mark as any).tremolo;
-		}
-
-		// Check markType for tie/slur/beam distinction
-		const markType = (mark as any).markType;
-		if (markType === 'tie') {
-			if ((mark as any).start) {
-				result.tieStart = true;
+		switch (mark.markType) {
+			case 'articulation': {
+				const articType = ARTIC_MAP[mark.type];
+				if (articType) {
+					result.artics.push({
+						type: articType,
+						placement: mark.placement,
+					});
+				}
+				break;
 			}
-		} else if (markType === 'slur') {
-			if ((mark as any).start) {
-				result.slurStart = true;
-			} else {
-				result.slurEnd = true;
+			case 'ornament':
+				if (mark.type === OrnamentType.fermata) {
+					result.fermata = 'normal';
+				} else if (mark.type === OrnamentType.shortFermata) {
+					result.fermata = 'short';
+				} else if (mark.type === OrnamentType.trill) {
+					result.trill = true;
+				} else if (mark.type === OrnamentType.arpeggio) {
+					result.arpeggio = true;
+				} else if (mark.type === OrnamentType.turn) {
+					result.turn = true;
+				} else if (mark.type === OrnamentType.mordent) {
+					result.mordent = 'lower';
+				} else if (mark.type === OrnamentType.prall) {
+					result.mordent = 'upper';
+				}
+				break;
+			case 'dynamic': {
+				const dynStr = DYNAMIC_MAP[mark.type];
+				if (dynStr) {
+					result.dynamic = dynStr;
+				}
+				break;
 			}
-		} else if (markType === 'beam') {
-			if ((mark as any).start) {
-				result.beamStart = true;
-			} else {
-				result.beamEnd = true;
-			}
+			case 'hairpin':
+				if (mark.type === HairpinType.crescendoStart) {
+					result.hairpin = 'crescStart';
+				} else if (mark.type === HairpinType.diminuendoStart) {
+					result.hairpin = 'dimStart';
+				} else if (mark.type === HairpinType.crescendoEnd || mark.type === HairpinType.diminuendoEnd) {
+					result.hairpin = 'end';
+				}
+				break;
+			case 'pedal':
+				if (mark.type === PedalType.sustainOn) {
+					result.pedal = 'down';
+				} else if (mark.type === PedalType.sustainOff) {
+					result.pedal = 'up';
+				}
+				break;
+			case 'tie':
+				if (mark.start) {
+					result.tieStart = true;
+				}
+				break;
+			case 'slur':
+				if (mark.start) {
+					result.slurStart = true;
+				} else {
+					result.slurEnd = true;
+				}
+				break;
+			case 'beam':
+				if (mark.start) {
+					result.beamStart = true;
+				} else {
+					result.beamEnd = true;
+				}
+				break;
+		}
+
+		// Tremolo (special case - from parser internal mark)
+		if ('tremolo' in mark && typeof (mark as { tremolo?: number }).tremolo === 'number') {
+			result.tremolo = (mark as { tremolo: number }).tremolo;
 		}
 	}
 

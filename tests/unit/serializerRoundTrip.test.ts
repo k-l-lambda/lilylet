@@ -226,7 +226,7 @@ const compareEvents = (orig: Event, rt: Event, location: string): string[] => {
 /**
  * Run round-trip test on a single JSON file
  */
-const testRoundTrip = async (jsonPath: string): Promise<{ success: boolean; diffs: string[]; lylLength: number }> => {
+const testRoundTrip = (jsonPath: string): { success: boolean; diffs: string[]; lylLength: number } => {
 	// Load original JSON
 	const jsonContent = fs.readFileSync(jsonPath, 'utf-8');
 	const original: LilyletDoc = JSON.parse(jsonContent);
@@ -235,7 +235,7 @@ const testRoundTrip = async (jsonPath: string): Promise<{ success: boolean; diff
 	const lylContent = serializeLilyletDoc(original);
 
 	// Parse back to LilyletDoc
-	const roundTrip = await parseCode(lylContent);
+	const roundTrip = parseCode(lylContent);
 
 	// Compare
 	const diffs = compareDocs(original, roundTrip);
@@ -272,7 +272,7 @@ const main = async () => {
 		const filename = path.basename(jsonPath);
 
 		try {
-			const result = await testRoundTrip(jsonPath);
+			const result = testRoundTrip(jsonPath);
 
 			if (result.success) {
 				console.log(`[${i + 1}/${jsonFiles.length}] ✓ ${filename} (${result.lylLength} chars)`);

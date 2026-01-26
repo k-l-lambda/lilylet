@@ -232,9 +232,9 @@ const parsePostEvents = (postEvents: any[]): Mark[] => {
 			if (typeof arg === 'string') {
 				const cleanArg = arg.replace(/^-/, '');
 				if (ARTICULATION_MAP[cleanArg]) {
-					marks.push({ type: ARTICULATION_MAP[cleanArg] });
+					marks.push({ markType: 'articulation', type: ARTICULATION_MAP[cleanArg] });
 				} else if (ORNAMENT_MAP[cleanArg]) {
-					marks.push({ type: ORNAMENT_MAP[cleanArg] });
+					marks.push({ markType: 'ornament', type: ORNAMENT_MAP[cleanArg] });
 				}
 			}
 
@@ -242,17 +242,17 @@ const parsePostEvents = (postEvents: any[]): Mark[] => {
 			if (arg && typeof arg === 'object' && 'cmd' in arg) {
 				const cmd = arg.cmd;
 				if (DYNAMIC_REGEX.test(cmd) && DYNAMIC_MAP[cmd]) {
-					marks.push({ type: DYNAMIC_MAP[cmd] });
+					marks.push({ markType: 'dynamic', type: DYNAMIC_MAP[cmd] });
 				} else if (cmd === '<') {
-					marks.push({ type: HairpinType.crescendoStart });
+					marks.push({ markType: 'hairpin', type: HairpinType.crescendoStart });
 				} else if (cmd === '>') {
-					marks.push({ type: HairpinType.diminuendoStart });
+					marks.push({ markType: 'hairpin', type: HairpinType.diminuendoStart });
 				} else if (cmd === '!') {
-					marks.push({ type: HairpinType.crescendoEnd }); // or diminuendoEnd
+					marks.push({ markType: 'hairpin', type: HairpinType.crescendoEnd }); // or diminuendoEnd
 				} else if (cmd === 'sustainOn') {
-					marks.push({ type: PedalType.sustainOn });
+					marks.push({ markType: 'pedal', type: PedalType.sustainOn });
 				} else if (cmd === 'sustainOff') {
-					marks.push({ type: PedalType.sustainOff });
+					marks.push({ markType: 'pedal', type: PedalType.sustainOff });
 				}
 			}
 		}
@@ -284,7 +284,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 
 		const context = new lilyParser.TrackContext(undefined, {
 			listener: (term: lilyParser.BaseTerm, context: lilyParser.TrackContext) => {
-				const mi = term._measure!;
+				const mi = term._measure;
 				if (mi === undefined) return;
 
 				if (!measureMap.has(mi)) {
@@ -472,8 +472,10 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		context.execute(track.music);
 	});
 
-	// Filter out empty voices and convert to array
-	const measures = Array.from(measureMap.values());
+	// Filter out empty voices and convert to array, sorted by measure number
+	const measures = Array.from(measureMap.entries())
+		.sort(([a], [b]) => a - b)
+		.map(([, measure]) => measure);
 	for (const measure of measures) {
 		measure.voices = measure.voices.filter(Boolean);
 	}
