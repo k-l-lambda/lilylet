@@ -757,6 +757,7 @@ interface SlurSpan {
 
 // Tie state for cross-measure ties - maps staff:layer to pending pitches
 type TieState = Record<string, Pitch[]>;
+type SlurState = Record<string, string | null>;  // voice key -> pending slur startId
 
 // Layer result type
 interface LayerResult {
@@ -772,11 +773,12 @@ interface LayerResult {
 	turns: TurnRef[];
 	dynamics: DynamRef[];
 	pendingTiePitches: Pitch[];  // For cross-measure tie tracking
+	pendingSlur: string | null;  // For cross-measure slur tracking (startId)
 	endingClef?: Clef;  // For cross-measure clef tracking
 }
 
 // Encode a layer (voice)
-const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef): LayerResult => {
+const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlur: string | null = null): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -802,7 +804,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 
 	// Track slur spans - slurs must be encoded as control events in MEI
 	const slurs: SlurSpan[] = [];
-	let currentSlur: { startId: string } | null = null;
+	let currentSlur: { startId: string } | null = initialSlur ? { startId: initialSlur } : null;
 
 	// Track arpeggio refs
 	const arpeggios: ArpegRef[] = [];
@@ -1050,7 +1052,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches, endingClef: currentClef };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches, pendingSlur: currentSlur?.startId || null, endingClef: currentClef };
 };
 
 // Staff result type
@@ -1067,11 +1069,12 @@ interface StaffResult {
 	turns: TurnRef[];
 	dynamics: DynamRef[];
 	pendingTies: TieState;  // For cross-measure tie tracking
+	pendingSlurs: SlurState;  // For cross-measure slur tracking
 	endingClef?: Clef;  // For cross-measure clef tracking
 }
 
 // Encode a staff
-const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, keyFifths: number = 0, initialClef?: Clef): StaffResult => {
+const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, slurState: SlurState = {}, keyFifths: number = 0, initialClef?: Clef): StaffResult => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -1085,6 +1088,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const allTurns: TurnRef[] = [];
 	const allDynamics: DynamRef[] = [];
 	const pendingTies: TieState = {};
+	const pendingSlurs: SlurState = {};
 	let endingClef: Clef | undefined = initialClef;
 
 	if (voices.length === 0) {
@@ -1094,7 +1098,8 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			const layerN = vi + 1;
 			const tieKey = `${staffN}-${layerN}`;
 			const initialTies = tieState[tieKey] || [];
-			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef);
+			const initialSlur = slurState[tieKey] || null;
+			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef, initialSlur);
 			xml += result.xml;
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
@@ -1109,6 +1114,10 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			// Track pending ties for this layer
 			if (result.pendingTiePitches.length > 0) {
 				pendingTies[tieKey] = result.pendingTiePitches;
+			}
+			// Track pending slurs for this layer
+			if (result.pendingSlur) {
+				pendingSlurs[tieKey] = result.pendingSlur;
 			}
 			// Track ending clef for cross-measure tracking
 			if (result.endingClef) {
@@ -1131,6 +1140,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		turns: allTurns,
 		dynamics: allDynamics,
 		pendingTies,
+		pendingSlurs,
 		endingClef,
 	};
 };
@@ -1169,8 +1179,8 @@ const generateTempoElement = (tempo: Tempo, indent: string): string => {
 type ClefState = Record<number, Clef>;
 
 // Encode a measure
-// encodeMeasure accepts mutable tieState and clefState that persist across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}): string => {
+// encodeMeasure accepts mutable tieState, slurState and clefState that persist across measures
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}): string => {
 	const measureId = generateId("measure");
 	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -1214,11 +1224,11 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		}
 	}
 
-	// Encode each staff, passing and updating tie state and clef state
+	// Encode each staff, passing and updating tie state, slur state and clef state
 	for (let si = 1; si <= totalStaves; si++) {
 		const voices = voicesByStaff[si] || [];
 		const initialClef = clefState[si];
-		const result = encodeStaff(voices, si, indent + '    ', tieState, keyFifths, initialClef);
+		const result = encodeStaff(voices, si, indent + '    ', tieState, slurState, keyFifths, initialClef);
 		xml += result.xml;
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
@@ -1232,6 +1242,8 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		allDynamics.push(...result.dynamics);
 		// Update tie state with pending ties from this staff
 		Object.assign(tieState, result.pendingTies);
+		// Update slur state with pending slurs from this staff
+		Object.assign(slurState, result.pendingSlurs);
 		// Update clef state with ending clef from this staff
 		if (result.endingClef) {
 			clefState[si] = result.endingClef;
@@ -1480,6 +1492,9 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	// Track tie state across measures for cross-measure ties
 	const tieState: TieState = {};
 
+	// Track slur state across measures for cross-measure slurs
+	const slurState: SlurState = {};
+
 	// Initialize clef state from partInfos (convert local staff to global staff)
 	const clefState: ClefState = {};
 	for (let pi = 0; pi < partInfos.length; pi++) {
@@ -1518,7 +1533,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		if (measure.key) {
 			currentKey = keyToFifths(measure.key);
 		}
-		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, currentKey, partInfos, clefState);
+		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, currentKey, partInfos, clefState);
 	});
 
 	mei += `${indent}${indent}${indent}${indent}${indent}</section>\n`;
