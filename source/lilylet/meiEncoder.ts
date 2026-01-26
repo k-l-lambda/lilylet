@@ -543,21 +543,44 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0)
 };
 
 
+// TupletEventResult - return type for tupletEventToMEI
+interface TupletEventResult {
+	xml: string;
+	slurStarts: string[];  // Note IDs that start slurs
+	slurEnds: string[];    // Note IDs that end slurs
+	dynamics: DynamRef[];
+	fermatas: FermataRef[];
+	trills: TrillRef[];
+	mordents: MordentRef[];
+	turns: TurnRef[];
+	arpeggios: ArpegRef[];
+}
+
 // Convert TupletEvent to MEI
-const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number): string => {
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number): TupletEventResult => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
 	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
 	// MEI: num = number of notes written, numbase = normal equivalent
 	const num = event.ratio.denominator;      // denominator = actual note count
 	const numbase = event.ratio.numerator;    // numerator = time equivalent
 
-	let result = `${indent}<tuplet xml:id="${generateId('tuplet')}" num="${num}" numbase="${numbase}">\n`;
+	let xml = `${indent}<tuplet xml:id="${generateId('tuplet')}" num="${num}" numbase="${numbase}">\n`;
 
 	let inBeam = false;
 	const baseIndent = indent + '    ';
 
 	// Effective staff for cross-staff notation
 	const effectiveStaff = currentStaff ?? layerStaff;
+
+	// Collect control event info from notes inside tuplet
+	const slurStarts: string[] = [];
+	const slurEnds: string[] = [];
+	const dynamics: DynamRef[] = [];
+	const fermatas: FermataRef[] = [];
+	const trills: TrillRef[] = [];
+	const mordents: MordentRef[] = [];
+	const turns: TurnRef[] = [];
+	const arpeggios: ArpegRef[] = [];
 
 	for (const e of event.events) {
 		// Check for beam marks in note events
@@ -571,7 +594,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 		// Open beam element if beam starts
 		if (beamStart && !inBeam) {
-			result += `${baseIndent}<beam xml:id="${generateId('beam')}">\n`;
+			xml += `${baseIndent}<beam xml:id="${generateId('beam')}">\n`;
 			inBeam = true;
 		}
 
@@ -583,25 +606,38 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			const effectiveNoteEvent = effectiveStaff && layerStaff && effectiveStaff !== layerStaff
 				? { ...noteEvent, staff: effectiveStaff }
 				: noteEvent;
-			result += noteEventToMEI(effectiveNoteEvent, currentIndent, layerStaff, false, undefined, keyFifths).xml;
+			const result = noteEventToMEI(effectiveNoteEvent, currentIndent, layerStaff, false, undefined, keyFifths);
+			xml += result.xml;
+
+			// Collect slur info
+			if (result.slurStart) slurStarts.push(result.elementId);
+			if (result.slurEnd) slurEnds.push(result.elementId);
+
+			// Collect other control events
+			if (result.dynamic) dynamics.push({ startid: result.elementId, label: result.dynamic });
+			if (result.fermata) fermatas.push({ startid: result.elementId, shape: result.fermata === 'short' ? 'angular' : undefined });
+			if (result.trill) trills.push({ startid: result.elementId });
+			if (result.mordent) mordents.push({ startid: result.elementId, form: result.mordent === 'upper' ? 'upper' : undefined });
+			if (result.turn) turns.push({ startid: result.elementId });
+			if (result.arpeggio) arpeggios.push({ plist: result.elementId });
 		} else if (e.type === 'rest') {
-			result += restEventToMEI(e as RestEvent, currentIndent, keyFifths);
+			xml += restEventToMEI(e as RestEvent, currentIndent, keyFifths);
 		}
 
 		// Close beam element if beam ends
 		if (beamEnd && inBeam) {
-			result += `${baseIndent}</beam>\n`;
+			xml += `${baseIndent}</beam>\n`;
 			inBeam = false;
 		}
 	}
 
 	// Close any unclosed beam
 	if (inBeam) {
-		result += `${baseIndent}</beam>\n`;
+		xml += `${baseIndent}</beam>\n`;
 	}
 
-	result += `${indent}</tuplet>\n`;
-	return result;
+	xml += `${indent}</tuplet>\n`;
+	return { xml, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios };
 };
 
 
@@ -915,9 +951,36 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 			case 'rest':
 				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths);
 				break;
-			case 'tuplet':
-				xml += tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff);
+			case 'tuplet': {
+				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff);
+				xml += tupletResult.xml;
+
+				// Process slur ends first (to close any pending slurs from before this tuplet)
+				for (const endId of tupletResult.slurEnds) {
+					if (currentSlur) {
+						slurs.push({
+							startId: currentSlur.startId,
+							endId: endId,
+						});
+						currentSlur = null;
+					}
+				}
+
+				// Then process slur starts (to open new slurs)
+				for (const startId of tupletResult.slurStarts) {
+					currentSlur = { startId };
+				}
+
+				// Collect other control events from tuplet
+				dynamics.push(...tupletResult.dynamics);
+				fermatas.push(...tupletResult.fermatas);
+				trills.push(...tupletResult.trills);
+				mordents.push(...tupletResult.mordents);
+				turns.push(...tupletResult.turns);
+				arpeggios.push(...tupletResult.arpeggios);
+
 				break;
+			}
 			case 'tremolo':
 				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths);
 				break;
