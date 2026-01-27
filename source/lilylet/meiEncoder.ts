@@ -722,9 +722,9 @@ interface HairpinSpan {
 	endId: string;
 }
 
-interface PedalSpan {
+interface PedalMark {
 	startId: string;
-	endId: string;
+	dir: 'down' | 'up';
 }
 
 interface OctaveSpan {
@@ -775,7 +775,7 @@ type SlurState = Record<string, string | null>;  // voice key -> pending slur st
 interface LayerResult {
 	xml: string;
 	hairpins: HairpinSpan[];
-	pedals: PedalSpan[];
+	pedals: PedalMark[];
 	octaves: OctaveSpan[];
 	slurs: SlurSpan[];  // Slurs must be control events in MEI
 	arpeggios: ArpegRef[];
@@ -804,9 +804,8 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	const hairpins: HairpinSpan[] = [];
 	let currentHairpin: { form: 'cres' | 'dim'; startId: string } | null = null;
 
-	// Track pedal spans
-	const pedals: PedalSpan[] = [];
-	let currentPedal: { startId: string } | null = null;
+	// Track pedal marks (each is independent, not paired spans)
+	const pedals: PedalMark[] = [];
 
 	// Track octave spans
 	const octaves: OctaveSpan[] = [];
@@ -915,15 +914,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					currentHairpin = null;
 				}
 
-				// Track pedal spans
-				if (result.pedal === 'down') {
-					currentPedal = { startId: result.elementId };
-				} else if (result.pedal === 'up' && currentPedal) {
+				// Track pedal marks (each is independent)
+				if (result.pedal === 'down' || result.pedal === 'up') {
 					pedals.push({
-						startId: currentPedal.startId,
-						endId: result.elementId,
+						startId: result.elementId,
+						dir: result.pedal,
 					});
-					currentPedal = null;
 				}
 
 				// Track slur spans - end must be processed before start
@@ -1078,7 +1074,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 interface StaffResult {
 	xml: string;
 	hairpins: HairpinSpan[];
-	pedals: PedalSpan[];
+	pedals: PedalMark[];
 	octaves: OctaveSpan[];
 	slurs: SlurSpan[];
 	arpeggios: ArpegRef[];
@@ -1097,7 +1093,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
-	const allPedals: PedalSpan[] = [];
+	const allPedals: PedalMark[] = [];
 	const allOctaves: OctaveSpan[] = [];
 	const allSlurs: SlurSpan[] = [];
 	const allArpeggios: ArpegRef[] = [];
@@ -1203,7 +1199,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	const measureId = generateId("measure");
 	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
-	const allPedals: PedalSpan[] = [];
+	const allPedals: PedalMark[] = [];
 	const allOctaves: OctaveSpan[] = [];
 	const allSlurs: SlurSpan[] = [];
 	const allArpeggios: ArpegRef[] = [];
@@ -1279,9 +1275,9 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		xml += `${indent}    <hairpin xml:id="${generateId('hairpin')}" form="${hp.form}" startid="#${hp.startId}" endid="#${hp.endId}" />\n`;
 	}
 
-	// Generate pedal control events
+	// Generate pedal control events (each mark is independent)
 	for (const ped of allPedals) {
-		xml += `${indent}    <pedal xml:id="${generateId('pedal')}" dir="down" startid="#${ped.startId}" endid="#${ped.endId}" />\n`;
+		xml += `${indent}    <pedal xml:id="${generateId('pedal')}" dir="${ped.dir}" startid="#${ped.startId}" />\n`;
 	}
 
 	// Generate octave control events
