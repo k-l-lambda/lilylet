@@ -2,14 +2,12 @@
 import {
 	LilyletDoc,
 	Measure,
-	Part,
 	Voice,
 	NoteEvent,
 	RestEvent,
 	ContextChange,
 	TupletEvent,
 	TremoloEvent,
-	PitchResetEvent,
 	Pitch,
 	Clef,
 	Accidental,
@@ -167,9 +165,13 @@ const getKeyAccidentals = (fifths: number): Record<string, string> => {
 };
 
 // Convert Pitch to MEI attributes, checking against key signature
-const encodePitch = (pitch: Pitch, keyFifths: number = 0): { pname: string; oct: number; accid?: string } => {
+// ottavaShift: current ottava level (1 = 8va up, -1 = 8vb down, 2 = 15ma up, etc.)
+// The written pitch should be adjusted by subtracting the ottava shift
+const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 0): { pname: string; oct: number; accid?: string } => {
 	// Lilylet octave: 0 = middle C octave (C4), positive = higher, negative = lower
-	const oct = 4 + pitch.octave;
+	// When ottava is active, the source pitch is the sounding pitch, but we need to output the written pitch
+	// For 8va up (ottavaShift=1), written pitch is one octave lower than sounding
+	const oct = 4 + pitch.octave - ottavaShift;
 
 	// Get the accidental implied by the key signature for this note
 	const keyAccidentals = getKeyAccidentals(keyFifths);
@@ -416,7 +418,8 @@ const noteEventToMEI = (
 	layerStaff?: number,
 	tieEnd?: boolean,
 	contextStemDir?: StemDirection,
-	keyFifths: number = 0
+	keyFifths: number = 0,
+	ottavaShift: number = 0
 ): NoteEventResult => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
@@ -451,7 +454,7 @@ const noteEventToMEI = (
 
 	// Single note
 	if (event.pitches.length === 1) {
-		const pitch = encodePitch(event.pitches[0], keyFifths);
+		const pitch = encodePitch(event.pitches[0], keyFifths, ottavaShift);
 		const noteId = generateId('note');
 		return {
 			xml: buildNoteElement(pitch, dur, dots, indent, false, noteOptions, noteId),
@@ -485,7 +488,7 @@ const noteEventToMEI = (
 	let result = `${indent}<chord ${chordAttrs}>\n`;
 
 	for (const p of event.pitches) {
-		const pitch = encodePitch(p, keyFifths);
+		const pitch = encodePitch(p, keyFifths, ottavaShift);
 		result += buildNoteElement(pitch, dur, dots, indent + '    ', true);
 	}
 
@@ -527,14 +530,14 @@ const noteEventToMEI = (
 
 
 // Convert RestEvent to MEI
-const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0): string => {
+const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0): string => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	let attrs = `xml:id="${generateId('rest')}" dur="${dur}"`;
 	if (event.duration.dots > 0) attrs += ` dots="${event.duration.dots}"`;
 
 	// Pitched rest (positioned at specific pitch)
 	if (event.pitch) {
-		const pitch = encodePitch(event.pitch, keyFifths);
+		const pitch = encodePitch(event.pitch, keyFifths, ottavaShift);
 		attrs += ` ploc="${pitch.pname}" oloc="${pitch.oct}"`;
 	}
 
@@ -566,7 +569,7 @@ interface TupletEventResult {
 }
 
 // Convert TupletEvent to MEI
-const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number): TupletEventResult => {
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0): TupletEventResult => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
 	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
 	// MEI: num = number of notes written, numbase = normal equivalent
@@ -615,7 +618,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			const effectiveNoteEvent = effectiveStaff && layerStaff && effectiveStaff !== layerStaff
 				? { ...noteEvent, staff: effectiveStaff }
 				: noteEvent;
-			const result = noteEventToMEI(effectiveNoteEvent, currentIndent, layerStaff, false, undefined, keyFifths);
+			const result = noteEventToMEI(effectiveNoteEvent, currentIndent, layerStaff, false, undefined, keyFifths, ottavaShift);
 			xml += result.xml;
 
 			// Collect slur info
@@ -630,7 +633,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			if (result.turn) turns.push({ startid: result.elementId });
 			if (result.arpeggio) arpeggios.push({ plist: result.elementId });
 		} else if (e.type === 'rest') {
-			xml += restEventToMEI(e as RestEvent, currentIndent, keyFifths);
+			xml += restEventToMEI(e as RestEvent, currentIndent, keyFifths, ottavaShift);
 		}
 
 		// Close beam element if beam ends
@@ -651,7 +654,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 
 // Convert TremoloEvent to MEI (fingered tremolo - alternating between two notes)
-const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: number = 0): string => {
+const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0): string => {
 	const ftremId = generateId('fTrem');
 
 	// For \repeat tremolo 4 { c16 d16 }:
@@ -675,14 +678,14 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 
 	// First note (or chord)
 	if (event.pitchA.length === 1) {
-		const pitch = encodePitch(event.pitchA[0], keyFifths);
+		const pitch = encodePitch(event.pitchA[0], keyFifths, ottavaShift);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		result += `${indent}    <note ${attrs} />\n`;
 	} else if (event.pitchA.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
 		for (const p of event.pitchA) {
-			const pitch = encodePitch(p, keyFifths);
+			const pitch = encodePitch(p, keyFifths, ottavaShift);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 			result += `${indent}        <note ${attrs} />\n`;
@@ -692,14 +695,14 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 
 	// Second note (or chord)
 	if (event.pitchB.length === 1) {
-		const pitch = encodePitch(event.pitchB[0], keyFifths);
+		const pitch = encodePitch(event.pitchB[0], keyFifths, ottavaShift);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		result += `${indent}    <note ${attrs} />\n`;
 	} else if (event.pitchB.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
 		for (const p of event.pitchB) {
-			const pitch = encodePitch(p, keyFifths);
+			const pitch = encodePitch(p, keyFifths, ottavaShift);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 			result += `${indent}        <note ${attrs} />\n`;
@@ -809,6 +812,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	const octaves: OctaveSpan[] = [];
 	let currentOctave: { dis: 8 | 15; disPlace: 'above' | 'below'; startId: string } | null = null;
 	let pendingOttava: number | null = null;  // Track ottava to apply to next note
+	let currentOttavaShift: number = 0;  // Track current ottava shift for pitch encoding
 	let lastNoteId: string | null = null;  // Track last note id for ending ottava spans
 
 	// Track slur spans - slurs must be encoded as control events in MEI
@@ -868,12 +872,17 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				// Check if this note should have tie="t" (matches pending tie)
 				const tieEnd = pendingTiePitches.length > 0 && pitchesMatch(pendingTiePitches, noteEvent.pitches);
 
+				// If there's a pending ottava, apply it BEFORE encoding the note
+				if (pendingOttava !== null && pendingOttava !== 0) {
+					currentOttavaShift = pendingOttava;  // Apply the shift for this note
+				}
+
 				// For cross-staff notation: set note's staff to currentStaff if different from voice.staff
 				const effectiveNoteEvent = currentStaff !== voice.staff
 					? { ...noteEvent, staff: currentStaff }
 					: noteEvent;
 
-				const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths);
+				const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift);
 				xml += result.xml;
 				lastNoteId = result.elementId;
 
@@ -960,10 +969,10 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				break;
 			}
 			case 'rest':
-				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths);
+				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift);
 				break;
 			case 'tuplet': {
-				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff);
+				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift);
 				xml += tupletResult.xml;
 
 				// Process slur ends first (to close any pending slurs from before this tuplet)
@@ -993,7 +1002,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				break;
 			}
 			case 'tremolo':
-				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths);
+				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths, currentOttavaShift);
 				break;
 			case 'context': {
 				const ctx = event as ContextChange;
@@ -1016,6 +1025,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 							});
 							currentOctave = null;
 						}
+						currentOttavaShift = 0;  // Reset the shift
 					} else {
 						// Start new ottava span - will be applied to next note
 						pendingOttava = ctx.ottava;
