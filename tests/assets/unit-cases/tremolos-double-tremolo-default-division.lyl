@@ -1,1 +1,1 @@
-\clef "treble" \repeat tremolo 4 { c16 d }
+\clef "treble" \repeat tremolo 4 { c16 d } \repeat tremolo 4 { d f }

@@ -441,8 +441,9 @@ tuplet_event
 	;
 
 tremolo_event
-	: CMD_REPEAT TREMOLO NUMBER '{' pitch duration pitch duration '}'		-> tremoloEvent([$5], [$7], Number($3), $6.division)
-	| CMD_REPEAT TREMOLO NUMBER '{' pitch duration pitch '}'				-> tremoloEvent([$5], [$7], Number($3), $6.division)
+	: CMD_REPEAT TREMOLO NUMBER '{' pitch duration pitch duration '}'		%{ currentDuration = $6; $$ = tremoloEvent([$5], [$7], Number($3), $6.division); %}
+	| CMD_REPEAT TREMOLO NUMBER '{' pitch duration pitch '}'				%{ currentDuration = $6; $$ = tremoloEvent([$5], [$7], Number($3), $6.division); %}
+	| CMD_REPEAT TREMOLO NUMBER '{' pitch pitch '}'							-> tremoloEvent([$5], [$6], Number($3), currentDuration.division)
 	;
 
 post_events
