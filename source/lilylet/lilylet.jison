@@ -316,7 +316,7 @@ part_voices
 
 voice_events
 	: /* empty */								{ $$ = []; }
-	| voice_events event						{ $$ = $1.concat([$2]); }
+	| voice_events event						{ $$ = $1.concat(Array.isArray($2) ? $2 : [$2]); }
 	;
 
 event
@@ -431,7 +431,7 @@ stem_cmd
 	;
 
 grace_event
-	: CMD_GRACE '{' voice_events '}'			-> ({ type: 'note', pitches: $3.filter(e => e.type === 'note').flatMap(e => e.pitches), duration: $3.find(e => e.type === 'note')?.duration || { division: 8, dots: 0 }, grace: true, marks: $3.filter(e => e.type === 'note').flatMap(e => e.marks || []) })
+	: CMD_GRACE '{' voice_events '}'			-> ($3.filter(e => e.type === 'note' || e.type === 'rest').map(e => ({ ...e, grace: true })))
 	| CMD_GRACE note_event						-> ({ ...$2, grace: true })
 	| CMD_GRACE rest_event						-> ({ ...$2, grace: true })
 	;
@@ -442,6 +442,7 @@ tuplet_event
 
 tremolo_event
 	: CMD_REPEAT TREMOLO NUMBER '{' pitch duration pitch duration '}'		-> tremoloEvent([$5], [$7], Number($3), $6.division)
+	| CMD_REPEAT TREMOLO NUMBER '{' pitch duration pitch '}'				-> tremoloEvent([$5], [$7], Number($3), $6.division)
 	;
 
 post_events
