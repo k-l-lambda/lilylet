@@ -770,6 +770,7 @@ interface SlurSpan {
 // Tie state for cross-measure ties - maps staff:layer to pending pitches
 type TieState = Record<string, Pitch[]>;
 type SlurState = Record<string, string | null>;  // voice key -> pending slur startId
+type HairpinState = Record<string, { form: 'cres' | 'dim'; startId: string } | null>;  // voice key -> pending hairpin
 
 // Layer result type
 interface LayerResult {
@@ -786,11 +787,12 @@ interface LayerResult {
 	dynamics: DynamRef[];
 	pendingTiePitches: Pitch[];  // For cross-measure tie tracking
 	pendingSlur: string | null;  // For cross-measure slur tracking (startId)
+	pendingHairpin: { form: 'cres' | 'dim'; startId: string } | null;  // For cross-measure hairpin tracking
 	endingClef?: Clef;  // For cross-measure clef tracking
 }
 
 // Encode a layer (voice)
-const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlur: string | null = null): LayerResult => {
+const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlur: string | null = null, initialHairpin: { form: 'cres' | 'dim'; startId: string } | null = null): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -802,7 +804,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 
 	// Track hairpin spans
 	const hairpins: HairpinSpan[] = [];
-	let currentHairpin: { form: 'cres' | 'dim'; startId: string } | null = null;
+	let currentHairpin: { form: 'cres' | 'dim'; startId: string } | null = initialHairpin;
 
 	// Track pedal marks (each is independent, not paired spans)
 	const pedals: PedalMark[] = [];
@@ -1067,7 +1069,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches, pendingSlur: currentSlur?.startId || null, endingClef: currentClef };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin: currentHairpin, endingClef: currentClef };
 };
 
 // Staff result type
@@ -1085,11 +1087,12 @@ interface StaffResult {
 	dynamics: DynamRef[];
 	pendingTies: TieState;  // For cross-measure tie tracking
 	pendingSlurs: SlurState;  // For cross-measure slur tracking
+	pendingHairpins: HairpinState;  // For cross-measure hairpin tracking
 	endingClef?: Clef;  // For cross-measure clef tracking
 }
 
 // Encode a staff
-const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, slurState: SlurState = {}, keyFifths: number = 0, initialClef?: Clef): StaffResult => {
+const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, slurState: SlurState = {}, hairpinState: HairpinState = {}, keyFifths: number = 0, initialClef?: Clef): StaffResult => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -1104,6 +1107,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const allDynamics: DynamRef[] = [];
 	const pendingTies: TieState = {};
 	const pendingSlurs: SlurState = {};
+	const pendingHairpins: HairpinState = {};
 	let endingClef: Clef | undefined = initialClef;
 
 	if (voices.length === 0) {
@@ -1114,7 +1118,8 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			const tieKey = `${staffN}-${layerN}`;
 			const initialTies = tieState[tieKey] || [];
 			const initialSlur = slurState[tieKey] || null;
-			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef, initialSlur);
+			const initialHairpin = hairpinState[tieKey] || null;
+			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef, initialSlur, initialHairpin);
 			xml += result.xml;
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
@@ -1133,6 +1138,10 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			// Track pending slurs for this layer
 			if (result.pendingSlur) {
 				pendingSlurs[tieKey] = result.pendingSlur;
+			}
+			// Track pending hairpins for this layer
+			if (result.pendingHairpin) {
+				pendingHairpins[tieKey] = result.pendingHairpin;
 			}
 			// Track ending clef for cross-measure tracking
 			if (result.endingClef) {
@@ -1156,6 +1165,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		dynamics: allDynamics,
 		pendingTies,
 		pendingSlurs,
+		pendingHairpins,
 		endingClef,
 	};
 };
@@ -1194,8 +1204,8 @@ const generateTempoElement = (tempo: Tempo, indent: string): string => {
 type ClefState = Record<number, Clef>;
 
 // Encode a measure
-// encodeMeasure accepts mutable tieState, slurState and clefState that persist across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}): string => {
+// encodeMeasure accepts mutable tieState, slurState, hairpinState and clefState that persist across measures
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}): string => {
 	const measureId = generateId("measure");
 	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -1239,11 +1249,11 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		}
 	}
 
-	// Encode each staff, passing and updating tie state, slur state and clef state
+	// Encode each staff, passing and updating tie state, slur state, hairpin state and clef state
 	for (let si = 1; si <= totalStaves; si++) {
 		const voices = voicesByStaff[si] || [];
 		const initialClef = clefState[si];
-		const result = encodeStaff(voices, si, indent + '    ', tieState, slurState, keyFifths, initialClef);
+		const result = encodeStaff(voices, si, indent + '    ', tieState, slurState, hairpinState, keyFifths, initialClef);
 		xml += result.xml;
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
@@ -1259,6 +1269,8 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		Object.assign(tieState, result.pendingTies);
 		// Update slur state with pending slurs from this staff
 		Object.assign(slurState, result.pendingSlurs);
+		// Update hairpin state with pending hairpins from this staff
+		Object.assign(hairpinState, result.pendingHairpins);
 		// Update clef state with ending clef from this staff
 		if (result.endingClef) {
 			clefState[si] = result.endingClef;
@@ -1510,6 +1522,9 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	// Track slur state across measures for cross-measure slurs
 	const slurState: SlurState = {};
 
+	// Track hairpin state across measures for cross-measure hairpins
+	const hairpinState: HairpinState = {};
+
 	// Initialize clef state from partInfos (convert local staff to global staff)
 	const clefState: ClefState = {};
 	for (let pi = 0; pi < partInfos.length; pi++) {
@@ -1548,7 +1563,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		if (measure.key) {
 			currentKey = keyToFifths(measure.key);
 		}
-		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, currentKey, partInfos, clefState);
+		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, hairpinState, currentKey, partInfos, clefState);
 	});
 
 	mei += `${indent}${indent}${indent}${indent}${indent}</section>\n`;
