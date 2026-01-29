@@ -1,1 +1,1 @@
-\key c \major \time 4/4 \clef "treble" c'\segno d' e' f' | g' a' b' c''
+\key c \major \time 4/4 \clef "treble" c'4\segno d e f | g' a b c'

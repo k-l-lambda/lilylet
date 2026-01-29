@@ -1285,11 +1285,22 @@ const generateTempoElement = (tempo: Tempo, indent: string): string => {
 // Clef state for cross-measure clef tracking - maps staff number to current clef
 type ClefState = Record<number, Clef>;
 
+// Barline style to MEI @right attribute mapping
+const BARLINE_TO_MEI: Record<string, string> = {
+	'|': 'single',
+	'||': 'dbl',
+	'|.': 'end',
+	'.|:': 'rptstart',
+	':|.': 'rptend',
+	':..:|': 'rptboth',
+	':..:': 'rptboth',
+};
+
 // Encode a measure
 // encodeMeasure accepts mutable tieState, slurState, hairpinState and clefState that persist across measures
 const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}): string => {
 	const measureId = generateId("measure");
-	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}">\n`;
+	let staffContent = '';  // Build staff content first, then add measure tag with barline
 	const allHairpins: HairpinSpan[] = [];
 	const allPedals: PedalMark[] = [];
 	const allOctaves: OctaveSpan[] = [];
@@ -1340,7 +1351,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		const voices = voicesByStaff[si] || [];
 		const initialClef = clefState[si];
 		const result = encodeStaff(voices, si, indent + '    ', tieState, slurState, hairpinState, keyFifths, initialClef);
-		xml += result.xml;
+		staffContent += result.xml;
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
 		allOctaves.push(...result.octaves);
@@ -1369,79 +1380,92 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 
 	// Generate tempo element if present
 	if (measureTempo) {
-		xml += generateTempoElement(measureTempo, indent + '    ');
+		staffContent += generateTempoElement(measureTempo, indent + '    ');
 	}
 
 	// Generate hairpin control events
 	for (const hp of allHairpins) {
-		xml += `${indent}    <hairpin xml:id="${generateId('hairpin')}" form="${hp.form}" startid="#${hp.startId}" endid="#${hp.endId}" />\n`;
+		staffContent += `${indent}    <hairpin xml:id="${generateId('hairpin')}" form="${hp.form}" startid="#${hp.startId}" endid="#${hp.endId}" />\n`;
 	}
 
 	// Generate pedal control events (each mark is independent)
 	for (const ped of allPedals) {
-		xml += `${indent}    <pedal xml:id="${generateId('pedal')}" dir="${ped.dir}" startid="#${ped.startId}" />\n`;
+		staffContent += `${indent}    <pedal xml:id="${generateId('pedal')}" dir="${ped.dir}" startid="#${ped.startId}" />\n`;
 	}
 
 	// Generate octave control events
 	for (const oct of allOctaves) {
-		xml += `${indent}    <octave xml:id="${generateId('octave')}" dis="${oct.dis}" dis.place="${oct.disPlace}" startid="#${oct.startId}" endid="#${oct.endId}" />\n`;
+		staffContent += `${indent}    <octave xml:id="${generateId('octave')}" dis="${oct.dis}" dis.place="${oct.disPlace}" startid="#${oct.startId}" endid="#${oct.endId}" />\n`;
 	}
 
 	// Generate slur control events
 	for (const sl of allSlurs) {
-		xml += `${indent}    <slur xml:id="${generateId('slur')}" startid="#${sl.startId}" endid="#${sl.endId}" />\n`;
+		staffContent += `${indent}    <slur xml:id="${generateId('slur')}" startid="#${sl.startId}" endid="#${sl.endId}" />\n`;
 	}
 
 	// Generate arpeggio control events
 	for (const arp of allArpeggios) {
-		xml += `${indent}    <arpeg xml:id="${generateId('arpeg')}" plist="#${arp.plist}" />\n`;
+		staffContent += `${indent}    <arpeg xml:id="${generateId('arpeg')}" plist="#${arp.plist}" />\n`;
 	}
 
 	// Generate fermata control events
 	for (const ferm of allFermatas) {
 		const shapeAttr = ferm.shape ? ` shape="${ferm.shape}"` : '';
-		xml += `${indent}    <fermata xml:id="${generateId('fermata')}" startid="#${ferm.startid}"${shapeAttr} />\n`;
+		staffContent += `${indent}    <fermata xml:id="${generateId('fermata')}" startid="#${ferm.startid}"${shapeAttr} />\n`;
 	}
 
 	// Generate trill control events
 	for (const tr of allTrills) {
-		xml += `${indent}    <trill xml:id="${generateId('trill')}" startid="#${tr.startid}" />\n`;
+		staffContent += `${indent}    <trill xml:id="${generateId('trill')}" startid="#${tr.startid}" />\n`;
 	}
 
 	// Generate mordent control events
 	for (const mord of allMordents) {
 		const formAttr = mord.form ? ` form="${mord.form}"` : '';
-		xml += `${indent}    <mordent xml:id="${generateId('mordent')}" startid="#${mord.startid}"${formAttr} />\n`;
+		staffContent += `${indent}    <mordent xml:id="${generateId('mordent')}" startid="#${mord.startid}"${formAttr} />\n`;
 	}
 
 	// Generate turn control events
 	for (const tu of allTurns) {
-		xml += `${indent}    <turn xml:id="${generateId('turn')}" startid="#${tu.startid}" />\n`;
+		staffContent += `${indent}    <turn xml:id="${generateId('turn')}" startid="#${tu.startid}" />\n`;
 	}
 
 	// Generate dynamic control events
 	for (const dyn of allDynamics) {
-		xml += `${indent}    <dynam xml:id="${generateId('dynam')}" startid="#${dyn.startid}">${dyn.label}</dynam>\n`;
+		staffContent += `${indent}    <dynam xml:id="${generateId('dynam')}" startid="#${dyn.startid}">${dyn.label}</dynam>\n`;
 	}
 
 	// Generate fingering control events
 	for (const fing of allFingerings) {
 		const placeAttr = fing.placement ? ` place="${fing.placement}"` : '';
-		xml += `${indent}    <fing xml:id="${generateId('fing')}" startid="#${fing.startid}"${placeAttr}>${fing.finger}</fing>\n`;
+		staffContent += `${indent}    <fing xml:id="${generateId('fing')}" startid="#${fing.startid}"${placeAttr}>${fing.finger}</fing>\n`;
 	}
 
 	// Generate dir elements for navigation marks (coda, segno)
 	for (const nav of allNavigations) {
 		// Use <dir> element with appropriate glyph
 		const glyph = nav.type === 'coda' ? '𝄌' : '𝄋';  // Unicode coda/segno symbols
-		xml += `${indent}    <dir xml:id="${generateId('dir')}" tstamp="1">${glyph}</dir>\n`;
+		staffContent += `${indent}    <dir xml:id="${generateId('dir')}" tstamp="1">${glyph}</dir>\n`;
 	}
 
 	// Generate harm elements for chord symbols
 	for (const harm of allHarmonies) {
-		xml += `${indent}    <harm xml:id="${generateId('harm')}" startid="#${harm.startid}">${escapeXml(harm.text)}</harm>\n`;
+		staffContent += `${indent}    <harm xml:id="${generateId('harm')}" startid="#${harm.startid}">${escapeXml(harm.text)}</harm>\n`;
 	}
 
+	// Determine barline attribute from collected barlines
+	let barlineAttr = '';
+	if (allBarlines.length > 0) {
+		const lastBarline = allBarlines[allBarlines.length - 1];
+		const meiBarline = BARLINE_TO_MEI[lastBarline.style];
+		if (meiBarline && meiBarline !== 'single') {
+			barlineAttr = ` right="${meiBarline}"`;
+		}
+	}
+
+	// Build final XML with measure tag including barline
+	let xml = `${indent}<measure xml:id="${measureId}" n="${measureN}"${barlineAttr}>\n`;
+	xml += staffContent;
 	xml += `${indent}</measure>\n`;
 	return xml;
 };
