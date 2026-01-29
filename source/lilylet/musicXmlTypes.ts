@@ -45,7 +45,7 @@ export interface MusicXmlAttributes {
 	divisions?: number;     // Divisions per quarter note
 	key?: MusicXmlKey;
 	time?: MusicXmlTime;
-	clef?: MusicXmlClef;
+	clefs?: { staff: number; clef: MusicXmlClef }[];  // Clefs by staff number
 	staves?: number;        // Number of staves
 }
 

@@ -447,14 +447,21 @@ const parseAttributes = (attrEl: Element): MusicXmlAttributes => {
 		}
 	}
 
-	// Clef
-	const clefEl = attrEl.getElementsByTagName('clef')[0];
-	if (clefEl) {
-		const sign = getElementText(clefEl, 'sign');
-		const line = getElementInt(clefEl, 'line');
-		const octaveChange = getElementInt(clefEl, 'clef-octave-change');
-		if (sign) {
-			result.clef = { sign, line, clefOctaveChange: octaveChange };
+	// Clefs - handle multiple clefs for different staves
+	const clefEls = getElements(attrEl, 'clef');
+	if (clefEls.length > 0) {
+		result.clefs = [];
+		for (const clefEl of clefEls) {
+			const sign = getElementText(clefEl, 'sign');
+			const line = getElementInt(clefEl, 'line');
+			const octaveChange = getElementInt(clefEl, 'clef-octave-change');
+			const staffNum = getAttributeNumber(clefEl, 'number') || 1;
+			if (sign) {
+				result.clefs.push({
+					staff: staffNum,
+					clef: { sign, line, clefOctaveChange: octaveChange },
+				});
+			}
 		}
 	}
 
@@ -852,12 +859,13 @@ const convertMeasure = (
 				timeSig = createFraction(attrs.time.beats, attrs.time.beatType);
 			}
 
-			// Clef - store by staff number
-			if (attrs.clef) {
-				const clef = convertClef(attrs.clef.sign, attrs.clef.line);
-				if (clef) {
-					const staffNum = 1;  // TODO: handle multiple clefs for different staves
-					clefs.set(staffNum, { type: 'context', clef });
+			// Clefs - store by staff number
+			if (attrs.clefs) {
+				for (const clefEntry of attrs.clefs) {
+					const clef = convertClef(clefEntry.clef.sign, clefEntry.clef.line);
+					if (clef) {
+						clefs.set(clefEntry.staff, { type: 'context', clef });
+					}
 				}
 			}
 		} else if (tagName === 'note') {
@@ -1032,16 +1040,20 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 		const voiceNumbers = Array.from(voiceMap.keys()).sort((a, b) => a - b);
 		const voices: Voice[] = [];
 
+		// Track which staves have had clef added (for first measure)
+		const staffsWithClef = new Set<number>();
+
 		for (const voiceNum of voiceNumbers) {
 			const voiceData = voiceMap.get(voiceNum)!;
 			const events: Event[] = [];
 
-			// Add clef at start of first voice in first measure
-			if (isFirstMeasure && voiceNum === voiceNumbers[0]) {
-				const clef = clefs.get(1);  // Staff 1 clef
+			// Add clef at start of first voice for each staff in first measure
+			if (isFirstMeasure && !staffsWithClef.has(voiceData.staff)) {
+				const clef = clefs.get(voiceData.staff);
 				if (clef) {
 					events.push(clef);
 				}
+				staffsWithClef.add(voiceData.staff);
 			}
 
 			// Add voice events
