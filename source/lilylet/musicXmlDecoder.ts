@@ -742,6 +742,123 @@ const notationsToMarks = (
 	return marks;
 };
 
+// MusicXML beat-unit to division mapping
+const BEAT_UNIT_TO_DIVISION: Record<string, number> = {
+	'maxima': 0.125,
+	'long': 0.25,
+	'breve': 0.5,
+	'whole': 1,
+	'half': 2,
+	'quarter': 4,
+	'eighth': 8,
+	'16th': 16,
+	'32nd': 32,
+	'64th': 64,
+};
+
+// Common tempo words that should be converted to \tempo
+const TEMPO_WORDS = new Set([
+	// Very slow
+	'largo', 'larghetto', 'grave', 'lento', 'adagio',
+	// Slow
+	'andante', 'andantino',
+	// Moderate
+	'moderato', 'allegretto',
+	// Fast
+	'allegro', 'vivace', 'presto', 'prestissimo',
+	// Other tempo indications
+	'tempo', 'a tempo', 'tempo i', 'tempo primo',
+	// With modifiers (partial matches)
+]);
+
+/**
+ * Check if text is a tempo word
+ */
+const isTempoWord = (text: string): boolean => {
+	const lower = text.toLowerCase().trim();
+	// Check exact match
+	if (TEMPO_WORDS.has(lower)) return true;
+	// Check if starts with tempo word (e.g., "Allegro moderato", "Andante con moto")
+	for (const word of TEMPO_WORDS) {
+		if (lower.startsWith(word)) return true;
+	}
+	return false;
+};
+
+/**
+ * Convert direction to context change (tempo, ottava)
+ */
+const directionToContextChange = (
+	direction: MusicXmlDirection,
+	ottavaTracker: { current: number }
+): ContextChange | undefined => {
+	// Metronome → Tempo (may combine with words)
+	if (direction.metronome) {
+		const { beatUnit, beatUnitDot, perMinute } = direction.metronome;
+		const division = BEAT_UNIT_TO_DIVISION[beatUnit] || 4;
+
+		// Check if there's accompanying tempo text
+		let tempoText: string | undefined;
+		if (direction.words && direction.words.length > 0) {
+			const text = direction.words[0].text.trim();
+			if (isTempoWord(text)) {
+				tempoText = text;
+			}
+		}
+
+		return {
+			type: 'context',
+			tempo: {
+				text: tempoText,
+				beat: {
+					division,
+					dots: beatUnitDot ? 1 : 0,
+				},
+				bpm: perMinute,
+			},
+		};
+	}
+
+	// Words alone that are tempo indications → Tempo (text only)
+	if (direction.words && direction.words.length > 0 && !direction.metronome) {
+		const text = direction.words[0].text.trim();
+		if (isTempoWord(text)) {
+			return {
+				type: 'context',
+				tempo: {
+					text,
+				},
+			};
+		}
+	}
+
+	// Octave shift → Ottava
+	if (direction.octaveShift) {
+		const { type, size = 8 } = direction.octaveShift;
+		let ottava: number;
+		if (type === 'stop') {
+			ottava = 0;
+			ottavaTracker.current = 0;
+		} else if (type === 'up') {
+			// 8va = 1, 15ma = 2
+			ottava = size === 15 ? 2 : 1;
+			ottavaTracker.current = ottava;
+		} else if (type === 'down') {
+			// 8vb = -1, 15mb = -2
+			ottava = size === 15 ? -2 : -1;
+			ottavaTracker.current = ottava;
+		} else {
+			return undefined;
+		}
+		return {
+			type: 'context',
+			ottava,
+		};
+	}
+
+	return undefined;
+};
+
 /**
  * Convert direction to marks
  */
@@ -822,7 +939,8 @@ interface MeasureConversionResult {
 const convertMeasure = (
 	measureEl: Element,
 	voiceTracker: VoiceTracker,
-	spannerTracker: SpannerTracker
+	spannerTracker: SpannerTracker,
+	ottavaTracker: { current: number }
 ): MeasureConversionResult => {
 	let key: KeySignature | undefined;
 	let timeSig: Fraction | undefined;
@@ -832,6 +950,8 @@ const convertMeasure = (
 
 	// Pending marks from directions (to attach to next note), per voice
 	const pendingMarks: Map<number, Mark[]> = new Map();
+	// Pending context changes (tempo, ottava) to insert before next note
+	const pendingContextChanges: ContextChange[] = [];
 	let currentVoice = 1;  // Track current voice for directions
 
 	// Process all children in order
@@ -873,6 +993,14 @@ const convertMeasure = (
 			const voiceNum = note.voice;
 			const staffNum = note.staff || 1;
 			currentVoice = voiceNum;
+
+			// Add any pending context changes before the note (tempo, ottava)
+			if (pendingContextChanges.length > 0) {
+				for (const ctx of pendingContextChanges) {
+					voiceTracker.addEvent(voiceNum, ctx, 0, staffNum);
+				}
+				pendingContextChanges.length = 0;  // Clear
+			}
 
 			// Get pending marks for this voice
 			const marks: Mark[] = pendingMarks.get(voiceNum) || [];
@@ -969,6 +1097,14 @@ const convertMeasure = (
 			}
 		} else if (tagName === 'direction') {
 			const direction = parseDirection(child);
+
+			// Handle context changes (tempo, ottava)
+			const contextChange = directionToContextChange(direction, ottavaTracker);
+			if (contextChange) {
+				pendingContextChanges.push(contextChange);
+			}
+
+			// Handle marks (dynamics, hairpins, etc.)
 			const marks = directionToMarks(direction, spannerTracker);
 			if (marks.length > 0) {
 				// Store marks to attach to next note in current voice
@@ -1021,6 +1157,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 	const measures: Measure[] = [];
 	const voiceTracker = new VoiceTracker();
 	const spannerTracker = new SpannerTracker();
+	const ottavaTracker = { current: 0 };
 
 	let lastKey: KeySignature | undefined;
 	let lastTimeSig: Fraction | undefined;
@@ -1030,7 +1167,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 
 	for (const measureEl of measureEls) {
 		voiceTracker.reset();
-		const { voiceMap, key, timeSig, barline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker);
+		const { voiceMap, key, timeSig, barline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker);
 
 		// Update running key/time
 		if (key) lastKey = key;
