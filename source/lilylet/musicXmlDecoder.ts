@@ -137,17 +137,23 @@ class SpannerTracker {
 /**
  * Track position within each voice for proper event ordering.
  * Handles backup/forward elements to manage multiple voices.
+ *
+ * MusicXML voice handling:
+ * - Each <note> has a <voice> element (1, 2, 3, etc.)
+ * - <backup> goes back in time to start a new voice
+ * - <forward> skips forward (for rests that aren't written)
  */
 interface VoiceState {
-	position: number;  // Current position in divisions
 	events: Event[];
 	staff: number;
+	lastEvent?: Event;  // For chord merging
 }
 
 class VoiceTracker {
 	private voices: Map<number, VoiceState> = new Map();
 	private currentPosition: number = 0;
 	private divisions: number = 1;
+	private staves: number = 1;
 
 	setDivisions(div: number): void {
 		this.divisions = div;
@@ -157,32 +163,45 @@ class VoiceTracker {
 		return this.divisions;
 	}
 
+	setStaves(n: number): void {
+		this.staves = n;
+	}
+
+	getStaves(): number {
+		return this.staves;
+	}
+
 	getOrCreateVoice(voiceNum: number, staff: number = 1): VoiceState {
 		if (!this.voices.has(voiceNum)) {
 			this.voices.set(voiceNum, {
-				position: 0,
 				events: [],
 				staff,
 			});
 		}
 		const voice = this.voices.get(voiceNum)!;
-		voice.staff = staff;
+		// Update staff if specified
+		if (staff > 0) {
+			voice.staff = staff;
+		}
 		return voice;
 	}
 
 	addEvent(voiceNum: number, event: Event, duration: number, staff: number = 1): void {
 		const voice = this.getOrCreateVoice(voiceNum, staff);
 		voice.events.push(event);
-		voice.position += duration;
-		this.currentPosition = Math.max(this.currentPosition, voice.position);
+		voice.lastEvent = event;
+		this.currentPosition += duration;
+	}
+
+	getLastEvent(voiceNum: number): Event | undefined {
+		const voice = this.voices.get(voiceNum);
+		return voice?.lastEvent;
 	}
 
 	backup(duration: number): void {
 		this.currentPosition -= duration;
-		if (this.currentPosition < 0) {
-			console.warn(`Negative position after backup: ${this.currentPosition}`);
-			this.currentPosition = 0;
-		}
+		// Note: Negative position is OK - it just means we're going back
+		// to write a different voice
 	}
 
 	forward(duration: number): void {
@@ -195,6 +214,10 @@ class VoiceTracker {
 
 	getVoices(): Map<number, VoiceState> {
 		return this.voices;
+	}
+
+	getVoiceNumbers(): number[] {
+		return Array.from(this.voices.keys()).sort((a, b) => a - b);
 	}
 
 	reset(): void {
@@ -361,6 +384,17 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 		}
 	}
 
+	// Beams - direct children of note, not in notations
+	// We only care about primary beam (number="1") for begin/end
+	let beams: { type: 'begin' | 'continue' | 'end'; number: number }[] | undefined;
+	const beamEls = getElements(noteEl, 'beam');
+	if (beamEls.length > 0) {
+		beams = beamEls.map(el => ({
+			type: (el.textContent?.trim() || 'continue') as 'begin' | 'continue' | 'end',
+			number: getAttributeNumber(el, 'number') || 1,
+		}));
+	}
+
 	return {
 		isChord,
 		isRest,
@@ -377,6 +411,7 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 		stem: stem as any,
 		notations,
 		fingering,
+		beams,
 	};
 };
 
@@ -763,21 +798,34 @@ const directionToMarks = (
 };
 
 /**
- * Convert a MusicXML measure to Lilylet events
+ * Result of converting a measure - now includes voices grouped by voice number
+ */
+interface MeasureConversionResult {
+	voiceMap: Map<number, { events: Event[]; staff: number }>;
+	key?: KeySignature;
+	timeSig?: Fraction;
+	barline?: BarlineEvent;
+	harmonies: HarmonyEvent[];
+	clefs: Map<number, ContextChange>;  // staff number → clef context
+}
+
+/**
+ * Convert a MusicXML measure to Lilylet events, grouped by voice
  */
 const convertMeasure = (
 	measureEl: Element,
 	voiceTracker: VoiceTracker,
 	spannerTracker: SpannerTracker
-): { events: Event[]; key?: KeySignature; timeSig?: Fraction; barline?: BarlineEvent; harmony?: HarmonyEvent[] } => {
-	const allEvents: Event[] = [];
+): MeasureConversionResult => {
 	let key: KeySignature | undefined;
 	let timeSig: Fraction | undefined;
 	let barline: BarlineEvent | undefined;
 	const harmonies: HarmonyEvent[] = [];
+	const clefs: Map<number, ContextChange> = new Map();
 
-	// Pending marks from directions (to attach to next note)
-	let pendingMarks: Mark[] = [];
+	// Pending marks from directions (to attach to next note), per voice
+	const pendingMarks: Map<number, Mark[]> = new Map();
+	let currentVoice = 1;  // Track current voice for directions
 
 	// Process all children in order
 	for (const child of getChildElements(measureEl)) {
@@ -790,6 +838,10 @@ const convertMeasure = (
 				voiceTracker.setDivisions(attrs.divisions);
 			}
 
+			if (attrs.staves !== undefined) {
+				voiceTracker.setStaves(attrs.staves);
+			}
+
 			// Key signature
 			if (attrs.key) {
 				key = convertKeySignature(attrs.key.fifths, attrs.key.mode);
@@ -800,19 +852,23 @@ const convertMeasure = (
 				timeSig = createFraction(attrs.time.beats, attrs.time.beatType);
 			}
 
-			// Clef
+			// Clef - store by staff number
 			if (attrs.clef) {
 				const clef = convertClef(attrs.clef.sign, attrs.clef.line);
 				if (clef) {
-					const contextEvent: ContextChange = {
-						type: 'context',
-						clef,
-					};
-					allEvents.push(contextEvent);
+					const staffNum = 1;  // TODO: handle multiple clefs for different staves
+					clefs.set(staffNum, { type: 'context', clef });
 				}
 			}
 		} else if (tagName === 'note') {
 			const note = parseNote(child, voiceTracker.getDivisions());
+			const voiceNum = note.voice;
+			const staffNum = note.staff || 1;
+			currentVoice = voiceNum;
+
+			// Get pending marks for this voice
+			const marks: Mark[] = pendingMarks.get(voiceNum) || [];
+			pendingMarks.delete(voiceNum);
 
 			if (note.isRest) {
 				// Rest event
@@ -829,12 +885,35 @@ const convertMeasure = (
 					duration,
 				};
 
-				voiceTracker.addEvent(note.voice, restEvent, note.duration.divisions, note.staff || 1);
-				allEvents.push(restEvent);
+				// Grace notes don't advance time
+				const advanceDuration = note.isGrace ? 0 : note.duration.divisions;
+				voiceTracker.addEvent(voiceNum, restEvent, advanceDuration, staffNum);
 			} else if (note.pitch) {
 				// Note or chord - convert MusicXmlPitch to Lilylet Pitch
 				const lilyletPitch = musicXmlPitchToLilylet(note.pitch);
-				const pitches: Pitch[] = [lilyletPitch];
+
+				// Get marks from notations
+				const notationMarks = notationsToMarks(note.notations, spannerTracker, [lilyletPitch]);
+				marks.push(...notationMarks);
+
+				// Add fingering
+				if (note.fingering !== undefined && note.fingering >= 1 && note.fingering <= 5) {
+					marks.push({ markType: 'fingering', finger: note.fingering });
+				}
+
+				// Handle chord: merge with previous note in same voice
+				if (note.isChord) {
+					const lastEvent = voiceTracker.getLastEvent(voiceNum);
+					if (lastEvent && lastEvent.type === 'note') {
+						lastEvent.pitches.push(lilyletPitch);
+						// Merge marks
+						if (marks.length > 0) {
+							lastEvent.marks = [...(lastEvent.marks || []), ...marks];
+						}
+						continue;  // Don't create a new event
+					}
+				}
+
 				const duration = convertDuration(
 					voiceTracker.getDivisions(),
 					note.duration.divisions,
@@ -843,52 +922,51 @@ const convertMeasure = (
 					note.duration.timeModification
 				);
 
-				// Get marks from notations
-				const marks = notationsToMarks(note.notations, spannerTracker, pitches);
-
-				// Add pending marks from directions
-				if (pendingMarks.length > 0) {
-					marks.push(...pendingMarks);
-					pendingMarks = [];
-				}
-
-				// Add fingering
-				if (note.fingering !== undefined && note.fingering >= 1 && note.fingering <= 5) {
-					marks.push({ markType: 'fingering', finger: note.fingering });
-				}
-
 				const noteEvent: NoteEvent = {
 					type: 'note',
-					pitches,
+					pitches: [lilyletPitch],
 					duration,
 					grace: note.isGrace || undefined,
-					staff: note.staff,
+					staff: staffNum > 1 ? staffNum : undefined,  // Only include if cross-staff
 					stemDirection: note.stem ? convertStemDirection(note.stem) : undefined,
 				};
+
+				// Add single tremolo
+				if (note.notations?.tremolo?.type === 'single') {
+					// Convert tremolo value (number of beams) to division
+					// 1 beam = 8th, 2 beams = 16th, 3 beams = 32nd
+					noteEvent.tremolo = Math.pow(2, note.notations.tremolo.value + 2);
+				}
+
+				// Add beam marks - only care about primary beam (number=1)
+				if (note.beams) {
+					const primaryBeam = note.beams.find(b => b.number === 1);
+					if (primaryBeam) {
+						if (primaryBeam.type === 'begin') {
+							marks.push({ markType: 'beam', start: true });
+						} else if (primaryBeam.type === 'end') {
+							marks.push({ markType: 'beam', start: false });
+						}
+						// 'continue' doesn't need a mark
+					}
+				}
 
 				if (marks.length > 0) {
 					noteEvent.marks = marks;
 				}
 
-				// Handle chord: merge with previous note
-				if (note.isChord && allEvents.length > 0) {
-					const lastEvent = allEvents[allEvents.length - 1];
-					if (lastEvent.type === 'note') {
-						lastEvent.pitches.push(lilyletPitch);
-						// Merge marks
-						if (noteEvent.marks) {
-							lastEvent.marks = [...(lastEvent.marks || []), ...noteEvent.marks];
-						}
-					}
-				} else {
-					voiceTracker.addEvent(note.voice, noteEvent, note.duration.divisions, note.staff || 1);
-					allEvents.push(noteEvent);
-				}
+				// Grace notes don't advance time
+				const advanceDuration = note.isGrace ? 0 : note.duration.divisions;
+				voiceTracker.addEvent(voiceNum, noteEvent, advanceDuration, staffNum);
 			}
 		} else if (tagName === 'direction') {
 			const direction = parseDirection(child);
 			const marks = directionToMarks(direction, spannerTracker);
-			pendingMarks.push(...marks);
+			if (marks.length > 0) {
+				// Store marks to attach to next note in current voice
+				const existing = pendingMarks.get(currentVoice) || [];
+				pendingMarks.set(currentVoice, [...existing, ...marks]);
+			}
 		} else if (tagName === 'backup') {
 			const duration = getElementInt(child, 'duration') || 0;
 			voiceTracker.backup(duration);
@@ -916,10 +994,16 @@ const convertMeasure = (
 		}
 	}
 
-	// If there are remaining pending marks, create a context event (rare edge case)
-	// This can happen if directions appear at the end of a measure without a following note
+	// Build voice map from tracker
+	const voiceMap = new Map<number, { events: Event[]; staff: number }>();
+	for (const [voiceNum, voiceState] of voiceTracker.getVoices()) {
+		voiceMap.set(voiceNum, {
+			events: voiceState.events,
+			staff: voiceState.staff,
+		});
+	}
 
-	return { events: allEvents, key, timeSig, barline, harmony: harmonies.length > 0 ? harmonies : undefined };
+	return { voiceMap, key, timeSig, barline, harmonies, clefs };
 };
 
 /**
@@ -932,31 +1016,56 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 
 	let lastKey: KeySignature | undefined;
 	let lastTimeSig: Fraction | undefined;
+	let isFirstMeasure = true;
 
 	const measureEls = getDirectChildren(partEl, 'measure');
 
 	for (const measureEl of measureEls) {
 		voiceTracker.reset();
-		const { events, key, timeSig, barline, harmony } = convertMeasure(measureEl, voiceTracker, spannerTracker);
+		const { voiceMap, key, timeSig, barline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker);
 
 		// Update running key/time
 		if (key) lastKey = key;
 		if (timeSig) lastTimeSig = timeSig;
 
-		// Build voices from events
-		const voices: Voice[] = [{
-			staff: 1,
-			events: events,
-		}];
+		// Build voices from voice map, sorted by voice number
+		const voiceNumbers = Array.from(voiceMap.keys()).sort((a, b) => a - b);
+		const voices: Voice[] = [];
 
-		// Add barline and harmony events to the voice
-		if (harmony) {
-			for (const h of harmony) {
-				voices[0].events.push(h);
+		for (const voiceNum of voiceNumbers) {
+			const voiceData = voiceMap.get(voiceNum)!;
+			const events: Event[] = [];
+
+			// Add clef at start of first voice in first measure
+			if (isFirstMeasure && voiceNum === voiceNumbers[0]) {
+				const clef = clefs.get(1);  // Staff 1 clef
+				if (clef) {
+					events.push(clef);
+				}
 			}
+
+			// Add voice events
+			events.push(...voiceData.events);
+
+			// Add harmonies and barline to first voice only
+			if (voiceNum === voiceNumbers[0]) {
+				for (const h of harmonies) {
+					events.push(h);
+				}
+				if (barline) {
+					events.push(barline);
+				}
+			}
+
+			voices.push({
+				staff: voiceData.staff,
+				events,
+			});
 		}
-		if (barline) {
-			voices[0].events.push(barline);
+
+		// If no voices found, create an empty one
+		if (voices.length === 0) {
+			voices.push({ staff: 1, events: [] });
 		}
 
 		const measure: Measure = {
@@ -970,6 +1079,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 		if (timeSig) measure.timeSig = timeSig;
 
 		measures.push(measure);
+		isFirstMeasure = false;
 	}
 
 	return { measures };

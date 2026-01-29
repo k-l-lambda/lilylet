@@ -76,6 +76,7 @@ export interface MusicXmlNote {
 	stem?: MusicXmlStemDirection;
 	notations?: MusicXmlNotations;
 	fingering?: number;         // 1-5
+	beams?: { type: 'begin' | 'continue' | 'end'; number: number }[];
 }
 
 // ============ Direction Types ============
