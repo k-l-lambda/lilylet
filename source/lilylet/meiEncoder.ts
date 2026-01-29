@@ -8,6 +8,8 @@ import {
 	ContextChange,
 	TupletEvent,
 	TremoloEvent,
+	BarlineEvent,
+	HarmonyEvent,
 	Pitch,
 	Clef,
 	Accidental,
@@ -16,6 +18,7 @@ import {
 	Mark,
 	HairpinType,
 	PedalType,
+	NavigationMarkType,
 	Tempo,
 } from "./types";
 
@@ -289,6 +292,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 	hairpin?: string;
 	pedal?: string;
 	tremolo?: number;
+	fingerings: { finger: number; placement?: 'above' | 'below' }[];
+	navigation?: 'coda' | 'segno';
 } => {
 	const result = {
 		artics: [] as { type: string; placement?: 'above' | 'below' }[],
@@ -306,6 +311,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 		hairpin: undefined as string | undefined,
 		pedal: undefined as string | undefined,
 		tremolo: undefined as number | undefined,
+		fingerings: [] as { finger: number; placement?: 'above' | 'below' }[],
+		navigation: undefined as 'coda' | 'segno' | undefined,
 	};
 
 	if (!marks) return result;
@@ -381,6 +388,15 @@ const extractMarkOptions = (marks?: Mark[]): {
 					result.beamEnd = true;
 				}
 				break;
+			case 'fingering':
+				result.fingerings.push({
+					finger: (mark as { finger: number }).finger,
+					placement: (mark as { placement?: 'above' | 'below' }).placement,
+				});
+				break;
+			case 'navigation':
+				result.navigation = (mark as { type: 'coda' | 'segno' }).type;
+				break;
 		}
 
 		// Tremolo (special case - from parser internal mark)
@@ -409,6 +425,8 @@ interface NoteEventResult {
 	dynamic?: string;  // dynamic marking (p, pp, f, ff, etc.)
 	slurStart: boolean;  // For tracking slur spans
 	slurEnd: boolean;    // For tracking slur spans
+	fingerings: { finger: number; placement?: 'above' | 'below' }[];
+	navigation?: 'coda' | 'segno';
 }
 
 // Convert NoteEvent to MEI
@@ -471,6 +489,8 @@ const noteEventToMEI = (
 			dynamic: markOptions.dynamic,
 			slurStart: markOptions.slurStart,
 			slurEnd: markOptions.slurEnd,
+			fingerings: markOptions.fingerings,
+			navigation: markOptions.navigation,
 		};
 	}
 
@@ -525,6 +545,8 @@ const noteEventToMEI = (
 		dynamic: markOptions.dynamic,
 		slurStart: markOptions.slurStart,
 		slurEnd: markOptions.slurEnd,
+		fingerings: markOptions.fingerings,
+		navigation: markOptions.navigation,
 	};
 };
 
@@ -761,6 +783,25 @@ interface DynamRef {
 	label: string;  // p, pp, ppp, f, ff, fff, mf, mp, sfz, rfz
 }
 
+interface FingerRef {
+	startid: string;
+	finger: number;
+	placement?: 'above' | 'below';
+}
+
+interface NavigationRef {
+	type: 'coda' | 'segno';
+}
+
+interface HarmonyRef {
+	startid: string;
+	text: string;
+}
+
+interface BarlineRef {
+	style: string;
+}
+
 // Slur span data - slurs must be encoded as control events in MEI
 interface SlurSpan {
 	startId: string;
@@ -785,6 +826,10 @@ interface LayerResult {
 	mordents: MordentRef[];
 	turns: TurnRef[];
 	dynamics: DynamRef[];
+	fingerings: FingerRef[];
+	navigations: NavigationRef[];
+	harmonies: HarmonyRef[];
+	barlines: BarlineRef[];
 	pendingTiePitches: Pitch[];  // For cross-measure tie tracking
 	pendingSlur: string | null;  // For cross-measure slur tracking (startId)
 	pendingHairpin: { form: 'cres' | 'dim'; startId: string } | null;  // For cross-measure hairpin tracking
@@ -829,6 +874,10 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	const mordents: MordentRef[] = [];
 	const turns: TurnRef[] = [];
 	const dynamics: DynamRef[] = [];
+	const fingerings: FingerRef[] = [];
+	const navigations: NavigationRef[] = [];
+	const harmonies: HarmonyRef[] = [];
+	const barlines: BarlineRef[] = [];
 
 	// Track current stem direction from context changes
 	let currentStemDirection: StemDirection | undefined = undefined;
@@ -964,6 +1013,14 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				if (result.dynamic) {
 					dynamics.push({ startid: result.elementId, label: result.dynamic });
 				}
+				// Track fingerings
+				for (const fing of result.fingerings) {
+					fingerings.push({ startid: result.elementId, finger: fing.finger, placement: fing.placement });
+				}
+				// Track navigation marks
+				if (result.navigation) {
+					navigations.push({ type: result.navigation });
+				}
 				break;
 			}
 			case 'rest':
@@ -1044,6 +1101,15 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				// Pitch reset events are only used during pitch resolution in the parser.
 				// They don't produce any MEI output - just skip them.
 				break;
+			case 'barline':
+				barlines.push({ style: (event as BarlineEvent).style });
+				break;
+			case 'harmony':
+				// Harmony needs a note ID to attach to - use the last note if available
+				if (lastNoteId) {
+					harmonies.push({ startid: lastNoteId, text: (event as HarmonyEvent).text });
+				}
+				break;
 		}
 
 		// Close beam element if beam ends
@@ -1069,7 +1135,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin: currentHairpin, endingClef: currentClef };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin: currentHairpin, endingClef: currentClef };
 };
 
 // Staff result type
@@ -1085,6 +1151,10 @@ interface StaffResult {
 	mordents: MordentRef[];
 	turns: TurnRef[];
 	dynamics: DynamRef[];
+	fingerings: FingerRef[];
+	navigations: NavigationRef[];
+	harmonies: HarmonyRef[];
+	barlines: BarlineRef[];
 	pendingTies: TieState;  // For cross-measure tie tracking
 	pendingSlurs: SlurState;  // For cross-measure slur tracking
 	pendingHairpins: HairpinState;  // For cross-measure hairpin tracking
@@ -1105,6 +1175,10 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const allMordents: MordentRef[] = [];
 	const allTurns: TurnRef[] = [];
 	const allDynamics: DynamRef[] = [];
+	const allFingerings: FingerRef[] = [];
+	const allNavigations: NavigationRef[] = [];
+	const allHarmonies: HarmonyRef[] = [];
+	const allBarlines: BarlineRef[] = [];
 	const pendingTies: TieState = {};
 	const pendingSlurs: SlurState = {};
 	const pendingHairpins: HairpinState = {};
@@ -1131,6 +1205,10 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			allMordents.push(...result.mordents);
 			allTurns.push(...result.turns);
 			allDynamics.push(...result.dynamics);
+			allFingerings.push(...result.fingerings);
+			allNavigations.push(...result.navigations);
+			allHarmonies.push(...result.harmonies);
+			allBarlines.push(...result.barlines);
 			// Track pending ties for this layer
 			if (result.pendingTiePitches.length > 0) {
 				pendingTies[tieKey] = result.pendingTiePitches;
@@ -1163,6 +1241,10 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		mordents: allMordents,
 		turns: allTurns,
 		dynamics: allDynamics,
+		fingerings: allFingerings,
+		navigations: allNavigations,
+		harmonies: allHarmonies,
+		barlines: allBarlines,
 		pendingTies,
 		pendingSlurs,
 		pendingHairpins,
@@ -1218,6 +1300,10 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	const allMordents: MordentRef[] = [];
 	const allTurns: TurnRef[] = [];
 	const allDynamics: DynamRef[] = [];
+	const allFingerings: FingerRef[] = [];
+	const allNavigations: NavigationRef[] = [];
+	const allHarmonies: HarmonyRef[] = [];
+	const allBarlines: BarlineRef[] = [];
 
 	// Extract tempo from context changes
 	let measureTempo: Tempo | undefined;
@@ -1265,6 +1351,10 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		allMordents.push(...result.mordents);
 		allTurns.push(...result.turns);
 		allDynamics.push(...result.dynamics);
+		allFingerings.push(...result.fingerings);
+		allNavigations.push(...result.navigations);
+		allHarmonies.push(...result.harmonies);
+		allBarlines.push(...result.barlines);
 		// Update tie state with pending ties from this staff
 		Object.assign(tieState, result.pendingTies);
 		// Update slur state with pending slurs from this staff
@@ -1332,6 +1422,24 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	// Generate dynamic control events
 	for (const dyn of allDynamics) {
 		xml += `${indent}    <dynam xml:id="${generateId('dynam')}" startid="#${dyn.startid}">${dyn.label}</dynam>\n`;
+	}
+
+	// Generate fingering control events
+	for (const fing of allFingerings) {
+		const placeAttr = fing.placement ? ` place="${fing.placement}"` : '';
+		xml += `${indent}    <fing xml:id="${generateId('fing')}" startid="#${fing.startid}"${placeAttr}>${fing.finger}</fing>\n`;
+	}
+
+	// Generate dir elements for navigation marks (coda, segno)
+	for (const nav of allNavigations) {
+		// Use <dir> element with appropriate glyph
+		const glyph = nav.type === 'coda' ? '𝄌' : '𝄋';  // Unicode coda/segno symbols
+		xml += `${indent}    <dir xml:id="${generateId('dir')}" tstamp="1">${glyph}</dir>\n`;
+	}
+
+	// Generate harm elements for chord symbols
+	for (const harm of allHarmonies) {
+		xml += `${indent}    <harm xml:id="${generateId('harm')}" startid="#${harm.startid}">${escapeXml(harm.text)}</harm>\n`;
 	}
 
 	xml += `${indent}</measure>\n`;

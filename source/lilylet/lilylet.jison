@@ -91,6 +91,11 @@
 	const tie = (start) => ({ markType: 'tie', start });
 	const slur = (start) => ({ markType: 'slur', start });
 	const beam = (start) => ({ markType: 'beam', start });
+	const fingering = (finger, placement) => ({ markType: 'fingering', finger, placement });
+	const navigation = (type) => ({ markType: 'navigation', type });
+
+	const barlineEvent = (style) => ({ type: 'barline', style });
+	const harmonyEvent = (text) => ({ type: 'harmony', text });
 
 	// Parse PITCH token (e.g., "c", "cs", "bf", "css", "bff") into phonet and accidental
 	const parsePitch = (text, octave) => {
@@ -176,6 +181,11 @@
 
 "\\sustainOn"					return 'CMD_SUSTAINON'
 "\\sustainOff"					return 'CMD_SUSTAINOFF'
+
+"\\bar"							return 'CMD_BAR'
+"\\coda"						return 'CMD_CODA'
+"\\segno"						return 'CMD_SEGNO'
+"\\chords"						return 'CMD_CHORDS'
 
 "\\<"							return 'CMD_CRESC_BEGIN'
 "\\>"							return 'CMD_DIM_BEGIN'
@@ -327,6 +337,16 @@ event
 	| tuplet_event
 	| tremolo_event
 	| pitch_reset_event
+	| barline_event
+	| harmony_event
+	;
+
+barline_event
+	: CMD_BAR STRING							-> barlineEvent($2.slice(1, -1))
+	;
+
+harmony_event
+	: CMD_CHORDS STRING							-> harmonyEvent($2.slice(1, -1))
 	;
 
 pitch_reset_event
@@ -463,6 +483,8 @@ post_event
 	| tremolo_mark
 	| direction_mark
 	| rest_mark
+	| fingering_mark
+	| navigation_mark
 	;
 
 rest_mark
@@ -546,4 +568,13 @@ tremolo_mark
 direction_mark
 	: '^' post_event							-> ({ ...$2, placement: 'above' })
 	| '_' post_event							-> ({ ...$2, placement: 'below' })
+	;
+
+fingering_mark
+	: '-' NUMBER								%{ const n = Number($2); if (n >= 1 && n <= 5) $$ = fingering(n); else $$ = null; %}
+	;
+
+navigation_mark
+	: CMD_CODA									-> navigation('coda')
+	| CMD_SEGNO									-> navigation('segno')
 	;

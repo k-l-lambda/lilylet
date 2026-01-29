@@ -21,6 +21,7 @@ for (const file of lylFiles) {
 const getCategory = (name: string): string => {
     if (name.startsWith('accidentals-')) return 'accidentals';
     if (name.startsWith('articulations-')) return 'articulations';
+    if (name.startsWith('barline-')) return 'barline';
     if (name.startsWith('basic-notes-')) return 'basic-notes';
     if (name.startsWith('beams-')) return 'beams';
     if (name.startsWith('chords-')) return 'chords';
@@ -28,10 +29,13 @@ const getCategory = (name: string): string => {
     if (name.startsWith('dots-')) return 'dots';
     if (name.startsWith('durations-')) return 'durations';
     if (name.startsWith('dynamics-')) return 'dynamics';
+    if (name.startsWith('fingering-')) return 'fingering';
     if (name.startsWith('grace-')) return 'grace';
     if (name.startsWith('hairpins-')) return 'hairpins';
+    if (name.startsWith('harmony-')) return 'harmony';
     if (name.startsWith('key-signatures-')) return 'key-signatures';
     if (name.startsWith('multiple-')) return 'multiple';
+    if (name.startsWith('navigation-')) return 'navigation';
     if (name.startsWith('octaves-')) return 'octaves';
     if (name.startsWith('pedals-')) return 'pedals';
     if (name.startsWith('pitch-')) return 'pitch';
@@ -207,6 +211,7 @@ const html = `<!DOCTYPE html>
         <button class="filter-btn active" data-filter="all">All</button>
         <button class="filter-btn" data-filter="accidentals">Accidentals</button>
         <button class="filter-btn" data-filter="articulations">Articulations</button>
+        <button class="filter-btn" data-filter="barline">Barline</button>
         <button class="filter-btn" data-filter="basic-notes">Basic Notes</button>
         <button class="filter-btn" data-filter="beams">Beams</button>
         <button class="filter-btn" data-filter="chords">Chords</button>
@@ -214,10 +219,13 @@ const html = `<!DOCTYPE html>
         <button class="filter-btn" data-filter="dots">Dots</button>
         <button class="filter-btn" data-filter="durations">Durations</button>
         <button class="filter-btn" data-filter="dynamics">Dynamics</button>
+        <button class="filter-btn" data-filter="fingering">Fingering</button>
         <button class="filter-btn" data-filter="grace">Grace Notes</button>
         <button class="filter-btn" data-filter="hairpins">Hairpins</button>
+        <button class="filter-btn" data-filter="harmony">Harmony</button>
         <button class="filter-btn" data-filter="key-signatures">Key Signatures</button>
         <button class="filter-btn" data-filter="multiple">Multiple</button>
+        <button class="filter-btn" data-filter="navigation">Navigation</button>
         <button class="filter-btn" data-filter="octaves">Octaves</button>
         <button class="filter-btn" data-filter="pedals">Pedals</button>
         <button class="filter-btn" data-filter="pitch">Pitch</button>

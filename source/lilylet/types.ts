@@ -78,6 +78,20 @@ export enum PedalType {
 	unaCordaOff = 'unaCordaOff',
 }
 
+export enum BarlineType {
+	single = '|',
+	double = '||',
+	end = '|.',
+	repeatStart = '.|:',
+	repeatEnd = ':|.',
+	repeatBoth = ':..:'
+}
+
+export enum NavigationMarkType {
+	coda = 'coda',
+	segno = 'segno',
+}
+
 // === Basic Types ===
 
 export interface Fraction {
@@ -147,7 +161,18 @@ export interface Pedal {
 	type: PedalType;
 }
 
-export type Mark = Articulation | Ornament | Dynamic | Hairpin | Tie | Slur | Beam | Pedal;
+export interface Fingering {
+	markType: 'fingering';
+	finger: number;  // 1-5
+	placement?: Placement;
+}
+
+export interface NavigationMark {
+	markType: 'navigation';
+	type: NavigationMarkType;
+}
+
+export type Mark = Articulation | Ornament | Dynamic | Hairpin | Tie | Slur | Beam | Pedal | Fingering | NavigationMark;
 
 // === Key Signature ===
 
@@ -215,7 +240,17 @@ export interface PitchResetEvent {
 	type: 'pitchReset';
 }
 
-export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | PitchResetEvent;
+export interface BarlineEvent {
+	type: 'barline';
+	style: string;  // "|", "||", "|.", ".|:", ":|.", ":..:", etc.
+}
+
+export interface HarmonyEvent {
+	type: 'harmony';
+	text: string;  // Chord symbol text like "Am7", "Cmaj7", "D/F#"
+}
+
+export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | PitchResetEvent | BarlineEvent | HarmonyEvent;
 
 // === Structure ===
 

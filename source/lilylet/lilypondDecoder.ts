@@ -54,6 +54,7 @@ import {
 	DynamicType,
 	HairpinType,
 	PedalType,
+	NavigationMarkType,
 	Metadata,
 } from "./types";
 
@@ -239,6 +240,11 @@ const parsePostEvents = (postEvents: any[]): Mark[] => {
 				}
 			}
 
+			// Fingering (number 1-5)
+			if (typeof arg === 'number' && arg >= 1 && arg <= 5) {
+				marks.push({ markType: 'fingering', finger: arg });
+			}
+
 			// Command (dynamics, hairpins, etc.)
 			if (arg && typeof arg === 'object' && 'cmd' in arg) {
 				const cmd = arg.cmd;
@@ -254,6 +260,10 @@ const parsePostEvents = (postEvents: any[]): Mark[] => {
 					marks.push({ markType: 'pedal', type: PedalType.sustainOn });
 				} else if (cmd === 'sustainOff') {
 					marks.push({ markType: 'pedal', type: PedalType.sustainOff });
+				} else if (cmd === 'coda') {
+					marks.push({ markType: 'navigation', type: NavigationMarkType.coda });
+				} else if (cmd === 'segno') {
+					marks.push({ markType: 'navigation', type: NavigationMarkType.segno });
 				}
 			}
 		}
