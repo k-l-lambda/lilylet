@@ -33,9 +33,6 @@
     "type": "git",
     "url": "git+https://github.com/k-l-lambda/lilylet.git"
   },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
   "author": "k.l.lambda",
   "license": "ISC",
   "homepage": "https://github.com/k-l-lambda/lilylet#readme",

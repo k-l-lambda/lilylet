@@ -1,4 +1,4 @@
-name: Publish to GitHub Packages
+name: Publish to npm
 
 on:
   push:
@@ -12,7 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
 
     steps:
       - name: Checkout
@@ -47,25 +46,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Configure npm for GitHub Packages
-        if: steps.version-check.outputs.changed == 'true'
-        run: |
-          echo "@k-l-lambda:registry=https://npm.pkg.github.com" >> ~/.npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         if: steps.version-check.outputs.changed == 'true'
         run: npm install
 
       # Note: npm publish will trigger prepublishOnly which runs build:grammar && build
-      - name: Publish
+      - name: Publish to npm
         if: steps.version-check.outputs.changed == 'true'
-        run: npm publish
+        run: npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Summary
         if: steps.version-check.outputs.changed == 'true'
         run: |
-          echo "## 📦 Published @k-l-lambda/lilylet@${{ steps.version-check.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Published @k-l-lambda/lilylet@${{ steps.version-check.outputs.version }} to npm" >> $GITHUB_STEP_SUMMARY
