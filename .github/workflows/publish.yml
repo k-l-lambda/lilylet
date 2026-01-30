@@ -47,22 +47,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@k-l-lambda'
 
-      - name: Configure npm for GitHub Packages
+      - name: Install dependencies (from npmjs.org)
+        if: steps.version-check.outputs.changed == 'true'
+        run: npm install
+
+      - name: Configure npm for GitHub Packages (publish)
         if: steps.version-check.outputs.changed == 'true'
         run: |
           echo "@k-l-lambda:registry=https://npm.pkg.github.com" >> ~/.npmrc
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install dependencies
-        if: steps.version-check.outputs.changed == 'true'
-        run: npm install
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Note: npm publish will trigger prepublishOnly which runs build:grammar && build
       - name: Publish
