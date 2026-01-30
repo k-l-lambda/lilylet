@@ -1254,8 +1254,8 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 
 
 // Generate tempo element
-const generateTempoElement = (tempo: Tempo, indent: string): string => {
-	let attrs = `xml:id="${generateId('tempo')}" tstamp="1"`;
+const generateTempoElement = (tempo: Tempo, indent: string, staff: number = 1): string => {
+	let attrs = `xml:id="${generateId('tempo')}" tstamp="1" staff="${staff}"`;
 
 	// Add BPM if specified
 	if (tempo.bpm) {
@@ -1316,15 +1316,21 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	const allHarmonies: HarmonyRef[] = [];
 	const allBarlines: BarlineRef[] = [];
 
-	// Extract tempo from context changes
+	// Extract tempo from context changes (track which staff it came from)
 	let measureTempo: Tempo | undefined;
-	for (const part of measure.parts) {
+	let tempoStaff = 1;
+	for (let pi = 0; pi < measure.parts.length; pi++) {
+		const part = measure.parts[pi];
+		const partOffset = partInfos[pi]?.staffOffset || 0;
 		for (const voice of part.voices) {
+			const localStaff = voice.staff || 1;
+			const globalStaff = partOffset + localStaff;
 			for (const event of voice.events) {
 				if (event.type === 'context') {
 					const ctx = event as ContextChange;
 					if (ctx.tempo) {
 						measureTempo = ctx.tempo;
+						tempoStaff = globalStaff;
 					}
 				}
 			}
@@ -1380,7 +1386,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 
 	// Generate tempo element if present
 	if (measureTempo) {
-		staffContent += generateTempoElement(measureTempo, indent + '    ');
+		staffContent += generateTempoElement(measureTempo, indent + '    ', tempoStaff);
 	}
 
 	// Generate hairpin control events
