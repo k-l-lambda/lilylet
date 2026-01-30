@@ -5,7 +5,7 @@
  */
 
 // Import directly from the compiled lib directory to avoid ESM issues
-import * as lilyParser from "@k-l-lambda/lotus/lib/inc/lilyParser";
+import * as lilyParser from "@k-l-lambda/lotus/lib/inc/lilyParser/index.js";
 
 
 // Lazy-loaded parser instance
