@@ -249,7 +249,7 @@
 "~"								return '~'
 "."								return '.'
 "-"								return '-'
-"_"								return '_'
+[_]								return '_'
 "^"								return '^'
 "!"								return '!'
 ":"								return ':'
@@ -492,6 +492,7 @@ post_event
 	| direction_mark
 	| rest_mark
 	| fingering_mark
+	| fingering_number
 	| navigation_mark
 	| markup_mark
 	;
@@ -581,6 +582,10 @@ direction_mark
 
 fingering_mark
 	: '-' NUMBER								%{ const n = Number($2); if (n >= 1 && n <= 5) $$ = fingering(n); else $$ = null; %}
+	;
+
+fingering_number
+	: NUMBER									%{ const n = Number($1); if (n >= 1 && n <= 5) $$ = fingering(n); else $$ = null; %}
 	;
 
 navigation_mark
