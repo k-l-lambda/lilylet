@@ -10,4 +10,4 @@
 \staff "1" \stemUp d2 c\fermata \\
 \staff "1" \stemDown c8[ c4 b8] c8.[ \staff "2" \stemUp g16] \staff "1" c[ b c d] \\
 \staff "2" f,16[ ef f d] g[ af g f] ef[ d ef8]~ ef16[ f ef d] \\
-\staff "3" r16 g,[ af f] g[ f g8] c,2 | % 2
+\staff "3" r16 g,[ af f] g[ f g8] c,2 \bar "|." | % 2

@@ -95,4 +95,4 @@
 \staff "2" \clef "bass" \stemDown g4( \stemUp b,) \stemDown d | %31
 
 \staff "1" \clef "treble" \stemUp <b d g>2. \\
-\staff "2" \clef "bass" \stemDown g4 d \stemUp g, | %32
+\staff "2" \clef "bass" \stemDown g4 d \stemUp g, \bar "|." | %32

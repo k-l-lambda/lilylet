@@ -11,6 +11,7 @@ import * as lilylet from "../source/lilylet";
 interface IVerovioToolkit {
 	loadData(data: string): boolean;
 	renderToSVG(page?: number, options?: object): string;
+	setOptions(options: object): void;
 	getLog(): string;
 }
 
@@ -40,7 +41,21 @@ const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<
 		// Step 2: Encode to MEI
 		const mei = lilylet.meiEncoder.encode(doc);
 
-		// Step 3: Validate MEI with verovio
+		// Step 3: Calculate pageHeight based on measure count
+		const measureCount = doc.measures?.length || 1;
+		const basePageHeight = 2000;
+		const measuresPerPage = 20;
+		const pageHeight = Math.max(basePageHeight, Math.ceil(measureCount / measuresPerPage) * basePageHeight);
+
+		// Step 4: Set Verovio options for single-page rendering
+		vrvToolkit.setOptions({
+			scale: 40,
+			adjustPageHeight: true,
+			pageHeight,
+			pageWidth: 2100,
+		});
+
+		// Step 5: Validate MEI with verovio
 		const success = vrvToolkit.loadData(mei);
 		if (!success) {
 			return {
@@ -51,7 +66,7 @@ const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<
 			};
 		}
 
-		// Step 4: Try to render SVG (further validation)
+		// Step 6: Try to render SVG (further validation)
 		const svg = vrvToolkit.renderToSVG(1);
 		if (!svg || svg.length === 0) {
 			return {

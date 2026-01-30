@@ -329,4 +329,4 @@
 \staff "2" \stemUp gs16 [ b16 gs16 b16 ] gs16 [ b16 gs16 \staff "1" \stemDown b16 ] \> |
 
 \staff "1" \stemUp <gs e'>2 \\
-\staff "2" \stemDown <e,, b'>2 \! |
+\staff "2" \stemDown <e,, b'>2 \! \bar "|." |
