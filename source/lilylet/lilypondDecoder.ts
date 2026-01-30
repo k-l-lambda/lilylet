@@ -40,6 +40,7 @@ import {
 	NoteEvent,
 	RestEvent,
 	ContextChange,
+	MarkupEvent,
 	Pitch,
 	Duration,
 	Mark,
@@ -55,6 +56,7 @@ import {
 	HairpinType,
 	PedalType,
 	NavigationMarkType,
+	Placement,
 	Metadata,
 	Tempo,
 } from "./types";
@@ -327,6 +329,28 @@ const parsePostEvents = (postEvents: any[]): Mark[] => {
 					marks.push({ markType: 'navigation', type: NavigationMarkType.coda });
 				} else if (cmd === 'segno') {
 					marks.push({ markType: 'navigation', type: NavigationMarkType.segno });
+				} else if (cmd === '\\markup' || cmd === 'markup') {
+					// Markup attached to note
+					const text = extractTextFromObject(arg.args);
+					if (text && !containsTempoWord(text)) {
+						const direction = event.direction;
+						const placement: Placement | undefined =
+							direction === 'up' ? Placement.above :
+							direction === 'down' ? Placement.below : undefined;
+						marks.push({ markType: 'markup', content: text, placement });
+					}
+				}
+			}
+
+			// Handle markup command directly (proto: 'Command' with \\markup)
+			if (arg && typeof arg === 'object' && arg.proto === 'Command' && arg.cmd === '\\markup') {
+				const text = extractTextFromObject(arg.args);
+				if (text && !containsTempoWord(text)) {
+					const direction = event.direction;
+					const placement: Placement | undefined =
+						direction === 'up' ? Placement.above :
+						direction === 'down' ? Placement.below : undefined;
+					marks.push({ markType: 'markup', content: text, placement });
 				}
 			}
 		}
@@ -548,6 +572,20 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 							type: 'context',
 							tempo,
 						});
+					}
+				}
+				// Handle standalone markup command
+				else {
+					const termAny = term as any;
+					if (termAny.proto === 'Command' && (termAny.cmd === '\\markup' || termAny.cmd === 'markup')) {
+						const text = extractTextFromObject(termAny.args);
+						if (text && !containsTempoWord(text)) {
+							const markupEvent: MarkupEvent = {
+								type: 'markup',
+								content: text,
+							};
+							voice.events.push(markupEvent);
+						}
 					}
 				}
 			},

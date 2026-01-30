@@ -259,6 +259,7 @@ export interface HarmonyEvent {
 export interface MarkupEvent {
 	type: 'markup';
 	content: string;  // Text content of the markup
+	placement?: Placement;  // Optional placement (above/below)
 }
 
 export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | PitchResetEvent | BarlineEvent | HarmonyEvent | MarkupEvent;

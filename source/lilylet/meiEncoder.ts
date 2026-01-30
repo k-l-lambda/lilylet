@@ -1137,7 +1137,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 			case 'markup':
 				// Markup needs a note ID to attach to - use the last note if available
 				if (lastNoteId) {
-					markups.push({ startid: lastNoteId, content: (event as MarkupEvent).content });
+					const mkupEvent = event as MarkupEvent;
+					markups.push({
+						startid: lastNoteId,
+						content: mkupEvent.content,
+						placement: mkupEvent.placement,
+					});
 				}
 				break;
 		}
