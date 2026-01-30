@@ -1162,6 +1162,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 	let lastKey: KeySignature | undefined;
 	let lastTimeSig: Fraction | undefined;
 	let isFirstMeasure = true;
+	const lastClefs: Map<number, ContextChange> = new Map();  // Track last clef per staff
 
 	const measureEls = getDirectChildren(partEl, 'measure');
 
@@ -1177,18 +1178,33 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 		const voiceNumbers = Array.from(voiceMap.keys()).sort((a, b) => a - b);
 		const voices: Voice[] = [];
 
-		// Track which staves have had clef added (for first measure)
+		// Track which staves have had clef added (for this measure)
 		const staffsWithClef = new Set<number>();
 
 		for (const voiceNum of voiceNumbers) {
 			const voiceData = voiceMap.get(voiceNum)!;
 			const events: Event[] = [];
 
-			// Add clef at start of first voice for each staff in first measure
-			if (isFirstMeasure && !staffsWithClef.has(voiceData.staff)) {
+			// Add clef at start of first voice for each staff
+			// For first measure: always add initial clef
+			// For subsequent measures: add clef if there's a clef change
+			if (!staffsWithClef.has(voiceData.staff)) {
 				const clef = clefs.get(voiceData.staff);
 				if (clef) {
-					events.push(clef);
+					// Check if this is a clef change (not first measure) or initial clef (first measure)
+					if (isFirstMeasure) {
+						events.push(clef);
+						lastClefs.set(voiceData.staff, clef);
+					} else {
+						// Only add if it's different from the last clef for this staff
+						const lastClef = lastClefs.get(voiceData.staff);
+						const isSameClef = lastClef &&
+							(lastClef as ContextChange).clef === (clef as ContextChange).clef;
+						if (!isSameClef) {
+							events.push(clef);
+							lastClefs.set(voiceData.staff, clef);
+						}
+					}
 				}
 				staffsWithClef.add(voiceData.staff);
 			}
