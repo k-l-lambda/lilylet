@@ -56,6 +56,7 @@ import {
 	PedalType,
 	NavigationMarkType,
 	Metadata,
+	Tempo,
 } from "./types";
 
 
@@ -148,6 +149,68 @@ const DYNAMIC_MAP: Record<string, DynamicType> = {
 	fff: DynamicType.fff,
 	sfz: DynamicType.sfz,
 	rfz: DynamicType.rfz,
+};
+
+
+// Common tempo text words (from fprod corpus analysis)
+// Single words, lowercase for case-insensitive matching
+const TEMPO_WORDS = new Set([
+	// Basic tempo markings (Italian) - very slow to very fast
+	'grave', 'largo', 'larghetto', 'lento', 'adagio', 'adagietto',
+	'andante', 'andantino', 'moderato', 'allegretto', 'allegro',
+	'vivace', 'presto', 'prestissimo',
+	// Tempo modifiers
+	'molto', 'poco', 'più', 'meno', 'assai', 'con', 'moto', 'brio',
+	'ma', 'non', 'troppo', 'cantabile', 'sostenuto', 'espressivo',
+	'grazioso', 'maestoso', 'agitato', 'animato', 'tranquillo',
+	// Tempo changes
+	'tempo', 'primo',
+	'rit', 'ritard', 'ritardando', 'riten', 'ritenuto',
+	'rall', 'rallentando',
+	'accel', 'accelerando',
+	'allarg', 'allargando',
+	'calando', 'morendo', 'smorzando', 'smorz',
+	'rubato',
+]);
+
+
+// Check if text contains any tempo-related word (case-insensitive)
+const containsTempoWord = (text: string): boolean => {
+	// Remove punctuation and split into words
+	const words = text.toLowerCase().replace(/[.,!?]/g, '').split(/\s+/);
+	return words.some(word => TEMPO_WORDS.has(word));
+};
+
+
+// Convert lotus Tempo to Lilylet Tempo
+const convertTempo = (lotusTempo: any): Tempo | undefined => {
+	if (!lotusTempo) return undefined;
+
+	const tempo: Tempo = {};
+
+	// Text (e.g., "Allegro")
+	if (lotusTempo.text) {
+		tempo.text = typeof lotusTempo.text === 'string'
+			? lotusTempo.text
+			: extractTextFromObject(lotusTempo.text);
+	}
+
+	// Metronome mark (e.g., ♩ = 120)
+	if (lotusTempo.beatsPerMinute !== undefined && Number.isFinite(lotusTempo.beatsPerMinute)) {
+		tempo.bpm = lotusTempo.beatsPerMinute;
+
+		// Beat unit (note value)
+		if (lotusTempo.unit) {
+			tempo.beat = convertDuration(lotusTempo.unit);
+		}
+	}
+
+	// Return undefined if no meaningful tempo data
+	if (!tempo.text && !tempo.bpm) {
+		return undefined;
+	}
+
+	return tempo;
 };
 
 
@@ -475,6 +538,16 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					if (term.args?.[0]?.key === 'Staff') {
 						// Staff change mid-voice
 						voice.staff = staff;
+					}
+				}
+				// Handle tempo
+				else if (term instanceof lilyParser.LilyTerms.Tempo) {
+					const tempo = convertTempo(term);
+					if (tempo) {
+						voice.events.push({
+							type: 'context',
+							tempo,
+						});
 					}
 				}
 			},
