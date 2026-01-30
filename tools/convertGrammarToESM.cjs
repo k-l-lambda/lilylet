@@ -44,6 +44,11 @@ export { __grammar as grammar, __parser as parser, __Parser as Parser, __parse a
 export default __grammar;
 `;
 
+// Ensure lib directory exists
+if (!fs.existsSync('lib')) {
+  fs.mkdirSync('lib', { recursive: true });
+}
+
 fs.writeFileSync('lib/grammar.jison.js', esm);
 fs.writeFileSync('source/lilylet/grammar.jison.js', esm);
 console.log('Converted grammar.jison.js to ES module format');
