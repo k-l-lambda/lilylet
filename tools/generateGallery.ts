@@ -33,6 +33,7 @@ const getCategory = (name: string): string => {
     if (name.startsWith('grace-')) return 'grace';
     if (name.startsWith('hairpins-')) return 'hairpins';
     if (name.startsWith('harmony-')) return 'harmony';
+    if (name.startsWith('markup-')) return 'markup';
     if (name.startsWith('key-signatures-')) return 'key-signatures';
     if (name.startsWith('multiple-')) return 'multiple';
     if (name.startsWith('navigation-')) return 'navigation';
@@ -223,6 +224,7 @@ const html = `<!DOCTYPE html>
         <button class="filter-btn" data-filter="grace">Grace Notes</button>
         <button class="filter-btn" data-filter="hairpins">Hairpins</button>
         <button class="filter-btn" data-filter="harmony">Harmony</button>
+        <button class="filter-btn" data-filter="markup">Markup</button>
         <button class="filter-btn" data-filter="key-signatures">Key Signatures</button>
         <button class="filter-btn" data-filter="multiple">Multiple</button>
         <button class="filter-btn" data-filter="navigation">Navigation</button>

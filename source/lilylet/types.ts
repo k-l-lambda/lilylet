@@ -172,7 +172,13 @@ export interface NavigationMark {
 	type: NavigationMarkType;
 }
 
-export type Mark = Articulation | Ornament | Dynamic | Hairpin | Tie | Slur | Beam | Pedal | Fingering | NavigationMark;
+export interface MarkupMark {
+	markType: 'markup';
+	content: string;
+	placement?: Placement;
+}
+
+export type Mark = Articulation | Ornament | Dynamic | Hairpin | Tie | Slur | Beam | Pedal | Fingering | NavigationMark | MarkupMark;
 
 // === Key Signature ===
 
@@ -250,7 +256,12 @@ export interface HarmonyEvent {
 	text: string;  // Chord symbol text like "Am7", "Cmaj7", "D/F#"
 }
 
-export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | PitchResetEvent | BarlineEvent | HarmonyEvent;
+export interface MarkupEvent {
+	type: 'markup';
+	content: string;  // Text content of the markup
+}
+
+export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | PitchResetEvent | BarlineEvent | HarmonyEvent | MarkupEvent;
 
 // === Structure ===
 

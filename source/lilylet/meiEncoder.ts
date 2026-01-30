@@ -10,6 +10,7 @@ import {
 	TremoloEvent,
 	BarlineEvent,
 	HarmonyEvent,
+	MarkupEvent,
 	Pitch,
 	Clef,
 	Accidental,
@@ -294,6 +295,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 	tremolo?: number;
 	fingerings: { finger: number; placement?: 'above' | 'below' }[];
 	navigation?: 'coda' | 'segno';
+	markups: { content: string; placement?: 'above' | 'below' }[];
 } => {
 	const result = {
 		artics: [] as { type: string; placement?: 'above' | 'below' }[],
@@ -313,6 +315,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 		tremolo: undefined as number | undefined,
 		fingerings: [] as { finger: number; placement?: 'above' | 'below' }[],
 		navigation: undefined as 'coda' | 'segno' | undefined,
+		markups: [] as { content: string; placement?: 'above' | 'below' }[],
 	};
 
 	if (!marks) return result;
@@ -397,6 +400,12 @@ const extractMarkOptions = (marks?: Mark[]): {
 			case 'navigation':
 				result.navigation = (mark as { type: 'coda' | 'segno' }).type;
 				break;
+			case 'markup':
+				result.markups.push({
+					content: (mark as { content: string }).content,
+					placement: (mark as { placement?: 'above' | 'below' }).placement,
+				});
+				break;
 		}
 
 		// Tremolo (special case - from parser internal mark)
@@ -427,6 +436,7 @@ interface NoteEventResult {
 	slurEnd: boolean;    // For tracking slur spans
 	fingerings: { finger: number; placement?: 'above' | 'below' }[];
 	navigation?: 'coda' | 'segno';
+	markups: { content: string; placement?: 'above' | 'below' }[];
 }
 
 // Convert NoteEvent to MEI
@@ -491,6 +501,7 @@ const noteEventToMEI = (
 			slurEnd: markOptions.slurEnd,
 			fingerings: markOptions.fingerings,
 			navigation: markOptions.navigation,
+			markups: markOptions.markups,
 		};
 	}
 
@@ -547,6 +558,7 @@ const noteEventToMEI = (
 		slurEnd: markOptions.slurEnd,
 		fingerings: markOptions.fingerings,
 		navigation: markOptions.navigation,
+		markups: markOptions.markups,
 	};
 };
 
@@ -802,6 +814,12 @@ interface BarlineRef {
 	style: string;
 }
 
+interface MarkupRef {
+	startid: string;
+	content: string;
+	placement?: 'above' | 'below';
+}
+
 // Slur span data - slurs must be encoded as control events in MEI
 interface SlurSpan {
 	startId: string;
@@ -830,6 +848,7 @@ interface LayerResult {
 	navigations: NavigationRef[];
 	harmonies: HarmonyRef[];
 	barlines: BarlineRef[];
+	markups: MarkupRef[];
 	pendingTiePitches: Pitch[];  // For cross-measure tie tracking
 	pendingSlur: string | null;  // For cross-measure slur tracking (startId)
 	pendingHairpin: { form: 'cres' | 'dim'; startId: string } | null;  // For cross-measure hairpin tracking
@@ -878,6 +897,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	const navigations: NavigationRef[] = [];
 	const harmonies: HarmonyRef[] = [];
 	const barlines: BarlineRef[] = [];
+	const markups: MarkupRef[] = [];
 
 	// Track current stem direction from context changes
 	let currentStemDirection: StemDirection | undefined = undefined;
@@ -1017,6 +1037,10 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				for (const fing of result.fingerings) {
 					fingerings.push({ startid: result.elementId, finger: fing.finger, placement: fing.placement });
 				}
+				// Track markups from note marks
+				for (const mkup of result.markups) {
+					markups.push({ startid: result.elementId, content: mkup.content, placement: mkup.placement });
+				}
 				// Track navigation marks
 				if (result.navigation) {
 					navigations.push({ type: result.navigation });
@@ -1110,6 +1134,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					harmonies.push({ startid: lastNoteId, text: (event as HarmonyEvent).text });
 				}
 				break;
+			case 'markup':
+				// Markup needs a note ID to attach to - use the last note if available
+				if (lastNoteId) {
+					markups.push({ startid: lastNoteId, content: (event as MarkupEvent).content });
+				}
+				break;
 		}
 
 		// Close beam element if beam ends
@@ -1135,7 +1165,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin: currentHairpin, endingClef: currentClef };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin: currentHairpin, endingClef: currentClef };
 };
 
 // Staff result type
@@ -1155,6 +1185,7 @@ interface StaffResult {
 	navigations: NavigationRef[];
 	harmonies: HarmonyRef[];
 	barlines: BarlineRef[];
+	markups: MarkupRef[];
 	pendingTies: TieState;  // For cross-measure tie tracking
 	pendingSlurs: SlurState;  // For cross-measure slur tracking
 	pendingHairpins: HairpinState;  // For cross-measure hairpin tracking
@@ -1179,6 +1210,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const allNavigations: NavigationRef[] = [];
 	const allHarmonies: HarmonyRef[] = [];
 	const allBarlines: BarlineRef[] = [];
+	const allMarkups: MarkupRef[] = [];
 	const pendingTies: TieState = {};
 	const pendingSlurs: SlurState = {};
 	const pendingHairpins: HairpinState = {};
@@ -1209,6 +1241,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			allNavigations.push(...result.navigations);
 			allHarmonies.push(...result.harmonies);
 			allBarlines.push(...result.barlines);
+			allMarkups.push(...result.markups);
 			// Track pending ties for this layer
 			if (result.pendingTiePitches.length > 0) {
 				pendingTies[tieKey] = result.pendingTiePitches;
@@ -1245,6 +1278,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		navigations: allNavigations,
 		harmonies: allHarmonies,
 		barlines: allBarlines,
+		markups: allMarkups,
 		pendingTies,
 		pendingSlurs,
 		pendingHairpins,
@@ -1315,6 +1349,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	const allNavigations: NavigationRef[] = [];
 	const allHarmonies: HarmonyRef[] = [];
 	const allBarlines: BarlineRef[] = [];
+	const allMarkups: MarkupRef[] = [];
 
 	// Extract tempo from context changes (track which staff it came from)
 	let measureTempo: Tempo | undefined;
@@ -1372,6 +1407,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		allNavigations.push(...result.navigations);
 		allHarmonies.push(...result.harmonies);
 		allBarlines.push(...result.barlines);
+		allMarkups.push(...result.markups);
 		// Update tie state with pending ties from this staff
 		Object.assign(tieState, result.pendingTies);
 		// Update slur state with pending slurs from this staff
@@ -1457,6 +1493,12 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	// Generate harm elements for chord symbols
 	for (const harm of allHarmonies) {
 		staffContent += `${indent}    <harm xml:id="${generateId('harm')}" startid="#${harm.startid}">${escapeXml(harm.text)}</harm>\n`;
+	}
+
+	// Generate dir elements for markups
+	for (const mkup of allMarkups) {
+		const placeAttr = mkup.placement ? ` place="${mkup.placement}"` : '';
+		staffContent += `${indent}    <dir xml:id="${generateId('dir')}" startid="#${mkup.startid}"${placeAttr}>${escapeXml(mkup.content)}</dir>\n`;
 	}
 
 	// Determine barline attribute from collected barlines

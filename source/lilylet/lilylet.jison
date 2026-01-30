@@ -96,6 +96,8 @@
 
 	const barlineEvent = (style) => ({ type: 'barline', style });
 	const harmonyEvent = (text) => ({ type: 'harmony', text });
+	const markupEvent = (content, placement) => ({ type: 'markup', content, placement: placement || undefined });
+	const markupMark = (content) => ({ markType: 'markup', content });
 
 	// Parse PITCH token (e.g., "c", "cs", "bf", "css", "bff") into phonet and accidental
 	const parsePitch = (text, octave) => {
@@ -186,6 +188,7 @@
 "\\coda"						return 'CMD_CODA'
 "\\segno"						return 'CMD_SEGNO'
 "\\chords"						return 'CMD_CHORDS'
+"\\markup"						return 'CMD_MARKUP'
 
 "\\<"							return 'CMD_CRESC_BEGIN'
 "\\>"							return 'CMD_DIM_BEGIN'
@@ -339,6 +342,7 @@ event
 	| pitch_reset_event
 	| barline_event
 	| harmony_event
+	| markup_event
 	;
 
 barline_event
@@ -347,6 +351,10 @@ barline_event
 
 harmony_event
 	: CMD_CHORDS STRING							-> harmonyEvent($2.slice(1, -1))
+	;
+
+markup_event
+	: CMD_MARKUP STRING							-> markupEvent($2.slice(1, -1))
 	;
 
 pitch_reset_event
@@ -485,6 +493,7 @@ post_event
 	| rest_mark
 	| fingering_mark
 	| navigation_mark
+	| markup_mark
 	;
 
 rest_mark
@@ -577,4 +586,8 @@ fingering_mark
 navigation_mark
 	: CMD_CODA									-> navigation('coda')
 	| CMD_SEGNO									-> navigation('segno')
+	;
+
+markup_mark
+	: CMD_MARKUP STRING							-> markupMark($2.slice(1, -1))
 	;
