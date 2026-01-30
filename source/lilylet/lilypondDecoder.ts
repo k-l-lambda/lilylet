@@ -2,36 +2,15 @@
  * LilyPond to Lilylet Decoder
  *
  * Converts LilyPond notation files to Lilylet document format using the lotus parser.
+ * This module is browser-compatible - it uses pre-compiled parser from lotus.
  */
 
 // Import directly from the compiled lib directory to avoid ESM issues
 import * as lilyParser from "@k-l-lambda/lotus/lib/inc/lilyParser/index.js";
 
-
-// Lazy-loaded parser instance
-let parserPromise: Promise<any> | null = null;
-
-const getParser = async () => {
-	if (!parserPromise) {
-		// Load jison parser directly
-		const fs = await import('fs');
-		const path = await import('path');
-		const { createRequire } = await import('module');
-		const Jison = (await import('jison')).default;
-
-		// Use createRequire for ESM compatibility
-		const require = createRequire(import.meta.url);
-		const jisonPath = path.join(
-			path.dirname(require.resolve('@k-l-lambda/lotus/package.json')),
-			'jison/lilypond.jison'
-		);
-		const grammar = fs.readFileSync(jisonPath, 'utf-8');
-		const parser = new Jison.Parser(grammar);
-
-		parserPromise = Promise.resolve(parser);
-	}
-	return parserPromise;
-};
+// Import pre-compiled LilyPond parser (browser-compatible)
+// @ts-ignore - CommonJS module
+import * as lilypondParser from "@k-l-lambda/lotus/lib.browser/lib/lilyParser.js";
 
 import {
 	LilyletDoc,
@@ -782,25 +761,14 @@ const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[], metadata?: Metadat
 
 
 /**
- * Decode a LilyPond string to LilyletDoc (async - requires parser loading)
+ * Decode a LilyPond string to LilyletDoc (synchronous, browser-compatible)
  */
-const decode = async (lilypondSource: string): Promise<LilyletDoc> => {
-	const parser = await getParser();
-	const rawData = parser.parse(lilypondSource);
+const decode = (lilypondSource: string): LilyletDoc => {
+	const rawData = lilypondParser.parse(lilypondSource);
 	const lilyDocument = new lilyParser.LilyDocument(rawData);
 	const parsedMeasures = parseLilyDocument(lilyDocument);
 	const metadata = extractMetadata(lilyDocument);
 	return parsedMeasuresToDoc(parsedMeasures, metadata);
-};
-
-
-/**
- * Decode a LilyPond file to LilyletDoc
- */
-const decodeFile = async (filePath: string): Promise<LilyletDoc> => {
-	const fs = await import('fs/promises');
-	const source = await fs.readFile(filePath, 'utf-8');
-	return decode(source);
 };
 
 
@@ -816,8 +784,6 @@ const decodeFromDocument = (lilyDocument: lilyParser.LilyDocument): LilyletDoc =
 
 export {
 	decode,
-	decodeFile,
 	decodeFromDocument,
 	parseLilyDocument,
-	getParser,
 };
