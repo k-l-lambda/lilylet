@@ -99,6 +99,12 @@ export interface Fraction {
 	denominator: number;
 }
 
+// Time signature with optional symbol display
+// symbol: 'common' for C (4/4), 'cut' for C| (2/2), undefined for numeric
+export interface TimeSig extends Fraction {
+	symbol?: 'common' | 'cut';
+}
+
 export interface Pitch {
 	phonet: Phonet;
 	accidental?: Accidental;
@@ -292,7 +298,7 @@ export interface Part {
 // Measure contains parts separated by \\\
 export interface Measure {
 	key?: KeySignature;
-	timeSig?: Fraction;
+	timeSig?: TimeSig;
 	parts: Part[];
 	partial?: boolean;
 }

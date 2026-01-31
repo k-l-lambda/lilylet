@@ -102,6 +102,106 @@ const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<
 };
 
 
+// Generate index.html gallery
+const generateIndexHtml = (files: string[], outputDir: string): void => {
+	// Group files by category (prefix before first dash or hyphen pattern)
+	const getCategory = (file: string): string => {
+		const name = file.replace('.lyl', '');
+		const parts = name.split('-');
+		// Find category: usually first 1-2 parts
+		if (parts.length >= 2) {
+			// Check common patterns
+			if (parts[0] === 'time' && parts[1] === 'signatures') return 'time-signatures';
+			if (parts[0] === 'key' && parts[1] === 'signatures') return 'key-signatures';
+			if (parts[0] === 'basic' && parts[1] === 'notes') return 'basic-notes';
+			if (parts[0] === 'ties' && parts[1] === 'and') return 'ties-and-slurs';
+			if (parts[0] === 'grace' && parts[1] === 'notes') return 'grace-notes';
+			if (parts[0] === 'stem' && parts[1] === 'direction') return 'stem-direction';
+			if (parts[0] === 'multiple' && parts[1] === 'staves') return 'multiple-staves';
+			if (parts[0] === 'multiple' && parts[1] === 'voices') return 'multiple-voices';
+			if (parts[0] === 'multiple' && parts[1] === 'measures') return 'multiple-measures';
+			if (parts[0] === 'multiple' && parts[1] === 'parts') return 'multiple-parts';
+			return parts[0];
+		}
+		return parts[0];
+	};
+
+	const categories = [...new Set(files.map(getCategory))].sort();
+
+	const cards = files.map(file => {
+		const name = file.replace('.lyl', '');
+		const category = getCategory(file);
+		return `        <div class="card" data-category="${category}">
+            <div class="card-header">${name} <span class="category">${category}</span></div>
+            <div class="card-body"><img src="${name}.svg" alt="${name}"></div>
+            <div class="card-footer"><a href="${name}.mei">MEI</a><a href="${name}.svg" target="_blank">SVG</a></div>
+        </div>`;
+	}).join('\n');
+
+	const filterButtons = categories.map(cat =>
+		`<button class="filter-btn" data-filter="${cat}">${cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</button>`
+	).join('\n                ');
+
+	const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lilylet MEI Test Results</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        h1 { text-align: center; color: #333; margin-bottom: 10px; }
+        .stats { text-align: center; color: #666; margin-bottom: 30px; }
+        .filter-bar { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .filter-btn { padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 20px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .filter-btn:hover { background: #e0e0e0; }
+        .filter-btn.active { background: #4a90d9; color: white; border-color: #4a90d9; }
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
+        .card.hidden { display: none; }
+        .card-header { padding: 12px 16px; background: #f8f9fa; border-bottom: 1px solid #eee; font-weight: 500; font-size: 14px; }
+        .card-header .category { float: right; font-size: 12px; color: #888; font-weight: normal; }
+        .card-body { padding: 16px; text-align: center; min-height: 100px; display: flex; align-items: center; justify-content: center; }
+        .card-body img { max-width: 100%; height: auto; }
+        .card-footer { padding: 12px 16px; background: #f8f9fa; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        .card-footer a { color: #4a90d9; text-decoration: none; font-size: 14px; }
+        .card-footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Lilylet MEI Test Results</h1>
+    <div class="stats">${files.length} test cases</div>
+    <div class="filter-bar">
+        <button class="filter-btn active" data-filter="all">All</button>
+                ${filterButtons}
+    </div>
+    <div class="gallery">
+${cards}
+    </div>
+    <script>
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const filter = btn.dataset.filter;
+                document.querySelectorAll('.card').forEach(card => {
+                    if (filter === 'all' || card.dataset.category === filter) {
+                        card.classList.remove('hidden');
+                    } else {
+                        card.classList.add('hidden');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>`;
+
+	fs.writeFileSync(`${outputDir}/index.html`, html);
+};
+
+
 const main = async (): Promise<void> => {
 	const lylDir = "./tests/assets/unit-cases";
 	const outputDir = "./tests/output/unit-cases";
@@ -159,6 +259,9 @@ const main = async (): Promise<void> => {
 		}
 		process.exit(1);
 	}
+
+	// Generate index.html gallery
+	generateIndexHtml(files, outputDir);
 };
 
 

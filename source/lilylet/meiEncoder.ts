@@ -1586,11 +1586,14 @@ const encodeScoreDef = (
 	timeNum: number,
 	timeDen: number,
 	partInfos: PartInfo[],
-	indent: string
+	indent: string,
+	meterSymbol?: 'common' | 'cut'
 ): string => {
 	const scoreDefId = generateId("scoredef");
 
-	let xml = `${indent}<scoreDef xml:id="${scoreDefId}" key.sig="${keySig}" meter.count="${timeNum}" meter.unit="${timeDen}">\n`;
+	// Build meter attributes
+	const meterSymAttr = meterSymbol ? ` meter.sym="${meterSymbol}"` : '';
+	let xml = `${indent}<scoreDef xml:id="${scoreDefId}" key.sig="${keySig}"${meterSymAttr} meter.count="${timeNum}" meter.unit="${timeDen}">\n`;
 	xml += `${indent}    <staffGrp xml:id="${generateId("staffgrp")}">\n`;
 
 	for (let pi = 0; pi < partInfos.length; pi++) {
@@ -1640,6 +1643,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	let currentKey = 0;
 	let currentTimeNum = 4;
 	let currentTimeDen = 4;
+	let currentMeterSymbol: 'common' | 'cut' | undefined = undefined;
 
 	const firstMeasure = doc.measures[0];
 	if (firstMeasure.key) {
@@ -1648,6 +1652,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	if (firstMeasure.timeSig) {
 		currentTimeNum = firstMeasure.timeSig.numerator;
 		currentTimeDen = firstMeasure.timeSig.denominator;
+		currentMeterSymbol = firstMeasure.timeSig.symbol;
 	}
 
 	const keySig = KEY_SIGS[currentKey] || "0";
@@ -1701,7 +1706,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += `${indent}${indent}<body>\n`;
 	mei += `${indent}${indent}${indent}<mdiv xml:id="${generateId("mdiv")}">\n`;
 	mei += `${indent}${indent}${indent}${indent}<score xml:id="${generateId("score")}">\n`;
-	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`);
+	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol);
 	mei += `${indent}${indent}${indent}${indent}${indent}<section xml:id="${generateId("section")}">\n`;
 
 	// Track tie state across measures for cross-measure ties

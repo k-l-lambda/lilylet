@@ -128,6 +128,7 @@
 	let currentKey = null;
 	let currentTimeSig = null;
 	let currentDuration = { division: 4, dots: 0 }; // default quarter note
+	let numericTimeSignature = false; // When true, 4/4 and 2/2 use numeric display instead of C/C|
 
 	// Reset parser state - call before each parse
 	const resetParserState = () => {
@@ -135,6 +136,7 @@
 		currentKey = null;
 		currentTimeSig = null;
 		currentDuration = { division: 4, dots: 0 };
+		numericTimeSignature = false;
 	};
 
 	// Export reset function
@@ -168,6 +170,8 @@
 "\\clef"						return 'CMD_CLEF'
 "\\key"							return 'CMD_KEY'
 "\\time"						return 'CMD_TIME'
+"\\numericTimeSignature"		return 'CMD_NUMERIC_TIME_SIG'
+"\\defaultTimeSignature"		return 'CMD_DEFAULT_TIME_SIG'
 "\\tempo"						return 'CMD_TEMPO'
 "\\staff"						return 'CMD_STAFF'
 "\\grace"						return 'CMD_GRACE'
@@ -329,7 +333,7 @@ part_voices
 
 voice_events
 	: /* empty */								{ $$ = []; }
-	| voice_events event						{ $$ = $1.concat(Array.isArray($2) ? $2 : [$2]); }
+	| voice_events event						{ $$ = $2 === null ? $1 : $1.concat(Array.isArray($2) ? $2 : [$2]); }
 	;
 
 event
@@ -413,6 +417,8 @@ context_event
 	| staff_cmd									-> contextChange({ staff: $1 })
 	| ottava_cmd								-> contextChange({ ottava: $1 })
 	| stem_cmd									-> contextChange({ stemDirection: $1 })
+	| numeric_time_sig_cmd						-> null
+	| default_time_sig_cmd						-> null
 	;
 
 clef_cmd
@@ -433,7 +439,29 @@ mode
 	;
 
 time_cmd
-	: CMD_TIME NUMBER '/' NUMBER				%{ currentTimeSig = fraction(Number($2), Number($4)); $$ = currentTimeSig; %}
+	: CMD_TIME NUMBER '/' NUMBER				%{
+		const num = Number($2);
+		const den = Number($4);
+		const timeSig = fraction(num, den);
+		// Add symbol for 4/4 (common) and 2/2 (cut) unless numericTimeSignature is set
+		if (!numericTimeSignature) {
+			if (num === 4 && den === 4) {
+				timeSig.symbol = 'common';
+			} else if (num === 2 && den === 2) {
+				timeSig.symbol = 'cut';
+			}
+		}
+		currentTimeSig = timeSig;
+		$$ = currentTimeSig;
+	%}
+	;
+
+numeric_time_sig_cmd
+	: CMD_NUMERIC_TIME_SIG						%{ numericTimeSignature = true; $$ = null; %}
+	;
+
+default_time_sig_cmd
+	: CMD_DEFAULT_TIME_SIG						%{ numericTimeSignature = false; $$ = null; %}
 	;
 
 tempo_cmd

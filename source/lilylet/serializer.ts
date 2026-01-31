@@ -550,7 +550,7 @@ const serializeEvent = (
 // Key/time signature info to inject into first voice
 interface MeasureContext {
 	key?: KeySignature;
-	time?: { numerator: number; denominator: number };
+	time?: { numerator: number; denominator: number; symbol?: 'common' | 'cut' };
 }
 
 // Serialize a voice with pitch environment tracking
@@ -585,7 +585,13 @@ const serializeVoice = (
 			parts.push('\\key ' + keyStr);
 		}
 		if (measureContext.time) {
-			parts.push('\\time ' + measureContext.time.numerator + '/' + measureContext.time.denominator);
+			const { numerator, denominator, symbol } = measureContext.time;
+			// Output \numericTimeSignature before 4/4 or 2/2 if no symbol is set
+			// (meaning numeric display was explicitly requested)
+			if (!symbol && ((numerator === 4 && denominator === 4) || (numerator === 2 && denominator === 2))) {
+				parts.push('\\numericTimeSignature');
+			}
+			parts.push('\\time ' + numerator + '/' + denominator);
 		}
 	}
 
