@@ -1754,9 +1754,15 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 
 	// Encode measures
 	measures.forEach((measure, mi) => {
-		// Update key signature if measure has one
+		// Check for key signature change and output scoreDef if needed
 		if (measure.key) {
-			currentKey = keyToFifths(measure.key);
+			const newKey = keyToFifths(measure.key);
+			if (newKey !== currentKey) {
+				currentKey = newKey;
+				const newKeySig = KEY_SIGS[currentKey] || "0";
+				// Output a scoreDef with the new key signature
+				mei += `${indent}${indent}${indent}${indent}${indent}${indent}<scoreDef xml:id="${generateId('scoredef')}" key.sig="${newKeySig}" />\n`;
+			}
 		}
 		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, hairpinState, currentKey, partInfos, clefState);
 	});
