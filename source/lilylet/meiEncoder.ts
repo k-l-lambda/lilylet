@@ -171,7 +171,7 @@ const getKeyAccidentals = (fifths: number): Record<string, string> => {
 // Convert Pitch to MEI attributes, checking against key signature
 // ottavaShift: current ottava level (1 = 8va up, -1 = 8vb down, 2 = 15ma up, etc.)
 // The written pitch should be adjusted by subtracting the ottava shift
-const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 0): { pname: string; oct: number; accid?: string } => {
+const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 0): { pname: string; oct: number; accid?: string; accidGes?: string } => {
 	// Lilylet octave: 0 = middle C octave (C4), positive = higher, negative = lower
 	// When ottava is active, the source pitch is the sounding pitch, but we need to output the written pitch
 	// For 8va up (ottavaShift=1), written pitch is one octave lower than sounding
@@ -181,20 +181,25 @@ const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 
 	const keyAccidentals = getKeyAccidentals(keyFifths);
 	const keyAccid = keyAccidentals[pitch.phonet];
 
-	// Determine if we need to output an accid attribute
+	// Determine accid (written/displayed) and accid.ges (gestural/sounding)
 	let accid: string | undefined;
+	let accidGes: string | undefined;
+
 	if (pitch.accidental) {
 		const noteAccid = ACCIDENTALS[pitch.accidental];
-		// Only output accid if it's different from what the key implies
 		if (noteAccid !== keyAccid) {
+			// Accidental differs from key signature - display it
 			accid = noteAccid;
 		}
+		// Always set gestural accidental for MIDI generation
+		accidGes = noteAccid;
 	} else if (keyAccid) {
 		// Note has no accidental but key implies one - output natural
 		accid = 'n';
+		accidGes = 'n';
 	}
 
-	return { pname: pitch.phonet, oct, accid };
+	return { pname: pitch.phonet, oct, accid, accidGes };
 };
 
 
@@ -210,7 +215,7 @@ const tremoloToStemMod = (division: number): string | undefined => {
 
 // Build note element
 const buildNoteElement = (
-	pitch: { pname: string; oct: number; accid?: string },
+	pitch: { pname: string; oct: number; accid?: string; accidGes?: string },
 	dur: string,
 	dots: number,
 	indent: string,
@@ -233,6 +238,7 @@ const buildNoteElement = (
 		attrs += ` dur="${dur}"`;
 	}
 	if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+	if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
 	if (!inChord && dots > 0) attrs += ` dots="${dots}"`;
 	if (!inChord && options.grace) attrs += ` grace="unacc"`;
 	if (!inChord && options.tie) attrs += ` tie="${options.tie}"`;
@@ -715,6 +721,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 		const pitch = encodePitch(event.pitchA[0], keyFifths, ottavaShift);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+		if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
 		result += `${indent}    <note ${attrs} />\n`;
 	} else if (event.pitchA.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
@@ -722,6 +729,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 			const pitch = encodePitch(p, keyFifths, ottavaShift);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+			if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
 			result += `${indent}        <note ${attrs} />\n`;
 		}
 		result += `${indent}    </chord>\n`;
@@ -732,6 +740,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 		const pitch = encodePitch(event.pitchB[0], keyFifths, ottavaShift);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+		if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
 		result += `${indent}    <note ${attrs} />\n`;
 	} else if (event.pitchB.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
@@ -739,6 +748,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 			const pitch = encodePitch(p, keyFifths, ottavaShift);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
+			if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
 			result += `${indent}        <note ${attrs} />\n`;
 		}
 		result += `${indent}    </chord>\n`;
