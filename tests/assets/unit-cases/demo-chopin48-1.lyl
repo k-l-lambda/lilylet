@@ -150,8 +150,8 @@
 \staff "2" \clef "treble" \grace fs,16[ \grace g] g4.->\trill \grace fs16[ \grace g] <g,, g'>8\sustainOff\sustainOn <g'' d' f b>\sustainOff\arpeggio[\arpeggio\arpeggio\arpeggio <g e' c'>\sustainOn\arpeggio\arpeggio\arpeggio <g d' g d'>\sustainOff\arpeggio]\arpeggio\arpeggio\arpeggio \\
 \staff "2" <c, g' c e>8\arpeggio\arpeggio\arpeggio\arpeggio \grace fs,16[ \grace g] g4.\trill \grace fs16[ \grace g(] | %47
 
-\staff "2" \clef "bass" <e' g c e>16)\arpeggio\arpeggio\arpeggio\arpeggio \ottava #-1 <c' c'>[ <d d'>] <c c'>[ <g g'> <a a'>] <g g'>[ <e e'> \ottava #0 <f f'>] <e e'>[ <c c'> <d d'>] <c c'>[ <g g'> <a a'>] <g g'>[ <e e'> <f f'>] <e e'>[ <c c'> <d d'>] <c c'>[ <a a'> <f e'>] \\
-\staff "2" <c, g' c g'>16-> <c' c'>\sustainOff[ <d d'>] <c c'>->[ <g g'> <a a'>] <g g'>->[ <e e'> <f f'>] <e e'>->[ <c c'> <d d'>] <c c'>->[ <g g'> <a a'>] <g g'>->[ <e e'> <f f'>] <e e'>->[ <c c'> <d d'>] <c c'>->[ <a a'> <e e'>] | %48
+\staff "1" <e' g c e>16)\arpeggio\arpeggio\arpeggio\arpeggio \ottava #-1 <c' c'>[ <d d'>] <c c'>[ <g g'> <a a'>] <g g'>[ <e e'> \ottava #0 <f f'>] <e e'>[ <c c'> <d d'>] <c c'>[ <g g'> <a a'>] <g g'>[ <e e'> <f f'>] <e e'>[ <c c'> <d d'>] <c c'>[ <a a'> <f e'>] \\
+\staff "2" \clef "bass" <c, g' c g'>16-> <c' c'>\sustainOff[ <d d'>] <c c'>->[ <g g'> <a a'>] <g g'>->[ <e e'> <f f'>] <e e'>->[ <c c'> <d d'>] <c c'>->[ <g g'> <a a'>] <g g'>->[ <e e'> <f f'>] <e e'>->[ <c c'> <d d'>] <c c'>->[ <a a'> <e e'>] | %48
 
 \staff "1" <g c e g>16-> <ef'' ef'>[ <d d'>] <cs cs'>\ff[ <c c'> <b b'>] <bf bf'>[ <a a'> <gs gs'>] <g g'>[ <fs fs'> <f f'>] <e' gs e'>4(-> <d f d'>8)->[ <f, g d' g>(->] \\
 \staff "2" <g,, g'>16-> <ef'' ef'>[ <d d'>\sustainOff] <cs cs'>[ <c c'> <b b'>] <bf bf'>[ <a a'> <gs gs'>] <g g'>[ <fs fs'> <f f'>] <e e'>\sustainOn[ <ds ds'> <d d'>] <cs cs'>[ <c c'> <b b'>\sustainOff] <bf bf'>\sustainOn[ <a a'> <af af'>\sustainOff] <g g'>\sustainOn[ <fs fs'> <a a'>\sustainOff] | %49
@@ -270,8 +270,7 @@
 \staff "1" c16[ g c d] ef[ fs af g] b[ d c ef] fs[ g \grace bf8 af16 g] \\
 \staff "2" c,,,4-. r r2 | %78
 
-\staff "2" c''4) r <ef,,, g c ef>( <ef g c ef> \\
-\staff "2" r2 \\
+\staff "1" c''4) r \staff "2" <ef,,, g c ef>( <ef g c ef> \\
 \staff "2" <c,, c'>4 <c c'> | %79
 
 \staff "1" <c ef>1)\fermata \\
