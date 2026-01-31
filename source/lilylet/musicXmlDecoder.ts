@@ -27,6 +27,7 @@ import {
 	NavigationMarkType,
 	BarlineEvent,
 	HarmonyEvent,
+	TupletEvent,
 } from './types';
 
 import {
@@ -129,6 +130,88 @@ class SpannerTracker {
 		this.slurs.clear();
 		this.wedges.clear();
 		this.ties.clear();
+	}
+}
+
+// ============ Tuplet Tracker ============
+
+/**
+ * Track tuplet groups by number attribute.
+ * Collects notes between tuplet start and stop to create TupletEvent.
+ */
+class TupletTracker {
+	// Map from tuplet number to collected events and ratio
+	private activeTuplets: Map<number, {
+		events: (NoteEvent | RestEvent)[];
+		ratio?: Fraction;
+	}> = new Map();
+
+	/**
+	 * Start a new tuplet group
+	 */
+	startTuplet(number: number = 1): void {
+		this.activeTuplets.set(number, { events: [] });
+	}
+
+	/**
+	 * Add an event to active tuplet(s)
+	 * Returns true if the event was added to at least one tuplet
+	 */
+	addEvent(event: NoteEvent | RestEvent): boolean {
+		if (this.activeTuplets.size === 0) return false;
+
+		// Add to all active tuplets (in case of nested tuplets)
+		for (const [, tuplet] of this.activeTuplets) {
+			// Set ratio from first event's duration.tuplet
+			if (!tuplet.ratio && event.duration.tuplet) {
+				// In Lilylet, ratio is denominator/numerator (e.g., 2/3 for triplet)
+				tuplet.ratio = {
+					numerator: event.duration.tuplet.denominator,
+					denominator: event.duration.tuplet.numerator,
+				};
+			}
+			// Store event without tuplet info in duration (it's handled at TupletEvent level)
+			const cleanEvent = { ...event, duration: { ...event.duration } };
+			delete cleanEvent.duration.tuplet;
+			tuplet.events.push(cleanEvent);
+		}
+		return true;
+	}
+
+	/**
+	 * Stop a tuplet group and return the TupletEvent
+	 */
+	stopTuplet(number: number = 1): TupletEvent | undefined {
+		const tuplet = this.activeTuplets.get(number);
+		if (!tuplet || tuplet.events.length === 0) {
+			this.activeTuplets.delete(number);
+			return undefined;
+		}
+
+		this.activeTuplets.delete(number);
+
+		// Default ratio if not set (shouldn't happen normally)
+		const ratio = tuplet.ratio || { numerator: 2, denominator: 3 };
+
+		return {
+			type: 'tuplet',
+			ratio,
+			events: tuplet.events,
+		};
+	}
+
+	/**
+	 * Check if any tuplet is active
+	 */
+	isActive(): boolean {
+		return this.activeTuplets.size > 0;
+	}
+
+	/**
+	 * Reset tracker
+	 */
+	reset(): void {
+		this.activeTuplets.clear();
 	}
 }
 
@@ -940,7 +1023,8 @@ const convertMeasure = (
 	measureEl: Element,
 	voiceTracker: VoiceTracker,
 	spannerTracker: SpannerTracker,
-	ottavaTracker: { current: number }
+	ottavaTracker: { current: number },
+	tupletTracker: TupletTracker
 ): MeasureConversionResult => {
 	let key: KeySignature | undefined;
 	let timeSig: Fraction | undefined;
@@ -994,6 +1078,12 @@ const convertMeasure = (
 			const staffNum = note.staff || 1;
 			currentVoice = voiceNum;
 
+			// Check for tuplet start BEFORE processing the note
+			const tupletNotation = note.notations?.tuplet;
+			if (tupletNotation?.type === 'start') {
+				tupletTracker.startTuplet(tupletNotation.number);
+			}
+
 			// Add any pending context changes before the note (tempo, ottava)
 			if (pendingContextChanges.length > 0) {
 				for (const ctx of pendingContextChanges) {
@@ -1023,7 +1113,13 @@ const convertMeasure = (
 
 				// Grace notes don't advance time
 				const advanceDuration = note.isGrace ? 0 : note.duration.divisions;
-				voiceTracker.addEvent(voiceNum, restEvent, advanceDuration, staffNum);
+
+				// Check if we're in a tuplet
+				if (tupletTracker.isActive()) {
+					tupletTracker.addEvent(restEvent);
+				} else {
+					voiceTracker.addEvent(voiceNum, restEvent, advanceDuration, staffNum);
+				}
 			} else if (note.pitch) {
 				// Note or chord - convert MusicXmlPitch to Lilylet Pitch
 				const lilyletPitch = musicXmlPitchToLilylet(note.pitch);
@@ -1093,7 +1189,31 @@ const convertMeasure = (
 
 				// Grace notes don't advance time
 				const advanceDuration = note.isGrace ? 0 : note.duration.divisions;
-				voiceTracker.addEvent(voiceNum, noteEvent, advanceDuration, staffNum);
+
+				// Check if we're in a tuplet
+				if (tupletTracker.isActive()) {
+					tupletTracker.addEvent(noteEvent);
+				} else {
+					voiceTracker.addEvent(voiceNum, noteEvent, advanceDuration, staffNum);
+				}
+			}
+
+			// Check for tuplet stop AFTER processing the note
+			if (tupletNotation?.type === 'stop') {
+				const tupletEvent = tupletTracker.stopTuplet(tupletNotation.number);
+				if (tupletEvent) {
+					// Calculate total duration of tuplet for voiceTracker
+					let totalDuration = 0;
+					for (const evt of tupletEvent.events) {
+						if (evt.duration) {
+							// Convert division to duration units (quarter = 1)
+							totalDuration += (4 / evt.duration.division) * voiceTracker.getDivisions();
+						}
+					}
+					// Apply tuplet ratio to get actual duration
+					totalDuration = totalDuration * tupletEvent.ratio.numerator / tupletEvent.ratio.denominator;
+					voiceTracker.addEvent(voiceNum, tupletEvent, totalDuration, staffNum);
+				}
 			}
 		} else if (tagName === 'direction') {
 			const direction = parseDirection(child);
@@ -1158,6 +1278,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 	const voiceTracker = new VoiceTracker();
 	const spannerTracker = new SpannerTracker();
 	const ottavaTracker = { current: 0 };
+	const tupletTracker = new TupletTracker();
 
 	let lastKey: KeySignature | undefined;
 	let lastTimeSig: Fraction | undefined;
@@ -1168,7 +1289,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 
 	for (const measureEl of measureEls) {
 		voiceTracker.reset();
-		const { voiceMap, key, timeSig, barline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker);
+		const { voiceMap, key, timeSig, barline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker, tupletTracker);
 
 		// Update running key/time
 		if (key) lastKey = key;
