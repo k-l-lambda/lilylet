@@ -609,7 +609,7 @@ interface TupletEventResult {
 }
 
 // Convert TupletEvent to MEI
-const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0): TupletEventResult => {
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false): TupletEventResult => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
 	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
 	// MEI: num = number of notes written, numbase = normal equivalent
@@ -618,7 +618,6 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 	let xml = `${indent}<tuplet xml:id="${generateId('tuplet')}" num="${num}" numbase="${numbase}">\n`;
 
-	let inBeam = false;
 	const baseIndent = indent + '    ';
 
 	// Effective staff for cross-staff notation
@@ -634,31 +633,18 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	const turns: TurnRef[] = [];
 	const arpeggios: ArpegRef[] = [];
 
+	// If we're inside a parent beam, don't create internal beams - notes go directly into tuplet
+	// MEI allows: <beam><tuplet><note/>...</tuplet><tuplet><note/>...</tuplet></beam>
+	// Beam state is managed by encodeLayer, not here.
+
 	for (const e of event.events) {
-		// Check for beam marks in note events
-		let beamStart = false;
-		let beamEnd = false;
-		if (e.type === 'note') {
-			const markOptions = extractMarkOptions((e as NoteEvent).marks);
-			beamStart = markOptions.beamStart;
-			beamEnd = markOptions.beamEnd;
-		}
-
-		// Open beam element if beam starts
-		if (beamStart && !inBeam) {
-			xml += `${baseIndent}<beam xml:id="${generateId('beam')}">\n`;
-			inBeam = true;
-		}
-
-		const currentIndent = inBeam ? baseIndent + '    ' : baseIndent;
-
 		if (e.type === 'note') {
 			// For cross-staff notation: set note's staff if different from layerStaff
 			const noteEvent = e as NoteEvent;
 			const effectiveNoteEvent = effectiveStaff && layerStaff && effectiveStaff !== layerStaff
 				? { ...noteEvent, staff: effectiveStaff }
 				: noteEvent;
-			const result = noteEventToMEI(effectiveNoteEvent, currentIndent, layerStaff, false, undefined, keyFifths, ottavaShift);
+			const result = noteEventToMEI(effectiveNoteEvent, baseIndent, layerStaff, false, undefined, keyFifths, ottavaShift);
 			xml += result.xml;
 
 			// Collect slur info
@@ -673,19 +659,8 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			if (result.turn) turns.push({ startid: result.elementId });
 			if (result.arpeggio) arpeggios.push({ plist: result.elementId });
 		} else if (e.type === 'rest') {
-			xml += restEventToMEI(e as RestEvent, currentIndent, keyFifths, ottavaShift);
+			xml += restEventToMEI(e as RestEvent, baseIndent, keyFifths, ottavaShift);
 		}
-
-		// Close beam element if beam ends
-		if (beamEnd && inBeam) {
-			xml += `${baseIndent}</beam>\n`;
-			inBeam = false;
-		}
-	}
-
-	// Close any unclosed beam
-	if (inBeam) {
-		xml += `${baseIndent}</beam>\n`;
 	}
 
 	xml += `${indent}</tuplet>\n`;
@@ -865,12 +840,35 @@ interface LayerResult {
 	endingClef?: Clef;  // For cross-measure clef tracking
 }
 
+
+// Helper: check if an event (or any note inside a tuplet) has beam start/end
+const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TremoloEvent | ContextChange | BarlineEvent | HarmonyEvent | MarkupEvent | { type: 'pitchReset' }): { beamStart: boolean; beamEnd: boolean } => {
+	if (event.type === 'note') {
+		const markOptions = extractMarkOptions((event as NoteEvent).marks);
+		return { beamStart: markOptions.beamStart, beamEnd: markOptions.beamEnd };
+	}
+	if (event.type === 'tuplet') {
+		const tuplet = event as TupletEvent;
+		let beamStart = false;
+		let beamEnd = false;
+		for (const e of tuplet.events) {
+			if (e.type === 'note') {
+				const markOptions = extractMarkOptions((e as NoteEvent).marks);
+				if (markOptions.beamStart) beamStart = true;
+				if (markOptions.beamEnd) beamEnd = true;
+			}
+		}
+		return { beamStart, beamEnd };
+	}
+	return { beamStart: false, beamEnd: false };
+};
+
 // Encode a layer (voice)
 const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlur: string | null = null, initialHairpin: { form: 'cres' | 'dim'; startId: string } | null = null): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
-	let inBeam = false;
+	let beamElementOpen = false;  // Whether actual <beam> element is open (passed to tuplets)
 	const baseIndent = indent + '    ';
 
 	// Track current clef to only emit changes
@@ -928,23 +926,16 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	};
 
 	for (const event of voice.events) {
-		// Check for beam start/end in note events
-		let beamStart = false;
-		let beamEnd = false;
-		if (event.type === 'note') {
-			const noteEvent = event as NoteEvent;
-			const markOptions = extractMarkOptions(noteEvent.marks);
-			beamStart = markOptions.beamStart;
-			beamEnd = markOptions.beamEnd;
-		}
+		// Check for beam start/end in this event (including inside tuplets)
+		const { beamStart, beamEnd } = getEventBeamMarks(event);
 
 		// Open beam element if beam starts
-		if (beamStart && !inBeam) {
+		if (beamStart && !beamElementOpen) {
 			xml += `${baseIndent}<beam xml:id="${generateId('beam')}">\n`;
-			inBeam = true;
+			beamElementOpen = true;
 		}
 
-		const currentIndent = inBeam ? baseIndent + '    ' : baseIndent;
+		const currentIndent = beamElementOpen ? baseIndent + '    ' : baseIndent;
 
 		switch (event.type) {
 			case 'note': {
@@ -1061,7 +1052,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift);
 				break;
 			case 'tuplet': {
-				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift);
+				// Tuplet can be nested inside beam in MEI: <beam><tuplet>...</tuplet></beam>
+				// Pass beamElementOpen to tuplet so it knows not to create its own beam
+				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen);
 				xml += tupletResult.xml;
 
 				// Process slur ends first (to close any pending slurs from before this tuplet)
@@ -1158,14 +1151,14 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 		}
 
 		// Close beam element if beam ends
-		if (beamEnd && inBeam) {
+		if (beamEnd && beamElementOpen) {
 			xml += `${baseIndent}</beam>\n`;
-			inBeam = false;
+			beamElementOpen = false;
 		}
 	}
 
 	// Close any unclosed beam
-	if (inBeam) {
+	if (beamElementOpen) {
 		xml += `${baseIndent}</beam>\n`;
 	}
 
