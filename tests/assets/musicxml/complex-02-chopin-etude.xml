@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
 <score-partwise version="3.0">
-  <movement-title>E大调练习曲</movement-title>
+  <movement-title>Etude in E Major</movement-title>
   <identification>
-    <creator type="composer">肖邦
+    <creator type="composer">Chopin
 Op.10 No.3</creator>
     <encoding>
       <software>Finale 2014.5 for Mac</software>
       <software>Dolet Light for Finale 2014.5</software>
-      <encoding-date>2017-11-20</encoding-date>
       <supports attribute="new-system" element="print" type="yes" value="yes"/>
       <supports attribute="new-page" element="print" type="yes" value="yes"/>
       <supports element="accidental" type="yes"/>
@@ -63,16 +62,16 @@ Op.10 No.3</creator>
   </defaults>
   <credit page="1">
     <credit-type>title</credit-type>
-    <credit-words default-x="568" default-y="1513" font-size="23.1" justify="center" valign="top">E大调练习曲</credit-words>
+    <credit-words default-x="568" default-y="1513" font-size="23.1" justify="center" valign="top">Etude in E Major</credit-words>
   </credit>
   <credit page="1">
     <credit-type>composer</credit-type>
-    <credit-words default-x="1059" default-y="1416" font-size="14.7" justify="right" valign="top" xml:space="preserve">肖邦
+    <credit-words default-x="1059" default-y="1416" font-size="14.7" justify="right" valign="top" xml:space="preserve">Chopin
 Op.10 No.3</credit-words>
   </credit>
   <credit page="1">
     <credit-type>subtitle</credit-type>
-    <credit-words default-x="564" default-y="1456" font-size="14.7" justify="center" valign="top">《离别》</credit-words>
+    <credit-words default-x="564" default-y="1456" font-size="14.7" justify="center" valign="top">Tristesse</credit-words>
   </credit>
   <credit page="2">
     <credit-type>page number</credit-type>

@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
 <score-partwise version="3.0">
-  <movement-title>二部创意曲No.1</movement-title>
+  <movement-title>Two-Part Invention No.1</movement-title>
   <identification>
     <creator type="arranger">BWV772</creator>
     <encoding>
       <software>Finale 2014.5 for Mac</software>
       <software>Dolet Light for Finale 2014.5</software>
-      <encoding-date>2017-08-15</encoding-date>
       <supports attribute="new-system" element="print" type="yes" value="yes"/>
       <supports attribute="new-page" element="print" type="yes" value="yes"/>
       <supports element="accidental" type="yes"/>
@@ -62,12 +61,12 @@
   </defaults>
   <credit page="1">
     <credit-type>title</credit-type>
-    <credit-words default-x="545" default-y="1456" font-family="Arial" font-size="22" justify="center" valign="top">二部创意曲No.1</credit-words>
+    <credit-words default-x="545" default-y="1456" font-family="Arial" font-size="22" justify="center" valign="top">Two-Part Invention No.1</credit-words>
   </credit>
   <credit page="1">
     <credit-type>subtitle</credit-type>
     <credit-words default-x="550" default-y="1414" font-family="Arial" font-size="13.2" justify="center" valign="top" xml:space="preserve">Invention No.1
-C大调</credit-words>
+C Major</credit-words>
   </credit>
   <credit page="1">
     <credit-type>arranger</credit-type>

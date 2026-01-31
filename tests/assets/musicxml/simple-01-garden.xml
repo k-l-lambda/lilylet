@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
 <score-partwise version="3.0">
-  <movement-title>音    苑</movement-title>
+  <movement-title>Music Garden</movement-title>
   <identification>
     <rights>?</rights>
     <encoding>
       <software>Finale 2014.5 for Mac</software>
       <software>Dolet 6.9 for Finale</software>
-      <encoding-date>2017-03-31</encoding-date>
       <supports attribute="new-system" element="print" type="yes" value="yes"/>
       <supports attribute="new-page" element="print" type="yes" value="yes"/>
       <supports element="accidental" type="yes"/>
@@ -62,7 +61,7 @@
   </defaults>
   <credit page="1">
     <credit-type>title</credit-type>
-    <credit-words default-x="590" default-y="1431" font-size="22" halign="center" valign="top" xml:space="preserve">音    苑</credit-words>
+    <credit-words default-x="590" default-y="1431" font-size="22" halign="center" valign="top" xml:space="preserve">Music Garden</credit-words>
   </credit>
   <part-list>
     <score-part id="P1">

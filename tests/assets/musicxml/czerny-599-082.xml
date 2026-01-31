@@ -7,7 +7,6 @@
     <encoding>
       <software>Finale 2014 for Mac</software>
       <software>Dolet 6.9 for Finale</software>
-      <encoding-date>2017-04-13</encoding-date>
       <supports attribute="new-system" element="print" type="yes" value="yes"/>
       <supports attribute="new-page" element="print" type="yes" value="yes"/>
       <supports element="accidental" type="yes"/>
