@@ -1,0 +1,278 @@
+[title "Norturne Opus 48 Nr.1"]
+[composer "Chopin"]
+
+\staff "1" \key ef \major \time 4/4 \clef "treble" \tempo "Lento" r4 g'' r af \\
+\staff "2" \clef "bass" <c,, c'>4-. <g'' ef' g>\sustainOff-. <c,, c'>\sustainOn-. <af'' ef' af>\sustainOff-. | %1
+
+\staff "1" r8 g''4( d8~ d16[ ef f ef] d[ ef f g] \\
+\staff "2" <b,, b'>4-. <g'' d' f g>\sustainOff-. <c,, c'>\sustainOn-. <g'' c ef g>-. | %2
+
+\staff "1" c'4 c8.[ c16] d4 c8.[ af16] \\
+\staff "2" <af,, af'>4-. <c'' ef af>\sustainOff-. <f,,, f'>\sustainOn-. <f'' c' d>-. | %3
+
+\staff "1" g'4~ g16[ \grace bf8 af16 g d] ef[ c)] r8 r4 \\
+\staff "2" <g,, g'>4-. <f'' b>-. <c,, c'>\sustainOff\sustainOn-. <ef'' g>-. | %4
+
+\staff "1" r4 g'' r af~( \\
+\staff "2" <ef,,, ef'>4-. <g'' bf ef g>\sustainOff-. <af,, af'>\sustainOn-. <f'' c' ef>-. | %5
+
+\staff "1" af''8 g4 f8~ f16[ ef f \grace ef[ \grace f] ef] d[ ef f g] \\
+\staff "2" <bf,, bf'>4-. <bf'' d af'>8-. r16 <b,, b'>\sustainOff-. <c c'>4\sustainOn-. <a'' ef' g>-. | %6
+
+\staff "1" d'8[ d,~] d16[ g c d] ef4.. fs,16 \\
+\staff "2" <d,, d'>4-. <bf'' g'>-. <d,,, d'>\sustainOff\sustainOn-. <a''' c>-. | %7
+
+\staff "1" fs4.~ fs32[ g bf a] g4) r \\
+\staff "2" <g,, g'>4-. <d'' bf' d>8-. r16 d,( <g, g'>4\sustainOn)-. <d'' bf' d>-. | %8
+
+\staff "1" r4 af'~(-> af8[ df f bf] \\
+\staff "2" <gf,, gf'>4-. <gf'' af c ef>-. <f,, f'>\sustainOff\sustainOn-. <f'' af df f>-. | %9
+
+\staff "1" af''4.( \grace af8))[ \grace gf,( \grace af \grace ef'] af16[ gf f] \grace f,8([ \grace af \grace df] f4)) r \\
+\staff "1" r4 r r8 \\
+\staff "2" <c,,, c'>4-. <c'' af' ef'>-. <df,, df'>\sustainOff-. <f'' af df>8\sustainOn-. r16 <c, c'>\sustainOff-. | %10
+
+\staff "1" r4 g'( \grace af16[ \grace bf] af\<[ g b d] d[ ef c' af\!] \\
+\staff "2" <b,, b'>4-. <g'' d' f>\sustainOff-. <c,, c'>\sustainOn-. <g'' c ef g>-. | %11
+
+\staff "1" g''4~ g16[ cs, d g f ef] ef4) r \\
+\staff "2" <d,, d'>4-. <g' b f' g>-. <ef, ef'>\sustainOff\sustainOn-. <g' c g'>8-. r16 <ef, ef'>\sustainOff-. | %12
+
+\staff "1" r4 b'~(-> bf8[ c d ef)] \\
+\staff "2" <f,, f'>4-. <af' d af'>\sustainOff-. <ef, ef'>\sustainOn-. <g' c g'>8-. r16 <c,, c'>\sustainOff-. | %13
+
+\staff "1" r4 d'~-> d8[ ef f g] \\
+\staff "2" <b,, b'>4-. <g'' d' f g>\sustainOff-. <c,, c'>\sustainOn-. <g'' c ef g>8-. r16 c,,-. | %14
+
+\staff "1" g''8[ f af c,] d[ ef \grace ef[ \grace f \grace ef \grace d \grace ef] g f] \\
+\staff "2" <g,, f'>4-. <f'' c' af'>\sustainOff-. <af,, af'>\sustainOn-. <f'' c' af'>-. | %15
+
+\staff "1" d'2() r \\
+\staff "2" <bf,, bf'>4-. <f'' bf d af'>8-. r16 <bf,, bf'>\sustainOff( <b b'>4\sustainOn)-. <g'' d' f g>8-. r16 <b,, bf'>\sustainOff-. | %16
+
+\staff "1" r4 g'' r af \\
+\staff "2" \clef "treble" <c,, c'>4-. <c'' ef bf'>-. <f,,, f'>\sustainOff\sustainOn-. <c''' ef af> | %17
+
+\staff "1" r8 g''4( f8~ f16[ ef f \grace ef[ \grace f] ef] d[ ef f g] \\
+\staff "2" \clef "bass" <bf,, bf'>4 <f'' bf d af'> <ef, ef'>\sustainOff\sustainOn <g' bf d g>\sustainOff | %18
+
+\staff "1" \grace g''8 c,2) r4 f( \\
+\staff "2" <af,, af'>4-. <af'' c g'>\sustainOff-. <d,, d'>\sustainOn-. <af'' c f>\sustainOff-. | %19
+
+\staff "1" \grace b'8 ef4. d8~ d16\<[ c d \grace c[ \grace d] c] b[ c d ef\!] \\
+\staff "2" <g,, g'>4-. <g'' b f'>\sustainOff-. <af,, af'>\sustainOn-. <ef'' af c ef>-. | %20
+
+\staff "1" g'4) c'~( c16\>[ b bf a\!] af[ f af, df~] \\
+\staff "2" <ef,,, ef'>4-. <ef'' g c>\sustainOff-. <g,, f'>\sustainOn-. <df'' af' df>-. | %21
+
+\staff "1" <e df'>16[ c' \grace ef8 df16 c] ds[ e af g] f,[ c' f g] bf[ af c, d] \\
+\staff "2" <g,, g'>4-. <e'' bf' c>-. <af,, af'>\sustainOff\sustainOn-. <f'' c'>-. | %22
+
+\staff "1" ef'4) r8 c16[ d c] g4-> r8 g16([ af g)] \\
+\staff "2" <g,, g'>4-. <ef'' g c>\f-. <g,, g'>\sustainOff\sustainOn-. <c' g' b>-. | %23
+
+\staff "1" c1\ff~-> \\
+\staff "2" r4 <g bf>\>( <fs a> <f af>\!) \\
+\staff "2" <c,,, c'>1~ | %24
+
+\staff "2" <e, g c e>2( \tempo "lento" <f g b d>4 <f g b e>8.[ <f g b f'>16] \\
+\staff "2" <c,, c'>2 <g g'>4\sustainOff\sustainOn g'8.[ g16\sustainOff] | %25
+
+\staff "2" <e, c' e>4) <g c e> \\
+\staff "2" e,4 <e g>( <e c'> g \\
+\staff "2" <c,, c'>4 <c c'> <c g' c> <c c'> | %26
+
+\staff "2" <g c g'>2 <g c e>4 \\
+\staff "2" \grace e8 <e, a d>8.\arpeggio[\arpeggio\arpeggio <e a c>16\sustainOff\<]~~ \\
+\staff "2" <c,, g' e'>2 <a' e'>4 <a, a'>8.[ <a a'>16]~ | %27
+
+\staff "2" <g b ds f g>4\< \\
+\staff "2" <fs, a c d>2 <d g b d>4\sustainOff\sustainOn\! \\
+\staff "2" <d,, a' d>2 <g, g'>4 <g' fs'> | %28
+
+\staff "1" <e g e'>2 <d g d'>4\!\p <e g e'>8[ <f g b g'>] \\
+\staff "2" <c,, g' c g'>2\arpeggio\arpeggio\arpeggio\arpeggio <c g' f' g>4\sustainOn <c g' c g'>8\sustainOn[ <c g' d' g>\sustainOn] | %29
+
+\staff "1" <e g c e>4\arpeggio\arpeggio\arpeggio\arpeggio <g, c e g> <c e a c> <e g b e>\arpeggio\arpeggio\arpeggio\arpeggio \\
+\staff "2" <e,, g c g'>4 <e g e'> <a e' a>\sustainOff <e e' b'>\sustainOn\arpeggio\arpeggio\arpeggio | %30
+
+\staff "1" g''2 <es, g b e>4 <c d a' d>8)[ r16 <b f' g>(] \\
+\staff "1" <e g c e>2\arpeggio\arpeggio\arpeggio\arpeggio \\
+\staff "2" <c,, g' c e g c>2\arpeggio\arpeggio\arpeggio\arpeggio\arpeggio\arpeggio <e b' gs'>4\sustainOff\sustainOn <f d' a'>8\sustainOff[ r16 <g d' g>\sustainOn] | %31
+
+\staff "1" \grace b8 <b f' g d'>2\>\arpeggio\arpeggio\arpeggio\arpeggio <c e c'>\!)\arpeggio\arpeggio\arpeggio \\
+\staff "2" <g, d' g>4~ <g, g'> <c g' d' g>2\sustainOff\sustainOn\arpeggio\arpeggio\arpeggio\arpeggio | %32
+
+\staff "1" <a' c a'>2( <g c g'>4 <g a c a'> \\
+\staff "2" <f,, c' f c'>2 <e c' a'>4\sustainOff\sustainOn <ef c' a'>\sustainOff\sustainOn | %33
+
+\staff "1" <fs as ds fs>4 <c d as' ds>8.[ <d as' ds>16] <d b' ds>4 <d fs ds'> \\
+\staff "2" <d,, a' d a'>4 <fs d' a'>8.[ <fs d' as'>16\sustainOff] <g d' b'>4\sustainOn <a d c'>\sustainOff\sustainOn | %34
+
+\staff "1" <b' d b'>2\arpeggio\arpeggio\arpeggio <a d a'>4 <a b d b'> \\
+\staff "2" <g, d' g d'>2\arpeggio\arpeggio\arpeggio\arpeggio <fs d' a'>4\sustainOff <f bs d b'> | %35
+
+\staff "1" <gs' b e gs>2\arpeggio\arpeggio\arpeggio\arpeggio <g b e g>4 d'8[ f8. e16] \\
+\staff "1" <f g g'>4 \\
+\staff "2" <e,, b' e b'>2\arpeggio\arpeggio\arpeggio\arpeggio <e b' f' b>4\sustainOff\sustainOn <g d' b'>\sustainOff\sustainOn | %36
+
+\staff "1" <e c' e g>2\arpeggio\arpeggio\arpeggio\arpeggio <f g b d g>4 <f g b e g>8[ <f g b f' g>] \\
+\staff "2" <c,, g' c g'>2\arpeggio\arpeggio\arpeggio\arpeggio <c g' g'>4\sustainOff <c g' g'>8\sustainOn[ <c g' g'>\sustainOff] | %37
+
+\staff "1" <e c' e g>4) <g, c e g>( <c e a c>\< <e g c e> \\
+\staff "2" <c,, g' c g'>4 <c g' e'>\sustainOff <a' e' a>\sustainOn <g e' c'>\sustainOff\sustainOn | %38
+
+\staff "1" <g' c e g>8) <fs, fs'>16(->[ <g g'> <g g'>] <g g'>[ <af af'> <af af'>] <af af'>[ <g g'> <g g'>)] <e' g e'>4( <d g d'>8[ <g, b f' g>] \\
+\staff "2" <g,, g'>8 <fs fs'>16\<\sustainOff[ <g g'> <g g'>] <g g'>[ <af af'>\! <af af'>\>] <af af'>[ <g g'> <g g'>\!] <g' d' f c'>4\>\sustainOn\arpeggio\arpeggio\arpeggio\arpeggio <g d' f b>8[ <g, g'>\!\sustainOff] | %39
+
+\staff "1" <e f g d'>8) <fs, fs'>16([ <g g'> <g g'>] <gs gs'>[ <a a'> <a a'>] <as as'>[ <b b'> <b b'>] <c e c'>2 \\
+\staff "2" <g, d' f b>8-> <fs, fs'>16[ <g g'> <g g'>] <gs gs'>[ <a a'> <a a'>] <as as'>[ <b b'> <b b'>] <c c'>2\sustainOff-> | %40
+
+\staff "1" <a' c a'>8\f) <b, b'>16([ <c c'> <c c'>] <c c'>[ <cs cs'> <cs cs'>] <cs cs'>[ <d d'> <ef ef'>] \\
+\staff "2" <f,, c' f c'>8\arpeggio\arpeggio\arpeggio\arpeggio <b, b'>16\sustainOff[ <c c'> <c c'>] <c c'>[ <cs cs'> <cs cs'>] <cs cs'>[ <d d'> <ef ef'>] | %41
+
+\staff "1" <g' c ef g>8)-> <c, c'>16([ <cs cs'> <cs cs'>] <cs cs'>[ <d d'> <d d'>] <d d'>[ <ef ef'> <g a c a'>] \\
+\staff "2" <ef, g c ef>8 <c, c'>16\sustainOff[ <cs cs'> <cs cs'>] <cs cs'>[ <d d'> <d d'>] <e d'>[ <ff ef'> <ef' g a ef'>->] | %42
+
+\staff "1" <fs a d fs>8) <cs cs'>16([ <d d'> <d d'>] <d d'>[ <ds ds'> <ds ds'>] <ds ds'>[ <e e'> <e e'>] <e e'>[ <f f'> <f f'>] <f f'>[ <fs fs'> <fs fs'>] <fs fs'>[ <g g'> <gs gs'>] <gs gs'>[ <a a'> <as as'>] \\
+\staff "2" <d, a' d>8-> <cs, cs'>16\sustainOff[ <d d'> <d d'>] <d d'>[ <ds ds'> <ds ds'>] <ds ds'>[ <e e'> <e e'>] <e e'>[ <f f'> <f f'>] <f f'>[ <fs fs'> <fs fs'>] <fs fs'>[ <g g'> <gs gs'>] <gs gs'>[ <a a'> <as as'>] | %43
+
+\staff "1" <b' d b'>8) <cs, cs'>16([ <d d'> <d d'>] <d d'>[ <ds ds'> <ds ds'>] <ds ds'>[ <e e'> <f f'>] <a b d a'>8) <d, d'>16([ <ds ds'> <ds ds'>] <ds ds'>[ <e e'> <e e'>] <e e'>[ <f f'> <a b d b'>)] \\
+\staff "2" <g, d' b'>8-> <cs, cs'>16\sustainOff[ <d d'> <d d'>] <d d'>[ <ds ds'> <ds ds'>] <ds ds'>[ <e e'> <f f'>] <f' a b d>8\sustainOn <d, d'>16\sustainOff[ <ds ds'> <ds ds'>] <ds ds'>[ <e e'> <e e'>] <e e'>[ <f f'> <f' a b d f>->] | %44
+
+\staff "1" <gs' b e gs>8(-. <ds ds'>16[ <e e'> <e e'>] <e e'>[ <f f'> <f f'>] <f f'>[ <fs fs'> <fs fs'>] \\
+\staff "2" <e, b' e>8-> <ds, ds'>16\sustainOff[ <e e'> <e e'>] <e e'>[ <f f'> <f f'>] <f f'>[ <fs fs'> <fs fs'>] | %45
+
+\staff "1" <fs fs'>16[ <g g'> <g g'>] <g g'>[ <g f' g> <g f' g>] <g f' g>[ <g f' g> <g f' g>] <g b f' g>[ <g b f' g> <g b f' g>)] \\
+\staff "2" <fs,, fs'>16[ <g g'> <g g'>] <g g'>[ <af af'> <a a'>] <as as'>[ <b b'> <c c'>] <cs cs'>[ <d d'> <ds ds'>] | %46
+
+\staff "1" <e' g e'>8\ff <e g c>\<([ <d g d'> <e g e'> <f g b f'>\!] \\
+\staff "2" \clef "treble" \grace fs,16[ \grace g] g4.->\trill \grace fs16[ \grace g] <g,, g'>8\sustainOff\sustainOn <g'' d' f b>\sustainOff\arpeggio[\arpeggio\arpeggio\arpeggio <g e' c'>\sustainOn\arpeggio\arpeggio\arpeggio <g d' g d'>\sustainOff\arpeggio]\arpeggio\arpeggio\arpeggio \\
+\staff "2" <c, g' c e>8\arpeggio\arpeggio\arpeggio\arpeggio \grace fs,16[ \grace g] g4.\trill \grace fs16[ \grace g(] | %47
+
+\staff "2" \clef "bass" <e' g c e>16)\arpeggio\arpeggio\arpeggio\arpeggio \ottava #-1 <c' c'>[ <d d'>] <c c'>[ <g g'> <a a'>] <g g'>[ <e e'> \ottava #0 <f f'>] <e e'>[ <c c'> <d d'>] <c c'>[ <g g'> <a a'>] <g g'>[ <e e'> <f f'>] <e e'>[ <c c'> <d d'>] <c c'>[ <a a'> <f e'>] \\
+\staff "2" <c, g' c g'>16-> <c' c'>\sustainOff[ <d d'>] <c c'>->[ <g g'> <a a'>] <g g'>->[ <e e'> <f f'>] <e e'>->[ <c c'> <d d'>] <c c'>->[ <g g'> <a a'>] <g g'>->[ <e e'> <f f'>] <e e'>->[ <c c'> <d d'>] <c c'>->[ <a a'> <e e'>] | %48
+
+\staff "1" <g c e g>16-> <ef'' ef'>[ <d d'>] <cs cs'>\ff[ <c c'> <b b'>] <bf bf'>[ <a a'> <gs gs'>] <g g'>[ <fs fs'> <f f'>] <e' gs e'>4(-> <d f d'>8)->[ <f, g d' g>(->] \\
+\staff "2" <g,, g'>16-> <ef'' ef'>[ <d d'>\sustainOff] <cs cs'>[ <c c'> <b b'>] <bf bf'>[ <a a'> <gs gs'>] <g g'>[ <fs fs'> <f f'>] <e e'>\sustainOn[ <ds ds'> <d d'>] <cs cs'>[ <c c'> <b b'>\sustainOff] <bf bf'>\sustainOn[ <a a'> <af af'>\sustainOff] <g g'>\sustainOn[ <fs fs'> <a a'>\sustainOff] | %49
+
+\staff "1" <d' f g b d>8 \ottava #-1 <e' e'>16)[ <d d'> <a a'>] <g g'>[ <e e'> \ottava #0 <d d'>] <a a'>[ <g g'> <g, b f' g>] <c e c'>4 r \\
+\staff "2" <g, d' f b>8\arpeggio\arpeggio\arpeggio\arpeggio <e'' e'>16[ <d d'> <a a'>\sustainOff] <g g'>[ <e e'> <d d'>] <a a'>[ <g g'> <g, g'>] <c, c'>\sfz\sustainOn(->[ <g' g'>\p <g g'>)] <g g'>([ <c c'>) <c c'>] <c c'>\>([ <g' g'> <g g'>)] <g g'>([ <c c'>) <c c'>\!] | %50
+
+\staff "1" g''4 r af \\
+\staff "1" r8 <g' c ef>([ <g c ef>] <g c ef>[ <g c ef> <g c ef>] <af c ef>[ <af c ef> <af c ef>] <af c ef>[ <af c ef> <af c ef>] \\
+\staff "2" <c, c'>8-.[ <ef c'>( <g ef'>] <ef c'>[ <g ef'> <ef c'>\sustainOff)] <f, f'>\sustainOn-.[ <f' c'>( <af d>] <f c'>[ <af ef'> <f c'>\sustainOff)] | %51
+
+\staff "1" g''4 d8( \\
+\staff "1" <af' bf d>8[ <af bf d> <af bf d>] <af bf d>[ <af bf d> <af bf d>] <ef g d'>16)[ <g c ef>-. <g c f>-. <g c ef>-.] <g c d>-.[ <g c ef>-. <g c f>-. <g c g'>)-.] \\
+\staff "2" <b,, b'>8[ <b' g'> <d d'>] <b g'>[ <d d'> <b g'>\sustainOff] <c, c'>\sustainOn[ <c' g'> <ef ef'>] <c g'>[ <ef ef'> <c g'>\sustainOff] | %52
+
+\staff "1" c'4 c8.[ <ef, af c>16] d'4~ d8[ c16 <c, d af'>] \\
+\staff "1" af'8[ <ef af> <ef af>] <ef af>[ <ef af> <ef af>] <d af'>[ <d af'> <d af'>] <d af'>[ <d af'> <d af'>] \\
+\staff "2" <af,, af'>8[ <c' af'> <ef c'>] <c af'>[ <ef c'> <c af'>\sustainOff] <f,, f'>\sustainOn[ <d'' f af> <f af c>] <d f af>[ <f af c> <d f af>\sustainOff] | %53
+
+\staff "2" g'4\< <bf, d f g>16[ \grace bf'8 <bf, d f af>16 <bf d f g> <f g b d>] <ef g ef'>[ <ef g c>] \\
+\staff "1" <c d f>8[ <c d f> <c d f>] \\
+\staff "2" r8 ef,[ ef] ef\>[ ef ef\sustainOff\!] \\
+\staff "2" <g,, g'>8[ <g' d'> <d' g>] <g, d'>[ <d' g> <g, d'>] <c, c'>[ <g' c> <c g'>] <g c>[ <c g'> <g c>] | %54
+
+\staff "1" g''4 r af~ \\
+\staff "1" r8 <g' bf ef>([ <g bf ef>] <g bf ef>[ <g bf ef> <g bf ef>] <af c ef>[ <af c ef> <af c ef>] <af c ef>[ <af c ef> <af c ef>] \\
+\staff "2" <ef, g bf>8 \\
+\staff "2" <ef,,, ef'>8[ <ef'' bf'> <g ef'>] <ef bf'>[ <g ef'> <ef bf'>] <af,, af'>[ <f'' c'> <af ef'>] <f c'>[ <af ef'> <f c'>\sustainOff] | %55
+
+\staff "1" af''8 g4 f8 \\
+\staff "1" <af' bf d>8[ <af bf d> <af bf d>] <af d>[ <af d> <af d f>]~ <g c f>16[ <g c ef>-. <g c f>-. <g c ef>-.] <g c d>-.[ <g c ef>-. <g af c f>-. <g af c ef g>)-.] \\
+\staff "2" <bf,, bf'>8[ <bf' af'> <f' c'>] <bf, af'>[ <f' d'> <b,, b'>\sustainOff] <c c'>\sustainOn[ <c' g'> <ef ef'>] <c g'>[ <ef ef'> <c g'>\sustainOff] | %56
+
+\staff "1" d'8([ d,~->] d16\<[ <d g>-. <d g c>-. <d g d'>-.] ef'4\!~ ef8[ f,] \\
+\staff "1" <d g bf>8[ <d g> d] <ef g>[ <ef g> <ef g>] <es f>[ <ef f> <c ef>] \\
+\staff "2" <d,, d'>8[ <bf' g'> <d bf'>] <bf g'>[ <d bf'> d\sustainOff] <d,, d'>\sustainOn[ <d'' a'> <a' c>] <d, a'>[ <a' c> <d, a'>\sustainOff] | %57
+
+\staff "1" f4-> g~(-> \\
+\staff "1" <bf ds>8[ <bf ds> <bf ds>] <bf ds>[ <bf ds> <bf ds>] <bf ds>[ <b ds> <b ds>] <b ds>[ <b ds> <b ds>] \\
+\staff "1" r8 r g'~ g2) \\
+\staff "2" <g,, g'>8[ <g' d'> <d' g>] <g, d'>[ <d' g>\sustainOff d,] <g, g'>\sustainOn[ <g' d'> <d' g>] <g, d'>[ <d' g> <g,, g'>\sustainOff] | %58
+
+\staff "1" g'4 af~-> af8[ df f bf] \\
+\staff "1" <b d>8[ <c ef> <c ef>] <c ef>[ <c ef> <c ef>] <af df>[ <af df> <df af'>] <f af d>[ <f af d> <bf d>] \\
+\staff "2" <gf,, gf'>8[ <gf' ef'> <c af'>] <gf ef'>[ <c af'> <gf, gf'>\sustainOff] <f f'>\sustainOn[ <f' df'> <df' af'>] <f, df'>[ <df' af'> <f,, f'>\sustainOff] | %59
+
+\staff "1" af''4\>~ af8[ gf16 <g, af f'>] f'2~ \\
+\staff "1" <g' af ef'>8[ <g af ef'> <g af ef'>] <g af ef'>[ <g af ef'> <g af ef'>] <f af df>[ <f af df> <f af df>\!] <f af df>[ <f af df> <f af df>] \\
+\staff "2" <c,, c'>8[ <c' af'> <ef ef'>] <c af'>[ <ef ef'> <c, c'>\sustainOff] <df df'>\sustainOn[ <df' af'> <f df'>] <df af'>[ <f df'> <c, c'>\sustainOff] | %60
+
+\staff "1" f'4) g,-> \\
+\staff "1" <f g d'>8[ <f g d'> <f g d'>] <d f>[ <d f> <d f>] <ef af>16(-.[ <ef g>-. <ef g b>-. <ef g c>-.] <ef g c d>-.[ <g c ef>-. <c ef c'>-. <c ef af>\!-.] \\
+\staff "2" <b,, b'>8[ <b' g'> <d d'>] <b g'>[ <d g> <b, b'>\sustainOff] <c c'>\sustainOn[ <c' g'> <ef c'>] <c g'>[ <ef ef'> <c, c'>\sustainOff] | %61
+
+\staff "1" g''4~-> <f, g b g'>16[ <f g b cs>-. <f bf d>-. <f g bf g'>-. <f g bf f'>-. <g bf ef>] ef'4\>)-> r \\
+\staff "1" <f g b>8[ <f g b> <f g b>] <g c>[ <g c> <g c>] <g c>[ <g c> <g c>\!] \\
+\staff "2" <d,, d'>8[ <d' g> <g d'>] <d g>[ <g d'> d\sustainOff] <ef, ef'>\sustainOn[ <ef' c'> <g ef'>] <ef c'>[ <g ef'> <ef, ef'>\sustainOff] | %62
+
+\staff "1" r4 b'~(-> bf8\<[ c d ef)] \\
+\staff "1" <d af'>8[ <d af'> <d af'>] <d af'>[ <d af'> <d af'>] <ef g>[ <ef g> <ef g>] <ef g>[ <ef g> <ef g>\!] \\
+\staff "2" <f,, f'>8[ <f' b> <b f'>] <f b>[ <b f'> f\sustainOff] <ef, ef'>\sustainOn[ <c' g'> <g' c>] <c, g'>[ <g' c> <c,, c'>\sustainOff] | %63
+
+\staff "1" r4 d'~(-> \\
+\staff "1" <f g>8[ <f g> <f g>] <f g>[ <f g> <f g>] \\
+\staff "2" <b,, b'>8[ <b' g'> <d d'>] <b g'>[ <d d'> <b, b'>\sustainOff] | %64
+
+\staff "1" d'8\<[ ef f g] \\
+\staff "1" <ef g>8[ <ef g> <ef g c>] <g c ef>[ <g c ef> <g c ef>\!] \\
+\staff "2" <c,, c'>8[ <c' g'> <ef c'>] <c g'>[ <ef g ef'> <c, c'>\sustainOff] | %65
+
+\staff "1" g''8\pp[ f af c,] d[ ef] \\
+\staff "1" <af' c ef>8[ <af c ef> <af c ef>] <af c ef>[ <af c ef> <f af>] <f af c>[ <f af c> <f af c>] <af c ef>16-.[ <af c f>-. <af c ef>-. <af c d>-. <af c ef>-. <af c ef g>-. <af c ef f>-.] \\
+\staff "2" <f,,, f'>8[ <f'' af c> <af c ef>] <f af c>[ <af c ef> <f,, f'>\sustainOff] <af af'>\sustainOn[ <f'' af c> <af c ef>] <f af c>[ <af c ef> <bf,, af'>\sustainOff] | %66
+
+\staff "1" d'1 \\
+\staff "1" <f af bf>8->[ <f af bf> <f af bf>] <f af bf>[ <f bf> <f af>] <f g>[ <f g> <f g>] <f g>[ <f af> <f g>)] \\
+\staff "2" <bf,, bf'>8[ <bf' af'> <f' d'>] <bf, af'>[ <f' d'> <bf,, bf'>\sustainOff] <b b'>\sustainOn[ <b' g'> <d d'>] <b g'>[ <d d'> <b, b'>\sustainOff] | %67
+
+\staff "1" g''4( r af \\
+\staff "1" <e g bf c e>8[ <g bf c e> <g bf c e>] <bf c e>[ <bf c e> <bf c e>] <af c e>[ <af c e> <af c e>] <af c f>[ <af c f> <af c f>] \\
+\staff "2" <c,, c'>8[ <g'' bf c> <bf c e>] <g bf c>[ <bf c e> <c,, c'>\sustainOff] <f f'>\sustainOn[ <f' af c> <af c e>] <f af c>[ <af c f> <f, f'>\sustainOff] | %68
+
+\staff "1" r8 r g''4 r8 r f\! \\
+\staff "1" <af' c ef>8[ <af c ef> <af c ef>] <af c ef>[ <af bf d> <af bf d f>]~ <g bf d f>16[ <g bf ef>-. <g bf f'>-. <g bf ef>-.] <g bf d>-.[ <g bf ef>-. <g bf f'>-. <g bf g'>\!-.] \\
+\staff "2" <bf,, bf'>8[ <f'' af c> <af c ef>] <f af c>[ <af bf d>\sustainOff <bf,, bf'>] <ef ef'>\sustainOn[ <ef' g bf> <g bf d>] <ef g bf>[ <g bf d> <ef, ef'>\sustainOff] | %69
+
+\staff "1" \grace <g' c g'>8( c4)) c8\<([ c] c4 f8[ ef] \\
+\staff "1" <g' af>8[ <g af> <g af>] <g af>[ <g af> <g af>] <f af>[ <f af> <f af>] <f af c>[ <f af c> <f af c>\!] \\
+\staff "2" <af,, af'>8[ <c' ef af> <ef af c>] <c ef af>[ <ef af c> <af,, af'>\sustainOff] <d d'>\sustainOn[ <d' f af> <f af c>] <d f af>[ <f af c> <d, d'>\sustainOff] | %70
+
+\staff "1" ef'4~ ef8\>[ d~] <ef, af d>16\!\<[ <ef af d>-. <ef af d>-. <ef af c>-.] <ef a b>-.[ <ef a c>-. <ef a d>-. <ef a ef'>\!)-.] \\
+\staff "1" <f af c>8[ <f af c> <f af c>] <f g b>[ <f g b> <f g b>] \\
+\staff "2" <g,, g'>8[ <d'' f af> <f af c>] <d g>[ <g b> <g,, g'>\sustainOff] <af af'>\sustainOn[ <c' af'> <ef af c>] <c af'>[ <ef af c> <af,, af'>\sustainOff] | %71
+
+\staff "1" g'4 c'\f(-> \\
+\staff "1" <g c>8[ <g c> c] <c' g'>[ <c g'> <c g'>] <c d c'>16[ <c d b'> <c d bf'> <c d a'>] <c d af'>[ <af c f> <f c'> <f af c d>] \\
+\staff "2" <ef,,, ef'>8[ ef'' <g ef'>] <ef g c>[ <g c g'> <ef,, ef'>\sustainOff] <f f'>\sustainOn[ <f'' c' d> <c' d f>] <f, c' d>[ <c' d af'> <f,,, f'>\sustainOff] | %72
+
+\staff "1" <e bf' c e>16[ <f bf c f> <e bf' c e> <d bf' c d>] <e bf' c e>[ <bf' c f> <bf c e af> <bf c e g>] <f c'>[ <f c' e> <f c' f> <c' g'>] <c d bf'>[ <c d af'> <f, c'> <f c' d>] \\
+\staff "2" <g,, g'>8[ <g'' c> <c g'>] <g c>[ <c g'> <g,, g'>\sustainOff] <af af'>\sustainOn[ <f'' c'> <c' f>] <f, c'>[ <c' d af'> <af,, af'>\sustainOff] | %73
+
+\staff "1" ef'4.\>) c16\!\<(-.[ <ef, g d'>-. <ef g c>\!-.] g4.\>) <bf, d g>16\!\<-.[ <bf d af'>-. <bf d g>-.] \\
+\staff "1" <ef g cf>8[ <ef g cf> <ef g cf>] <ef g c>[ <ef g c> <ef g c>] <c d>[ <c d> <c d>] <b d>[ <bf d> <bf d>] \\
+\staff "2" <g,, g'>8[ <c' g'> <g' c>] <c, g'>[ <g' c> <c, g'>\sustainOff] <g, g'>\sustainOn[ <g' d'> <d' g>] <g, d'>[ <d' g> <g, d'>\sustainOff] | %74
+
+\staff "1" c2\ff~(-> c16\<[ df f af] df[ e f g\!] \\
+\staff "2" <ef, af>8 <gf, ef'>[ <c af'> <gf ef'>\sustainOff] <gf, f'>\sustainOn[ <f' df'> <df' af'>] <f, df'>[ <df' af'> <f, df'>\sustainOff] \\
+\staff "2" <gf,, gf'>8[ <gf' ef'> <c af'>] | %75
+
+\staff "1" b2~-> b16[ af' g fs] f[ g, f' ef] \\
+\staff "2" <g,, g'>8([ <g' d'> <d' f>] <f af>[ <f af> <f af>)] <g,, g'>([ <g' d'> <d' f>\sustainOff] <f bf>\sustainOn[ <f bf> <f bf>)] | %76
+
+\staff "1" c1~-> \\
+\staff "2" c,,,8-.[ g''( <g c>] <ef' g>[ <ef g>) g,,-.] c-.[ g'( <g ef'>] <ef' g>[ <ef g>) g,,\sustainOff-.] | %77
+
+\staff "1" c16[ g c d] ef[ fs af g] b[ d c ef] fs[ g \grace bf8 af16 g] \\
+\staff "2" c,,,4-. r r2 | %78
+
+\staff "2" c''4) r <ef,,, g c ef>( <ef g c ef> \\
+\staff "2" r2 \\
+\staff "2" <c,, c'>4 <c c'> | %79
+
+\staff "1" <c ef>1)\fermata \\
+\staff "2" <c,, g' c ef g>1\fermata \bar "|." | %80

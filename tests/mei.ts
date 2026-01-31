@@ -41,11 +41,20 @@ const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<
 		// Step 2: Encode to MEI
 		const mei = lilylet.meiEncoder.encode(doc);
 
-		// Step 3: Calculate pageHeight based on measure count
+		// Step 3: Calculate pageHeight based on measure count and staff count
 		const measureCount = doc.measures?.length || 1;
+		// Calculate total staff count
+		let staffCount = 1;
+		if (doc.measures.length > 0) {
+			const firstMeasure = doc.measures[0];
+			staffCount = firstMeasure.parts.reduce((total, part) => {
+				const maxStaff = part.voices.reduce((max, voice) => Math.max(max, voice.staff || 1), 1);
+				return total + maxStaff;
+			}, 0) || 1;
+		}
 		const basePageHeight = 2000;
 		const measuresPerPage = 20;
-		const pageHeight = Math.max(basePageHeight, Math.ceil(measureCount / measuresPerPage) * basePageHeight);
+		const pageHeight = Math.max(basePageHeight, Math.ceil(measureCount / measuresPerPage) * basePageHeight) * 2 * staffCount;
 
 		// Step 4: Set Verovio options for single-page rendering
 		vrvToolkit.setOptions({
