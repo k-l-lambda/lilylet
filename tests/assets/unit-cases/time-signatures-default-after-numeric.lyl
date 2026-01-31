@@ -1,2 +1,4 @@
 \numericTimeSignature \time 4/4 \clef "treble" c'4 d e f |
 \defaultTimeSignature \time 2/2 g'2 a |
+\time 3/4 g2. |
+\time 3/2 g1. |

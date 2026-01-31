@@ -139,7 +139,7 @@ const generateIndexHtml = (files: string[], outputDir: string): void => {
 	}).join('\n');
 
 	const filterButtons = categories.map(cat =>
-		`<button class="filter-btn" data-filter="${cat}">${cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</button>`
+		`<a href="#${cat}" class="filter-btn" data-filter="${cat}">${cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</a>`
 	).join('\n                ');
 
 	const html = `<!DOCTYPE html>
@@ -154,10 +154,10 @@ const generateIndexHtml = (files: string[], outputDir: string): void => {
         h1 { text-align: center; color: #333; margin-bottom: 10px; }
         .stats { text-align: center; color: #666; margin-bottom: 30px; }
         .filter-bar { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        .filter-btn { padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 20px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .filter-btn { padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 20px; cursor: pointer; font-size: 14px; transition: all 0.2s; text-decoration: none; color: #333; }
         .filter-btn:hover { background: #e0e0e0; }
         .filter-btn.active { background: #4a90d9; color: white; border-color: #4a90d9; }
-        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(500px, 1fr)); gap: 20px; }
         .card { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
         .card.hidden { display: none; }
         .card-header { padding: 12px 16px; background: #f8f9fa; border-bottom: 1px solid #eee; font-weight: 500; font-size: 14px; }
@@ -173,27 +173,31 @@ const generateIndexHtml = (files: string[], outputDir: string): void => {
     <h1>Lilylet MEI Test Results</h1>
     <div class="stats">${files.length} test cases</div>
     <div class="filter-bar">
-        <button class="filter-btn active" data-filter="all">All</button>
+        <a href="#" class="filter-btn active" data-filter="all">All</a>
                 ${filterButtons}
     </div>
     <div class="gallery">
 ${cards}
     </div>
     <script>
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                const filter = btn.dataset.filter;
-                document.querySelectorAll('.card').forEach(card => {
-                    if (filter === 'all' || card.dataset.category === filter) {
-                        card.classList.remove('hidden');
-                    } else {
-                        card.classList.add('hidden');
-                    }
-                });
+        function applyFilter(filter) {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            const activeBtn = document.querySelector('.filter-btn[data-filter="' + filter + '"]');
+            if (activeBtn) activeBtn.classList.add('active');
+            document.querySelectorAll('.card').forEach(card => {
+                if (filter === 'all' || card.dataset.category === filter) {
+                    card.classList.remove('hidden');
+                } else {
+                    card.classList.add('hidden');
+                }
             });
-        });
+        }
+        function handleHash() {
+            const hash = window.location.hash.slice(1);
+            applyFilter(hash || 'all');
+        }
+        window.addEventListener('hashchange', handleHash);
+        handleHash();
     </script>
 </body>
 </html>`;

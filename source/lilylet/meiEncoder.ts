@@ -1762,6 +1762,20 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 				mei += `${indent}${indent}${indent}${indent}${indent}${indent}<scoreDef xml:id="${generateId('scoredef')}" key.sig="${newKeySig}" />\n`;
 			}
 		}
+		// Check for time signature change and output scoreDef if needed
+		if (measure.timeSig && mi > 0) {
+			const newTimeNum = measure.timeSig.numerator;
+			const newTimeDen = measure.timeSig.denominator;
+			const newMeterSymbol = measure.timeSig.symbol;
+			if (newTimeNum !== currentTimeNum || newTimeDen !== currentTimeDen || newMeterSymbol !== currentMeterSymbol) {
+				currentTimeNum = newTimeNum;
+				currentTimeDen = newTimeDen;
+				currentMeterSymbol = newMeterSymbol;
+				// Output a scoreDef with the new time signature
+				const meterSymAttr = currentMeterSymbol ? ` meter.sym="${currentMeterSymbol}"` : '';
+				mei += `${indent}${indent}${indent}${indent}${indent}${indent}<scoreDef xml:id="${generateId('scoredef')}"${meterSymAttr} meter.count="${currentTimeNum}" meter.unit="${currentTimeDen}" />\n`;
+			}
+		}
 		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, hairpinState, currentKey, partInfos, clefState);
 	});
 
