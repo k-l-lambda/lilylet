@@ -1,3 +1,7 @@
+[title "Minuet in G"]
+[subtitle "BWV Anh. 114"]
+[composer "Christian Petzold"]
+
 \staff "1" \key g \major \time 3/4 \clef "treble" \stemDown d'4(\p \stemUp g,8[ a b c] \\
 \staff "2" \clef "bass" \stemDown <g b d>2( a4 | %1
 
@@ -72,11 +76,11 @@
 
 \staff "1" \clef "treble" \stemDown d'4( \stemUp g,8[ fs] g4) \\
 \staff "2" \stemDown \clef "bass" b2 b4 \\
-\staff "2" \clef "bass" \stemDown g'4 \stemUp d2 | %25
+\staff "2" \clef "bass" \stemDown g'4\rest \stemUp d2 | %25
 
 \staff "1" \stemDown \clef "treble" e'4( \stemUp g,8[ fs] g4) \\
 \staff "2" \clef "bass" \stemDown c2 c4 \\
-\staff "2" \clef "bass" \stemUp a'4 e2 | %26
+\staff "2" \clef "bass" \stemUp a'4\rest e2 | %26
 
 \staff "1" \stemDown \clef "treble" d'4( c b \\
 \staff "2" \stemDown \clef "bass" b4( a g | %27
@@ -86,7 +90,7 @@
 
 \staff "1" \clef "treble" \stemUp d8([ e fs g a b] \\
 \staff "2" \clef "bass" \stemDown d,2. \\
-\staff "2" \clef "bass" \stemDown c4 c \stemUp fs, | %29
+\staff "2" \clef "bass" \stemDown c4\rest c \stemUp fs, | %29
 
 \staff "1" \stemDown \clef "treble" c'4) b \stemUp a \\
 \staff "2" \stemDown \clef "bass" e,4 g fs | %30
