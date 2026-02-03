@@ -547,21 +547,38 @@ const serializeEvent = (
 };
 
 
-// Key/time signature info to inject into first voice
+// Key/time/clef signature info to inject into voices
 interface MeasureContext {
 	key?: KeySignature;
 	time?: { numerator: number; denominator: number; symbol?: 'common' | 'cut' };
+	clef?: Clef;
 }
+
+// Find first clef in voice events
+const findVoiceClef = (voice: Voice): Clef | undefined => {
+	for (const event of voice.events) {
+		if (event.type === 'context') {
+			const ctx = event as ContextChange;
+			if (ctx.clef) {
+				return ctx.clef;
+			}
+		}
+	}
+	return undefined;
+};
 
 // Serialize a voice with pitch environment tracking
 // Takes currentStaff (what parser thinks staff is) and returns { str, newStaff }
 // If isGrandStaff is true, always output \staff command for clarity
-// If measureContext is provided, output key/time after \staff (for first voice only)
+// measureContext provides key/time for first voice
+// staffClef is the clef for this voice's staff (tracked across measures)
 const serializeVoice = (
 	voice: Voice,
 	currentStaff: number,
 	isGrandStaff: boolean = false,
-	measureContext?: MeasureContext
+	measureContext?: MeasureContext,
+	isFirstVoice: boolean = false,
+	staffClef?: Clef
 ): { str: string; newStaff: number } => {
 	const parts: string[] = [];
 	let prevDuration: Duration | undefined;
@@ -574,8 +591,8 @@ const serializeVoice = (
 		parts.push('\\staff "' + voice.staff + '"');
 	}
 
-	// Output key/time signatures after \staff (for first voice of first measure)
-	if (measureContext) {
+	// Output key/time signatures after \staff (for first voice only)
+	if (measureContext && isFirstVoice) {
 		if (measureContext.key) {
 			let keyStr = String(measureContext.key.pitch);
 			if (measureContext.key.accidental) {
@@ -595,7 +612,25 @@ const serializeVoice = (
 		}
 	}
 
+	// Output clef for every voice (use staff clef tracked across measures, or find from voice events)
+	const voiceClef = staffClef || findVoiceClef(voice);
+	if (voiceClef) {
+		parts.push('\\clef "' + CLEF_MAP[voiceClef] + '"');
+	}
+
+	// Track if we've already output the clef to avoid duplication
+	let clefOutputted = !!voiceClef;
+
 	for (const event of voice.events) {
+		// Skip clef context events if we've already output the clef at the beginning
+		if (clefOutputted && event.type === 'context') {
+			const ctx = event as ContextChange;
+			if (ctx.clef && !ctx.key && !ctx.time && !ctx.ottava && !ctx.stemDirection && !ctx.tempo && !ctx.staff) {
+				// This is a clef-only context event, skip it
+				continue;
+			}
+		}
+
 		const { str: eventStr, newEnv } = serializeEvent(event, pitchEnv, prevDuration);
 		pitchEnv = newEnv;
 
@@ -616,12 +651,14 @@ const serializeVoice = (
 
 
 // Serialize a part, tracking staff state across voices
-// If measureContext is provided, pass it to the first voice only
+// measureContext is passed to all voices (for clef), but key/time only to first voice
 const serializePart = (
 	part: Part,
 	currentStaff: number,
 	isGrandStaff: boolean = false,
-	measureContext?: MeasureContext
+	measureContext?: MeasureContext,
+	isFirstPart: boolean = false,
+	clefsByStaff?: Record<number, Clef>
 ): { str: string; newStaff: number } => {
 	if (part.voices.length === 0) {
 		return { str: '', newStaff: currentStaff };
@@ -632,9 +669,11 @@ const serializePart = (
 
 	for (let i = 0; i < part.voices.length; i++) {
 		const voice = part.voices[i];
-		// Only pass measureContext to first voice
-		const ctx = i === 0 ? measureContext : undefined;
-		const { str, newStaff } = serializeVoice(voice, staff, isGrandStaff, ctx);
+		// Pass measureContext to all voices, isFirstVoice for key/time
+		// Pass staff clef from clefsByStaff map
+		const isFirstVoice = isFirstPart && i === 0;
+		const staffClef = clefsByStaff?.[voice.staff];
+		const { str, newStaff } = serializeVoice(voice, staff, isGrandStaff, measureContext, isFirstVoice, staffClef);
 		voiceStrs.push(str);
 		staff = newStaff;
 	}
@@ -645,19 +684,33 @@ const serializePart = (
 
 
 // Serialize a measure, tracking staff state across parts
-const serializeMeasure = (measure: Measure, isFirst: boolean, currentStaff: number, isGrandStaff: boolean = false): { str: string; newStaff: number } => {
+// Always output key/time at start of each measure
+const serializeMeasure = (
+	measure: Measure,
+	isFirst: boolean,
+	currentStaff: number,
+	isGrandStaff: boolean = false,
+	currentKey?: KeySignature,
+	currentTime?: { numerator: number; denominator: number; symbol?: 'common' | 'cut' },
+	staffClefs?: Record<number, Clef>
+): { str: string; newStaff: number } => {
 	const parts: string[] = [];
 
-	// Build measure context for first voice (key/time signatures)
-	const measureContext: MeasureContext | undefined = isFirst ? {
-		key: measure.key,
-		time: measure.timeSig,
-	} : undefined;
+	// Build measure context for all voices (key/time)
+	// Key and time are written to first voice, clef to all voices based on staff
+	// Use passed currentKey/currentTime which tracks across all measures
+	const measureContext: MeasureContext = {
+		key: currentKey,
+		time: currentTime,
+	};
+
+	// Pass staffClefs to parts for per-voice clef lookup
+	const clefsByStaff = staffClefs || {};
 
 	// Parts
 	let staff = currentStaff;
 	if (measure.parts.length === 1) {
-		const { str: partStr, newStaff } = serializePart(measure.parts[0], staff, isGrandStaff, measureContext);
+		const { str: partStr, newStaff } = serializePart(measure.parts[0], staff, isGrandStaff, measureContext, true, clefsByStaff);
 		if (partStr) {
 			parts.push(partStr);
 		}
@@ -667,9 +720,8 @@ const serializeMeasure = (measure: Measure, isFirst: boolean, currentStaff: numb
 		const partStrs: string[] = [];
 		for (let i = 0; i < measure.parts.length; i++) {
 			const part = measure.parts[i];
-			// Only pass measureContext to first part
-			const ctx = i === 0 ? measureContext : undefined;
-			const { str, newStaff } = serializePart(part, staff, isGrandStaff, ctx);
+			// Pass measureContext to all parts, isFirstPart to first part only
+			const { str, newStaff } = serializePart(part, staff, isGrandStaff, measureContext, i === 0, clefsByStaff);
 			if (str) {
 				partStrs.push(str);
 			}
@@ -735,10 +787,35 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 
 	// Measures with bar lines, measure numbers, and double newlines
 	// Track staff state across measures (parser remembers staff across bar lines)
+	// Track key/time/clef across measures to output in every measure
 	const measureStrs: string[] = [];
 	let currentStaff = 1; // Parser starts at staff 1
+	let currentKey: KeySignature | undefined;
+	let currentTime: { numerator: number; denominator: number; symbol?: 'common' | 'cut' } | undefined;
+	const staffClefs: Record<number, Clef> = {}; // Track clef per staff
+
 	for (let i = 0; i < doc.measures.length; i++) {
-		const { str: measureStr, newStaff } = serializeMeasure(doc.measures[i], i === 0, currentStaff, isGrandStaff);
+		const measure = doc.measures[i];
+		// Update current key/time if measure has them
+		if (measure.key) {
+			currentKey = measure.key;
+		}
+		if (measure.timeSig) {
+			currentTime = measure.timeSig;
+		}
+
+		// Collect clefs from this measure's voices
+		for (const part of measure.parts) {
+			for (const voice of part.voices) {
+				for (const event of voice.events) {
+					if (event.type === 'context' && (event as ContextChange).clef) {
+						staffClefs[voice.staff] = (event as ContextChange).clef!;
+					}
+				}
+			}
+		}
+
+		const { str: measureStr, newStaff } = serializeMeasure(measure, i === 0, currentStaff, isGrandStaff, currentKey, currentTime, staffClefs);
 		// Always include measure, even if empty (use space rest for empty measures)
 		measureStrs.push(measureStr || 's1');
 		currentStaff = newStaff;
