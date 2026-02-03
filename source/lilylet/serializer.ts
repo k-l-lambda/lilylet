@@ -16,6 +16,7 @@ import {
 	ContextChange,
 	TupletEvent,
 	TremoloEvent,
+	BarlineEvent,
 	Pitch,
 	Duration,
 	Mark,
@@ -524,6 +525,16 @@ const serializeTremoloEvent = (
 };
 
 
+// Serialize a barline event
+const serializeBarlineEvent = (event: BarlineEvent): string => {
+	// Only output non-default barlines
+	if (event.style && event.style !== '|') {
+		return '\\bar "' + event.style + '"';
+	}
+	return '';
+};
+
+
 // Serialize a single event with pitch environment tracking
 const serializeEvent = (
 	event: Event,
@@ -541,6 +552,8 @@ const serializeEvent = (
 			return serializeTupletEvent(event as TupletEvent, env);
 		case 'tremolo':
 			return serializeTremoloEvent(event as TremoloEvent, env);
+		case 'barline':
+			return { str: serializeBarlineEvent(event as BarlineEvent), newEnv: env };
 		default:
 			return { str: '', newEnv: env };
 	}
@@ -687,7 +700,7 @@ const serializePart = (
 // Always output key/time at start of each measure
 const serializeMeasure = (
 	measure: Measure,
-	isFirst: boolean,
+	_isFirst: boolean,
 	currentStaff: number,
 	isGrandStaff: boolean = false,
 	currentKey?: KeySignature,
