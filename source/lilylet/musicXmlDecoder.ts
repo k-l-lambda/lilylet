@@ -922,12 +922,12 @@ const directionToContextChange = (
 		if (type === 'stop') {
 			ottava = 0;
 			ottavaTracker.current = 0;
-		} else if (type === 'up') {
-			// 8va = 1, 15ma = 2
+		} else if (type === 'down') {
+			// 8va = 1, 15ma = 2 (type="down" means written notes sound higher)
 			ottava = size === 15 ? 2 : 1;
 			ottavaTracker.current = ottava;
-		} else if (type === 'down') {
-			// 8vb = -1, 15mb = -2
+		} else if (type === 'up') {
+			// 8vb = -1, 15mb = -2 (type="up" means written notes sound lower)
 			ottava = size === 15 ? -2 : -1;
 			ottavaTracker.current = ottava;
 		} else {

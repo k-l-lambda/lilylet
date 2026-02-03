@@ -129,6 +129,7 @@
 	let currentTimeSig = null;
 	let currentDuration = { division: 4, dots: 0 }; // default quarter note
 	let numericTimeSignature = false; // When true, 4/4 and 2/2 use numeric display instead of C/C|
+	let currentOttava = 0; // Current ottava level, resets on newline
 
 	// Reset parser state - call before each parse
 	const resetParserState = () => {
@@ -137,6 +138,7 @@
 		currentTimeSig = null;
 		currentDuration = { division: 4, dots: 0 };
 		numericTimeSignature = false;
+		currentOttava = 0;
 	};
 
 	// Export reset function
@@ -323,7 +325,7 @@ parts
 	;
 
 part_start
-	: /* empty */								%{ currentStaff = 1; %}
+	: /* empty */								%{ currentStaff = 1; currentOttava = 0; %}
 	;
 
 part_voices
@@ -362,7 +364,16 @@ markup_event
 	;
 
 pitch_reset_event
-	: NEWLINE							-> ({ type: 'pitchReset' })
+	: NEWLINE							%{
+		// On newline, reset ottava to 0 if it's non-zero (like pitch base resets)
+		if (currentOttava !== 0) {
+			const ottavaReset = contextChange({ ottava: 0 });
+			currentOttava = 0;
+			$$ = [ottavaReset, { type: 'pitchReset' }];
+		} else {
+			$$ = { type: 'pitchReset' };
+		}
+	%}
 	;
 
 note_event
@@ -475,9 +486,9 @@ staff_cmd
 	;
 
 ottava_cmd
-	: CMD_OTTAVA '#' NUMBER						-> Number($3)
-	| CMD_OTTAVA '#' '-' NUMBER					-> -Number($4)
-	| CMD_OTTAVA								-> 0
+	: CMD_OTTAVA '#' NUMBER						%{ currentOttava = Number($3); $$ = currentOttava; %}
+	| CMD_OTTAVA '#' '-' NUMBER					%{ currentOttava = -Number($4); $$ = currentOttava; %}
+	| CMD_OTTAVA								%{ currentOttava = 0; $$ = 0; %}
 	;
 
 stem_cmd
