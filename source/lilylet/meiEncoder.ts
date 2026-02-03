@@ -60,7 +60,8 @@ const keyToFifths = (key?: { pitch: string; accidental?: Accidental; mode: strin
 
 	if (key.mode === 'minor') fifths -= 3;
 
-	return fifths;
+	// Clamp to valid range [-7, 7] since standard notation doesn't support more than 7 sharps/flats
+	return Math.max(-7, Math.min(7, fifths));
 };
 
 
