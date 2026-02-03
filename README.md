@@ -1,5 +1,7 @@
 # Lilylet
 
+![](./docs/live-demo.gif)
+
 Lilylet is a LilyPond-like music notation language designed for Markdown rendering and symbolic music representation in AIGC applications.
 
 ## Hello World
