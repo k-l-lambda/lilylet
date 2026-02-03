@@ -1348,15 +1348,52 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 };
 
 
+// Tempo text to BPM mapping (approximate values based on musical convention)
+const TEMPO_TEXT_TO_BPM: Record<string, number> = {
+	// Very slow
+	'grave': 35,
+	'largo': 50,
+	'larghetto': 63,
+	'lento': 52,
+	'adagio': 70,
+	// Slow to moderate
+	'andante': 92,
+	'andantino': 96,
+	'moderato': 114,
+	// Fast
+	'allegretto': 116,
+	'allegro': 138,
+	'vivace': 166,
+	'presto': 184,
+	'prestissimo': 208,
+};
+
+// Infer BPM from tempo text
+const inferBpmFromText = (text: string): number | undefined => {
+	const lowerText = text.toLowerCase();
+	for (const [keyword, bpm] of Object.entries(TEMPO_TEXT_TO_BPM)) {
+		if (lowerText.includes(keyword)) {
+			return bpm;
+		}
+	}
+	return undefined;
+};
+
 // Generate tempo element
 const generateTempoElement = (tempo: Tempo, indent: string, staff: number = 1): string => {
 	let attrs = `xml:id="${generateId('tempo')}" tstamp="1" staff="${staff}"`;
 
-	// Add BPM if specified
-	if (tempo.bpm) {
-		attrs += ` midi.bpm="${tempo.bpm}"`;
+	// Determine BPM: use explicit value or infer from text
+	let bpm = tempo.bpm;
+	if (!bpm && tempo.text) {
+		bpm = inferBpmFromText(tempo.text);
+	}
+
+	// Add BPM if available
+	if (bpm) {
+		attrs += ` midi.bpm="${bpm}"`;
 		if (tempo.beat) {
-			attrs += ` mm="${tempo.bpm}" mm.unit="${tempo.beat.division}"`;
+			attrs += ` mm="${bpm}" mm.unit="${tempo.beat.division}"`;
 		}
 	}
 
