@@ -200,10 +200,12 @@ const testFile = async (filename: string): Promise<TestResult> => {
 
 
 /**
- * Run simple encoding test (just check if encoding works without errors)
+ * Run encoding test with full content verification
+ * Saves both .ly and .json for inspection
  */
 const testEncoding = (filename: string): TestResult => {
 	const filepath = path.join(UNIT_CASES_DIR, filename);
+	const baseName = path.basename(filename, ".lyl");
 
 	try {
 		// Step 1: Read and parse original lilylet
@@ -218,7 +220,13 @@ const testEncoding = (filename: string): TestResult => {
 			};
 		}
 
-		// Step 2: Encode to LilyPond
+		// Step 2: Save LilyletDoc as JSON for inspection
+		fs.writeFileSync(
+			path.join(OUTPUT_DIR, `${baseName}.json`),
+			JSON.stringify(doc, null, 2)
+		);
+
+		// Step 3: Encode to LilyPond
 		const generatedLy = lilypondEncoder.encode(doc, {
 			paper: { width: 210, height: 297 },
 			fontSize: 20,
@@ -226,7 +234,7 @@ const testEncoding = (filename: string): TestResult => {
 			autoBeaming: false
 		});
 
-		// Step 3: Check that output is valid LilyPond syntax (basic checks)
+		// Step 4: Check that output is valid LilyPond syntax (basic checks)
 		if (!generatedLy.includes('\\version')) {
 			return {
 				filename,
@@ -243,9 +251,33 @@ const testEncoding = (filename: string): TestResult => {
 			};
 		}
 
-		// Save output for inspection
-		const baseName = path.basename(filename, ".lyl");
+		// Step 5: Save LilyPond output for inspection
 		fs.writeFileSync(path.join(OUTPUT_DIR, `${baseName}.ly`), generatedLy);
+
+		// Step 6: Verify content - check pitch encoding
+		// Each measure should have pitches with correct octave values
+		for (let mi = 0; mi < doc.measures.length; mi++) {
+			const measure = doc.measures[mi];
+			for (const part of measure.parts) {
+				for (const voice of part.voices) {
+					for (const event of voice.events) {
+						if (event.type === 'note') {
+							const noteEvent = event as any;
+							for (const pitch of noteEvent.pitches) {
+								// Verify octave is a valid number (after resolution)
+								if (typeof pitch.octave !== 'number' || isNaN(pitch.octave)) {
+									return {
+										filename,
+										status: "fail",
+										error: `Measure ${mi + 1}: Invalid octave value for pitch ${pitch.phonet}`
+									};
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 
 		return {
 			filename,

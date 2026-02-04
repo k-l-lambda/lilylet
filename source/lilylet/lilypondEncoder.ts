@@ -752,9 +752,10 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 		for (let vi = 0; vi < maxVoices; vi++) {
 			const measureContents = measures.map((m, mi) => {
 				const content = m[vi] || 's1';  // Space rest if no content
-				return `        ${content} |  % ${mi + 1}`;
+				// Wrap each measure in its own \relative c' to reset pitch context
+				return `        \\relative c' { ${content} } |  % ${mi + 1}`;
 			});
-			voiceLines.push(`      \\new Voice \\relative c' {\n${measureContents.join('\n')}\n      }`);
+			voiceLines.push(`      \\new Voice {\n${measureContents.join('\n')}\n      }`);
 		}
 
 		staffStrings.push(`    \\new Staff = "${si}" <<\n${voiceLines.join('\n')}\n    >>`);
@@ -769,7 +770,7 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 	const paperWidth = typeof opts.paper?.width === 'number' ? `${opts.paper.width}\\mm` : opts.paper?.width || '210\\mm';
 	const paperHeight = typeof opts.paper?.height === 'number' ? `${opts.paper.height}\\mm` : opts.paper?.height || '297\\mm';
 
-	const lyDoc = `\\version "2.24.0"
+	const lyDoc = `\\version "2.22.0"
 
 \\language "english"
 
