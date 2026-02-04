@@ -359,6 +359,13 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		}
 		let staff = staffName ? staffNames.indexOf(staffName) + 1 : 1;
 
+		// Track emitted context events across measures for this voice
+		let emittedKey = false;
+		let emittedTimeSig = false;
+		let emittedClef = false;
+		let emittedOttava = false;
+		let emittedStemDirection = false;
+
 		const context = new lilyParser.TrackContext(undefined, {
 			listener: (term: lilyParser.BaseTerm, context: lilyParser.TrackContext) => {
 				const mi = term._measure;
@@ -414,19 +421,20 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					// Update staff from voice events
 					voice.staff = staff;
 
-					// Handle key context change
-					if (context.key && !voice.events.some(e => e.type === 'context' && (e as ContextChange).key)) {
+					// Handle key context change (only emit once per voice)
+					if (context.key && !emittedKey) {
 						const key = convertKeySignature(context.key.key);
 						if (key) {
 							voice.events.push({
 								type: 'context',
 								key,
 							});
+							emittedKey = true;
 						}
 					}
 
-					// Handle time signature context change
-					if (context.time && !voice.events.some(e => e.type === 'context' && (e as ContextChange).timeSig)) {
+					// Handle time signature context change (only emit once per voice)
+					if (context.time && !emittedTimeSig) {
 						voice.events.push({
 							type: 'context',
 							timeSig: {
@@ -434,29 +442,32 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 								denominator: context.time.value.denominator,
 							},
 						});
+						emittedTimeSig = true;
 					}
 
-					// Handle clef context change
-					if (context.clef && !voice.events.some(e => e.type === 'context' && (e as ContextChange).clef)) {
+					// Handle clef context change (only emit once per voice)
+					if (context.clef && !emittedClef) {
 						const clef = LILYPOND_CLEF_MAP[context.clef.clefName];
 						if (clef) {
 							voice.events.push({
 								type: 'context',
 								clef,
 							});
+							emittedClef = true;
 						}
 					}
 
-					// Handle ottava
-					if (context.octave?.value && !voice.events.some(e => e.type === 'context' && (e as ContextChange).ottava !== undefined)) {
+					// Handle ottava (only emit once per voice)
+					if (context.octave?.value && !emittedOttava) {
 						voice.events.push({
 							type: 'context',
 							ottava: context.octave.value,
 						});
+						emittedOttava = true;
 					}
 
-					// Handle stem direction context
-					if (context.stemDirection && !voice.events.some(e => e.type === 'context' && (e as ContextChange).stemDirection)) {
+					// Handle stem direction context (only emit once per voice)
+					if (context.stemDirection && !emittedStemDirection) {
 						const stemDir = context.stemDirection === 'Up' ? StemDirection.up :
 							context.stemDirection === 'Down' ? StemDirection.down : undefined;
 						if (stemDir) {
@@ -464,6 +475,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 								type: 'context',
 								stemDirection: stemDir,
 							});
+							emittedStemDirection = true;
 						}
 					}
 
@@ -532,31 +544,40 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 				}
 				// Handle standalone stem direction
 				else if (term instanceof lilyParser.LilyTerms.StemDirection) {
-					const stemDir = term.direction === 'Up' ? StemDirection.up :
-						term.direction === 'Down' ? StemDirection.down : undefined;
-					if (stemDir) {
-						voice.events.push({
-							type: 'context',
-							stemDirection: stemDir,
-						});
+					if (!emittedStemDirection) {
+						const stemDir = term.direction === 'Up' ? StemDirection.up :
+							term.direction === 'Down' ? StemDirection.down : undefined;
+						if (stemDir) {
+							voice.events.push({
+								type: 'context',
+								stemDirection: stemDir,
+							});
+							emittedStemDirection = true;
+						}
 					}
 				}
 				// Handle standalone clef
 				else if (term instanceof lilyParser.LilyTerms.Clef) {
-					const clef = LILYPOND_CLEF_MAP[term.clefName];
-					if (clef) {
-						voice.events.push({
-							type: 'context',
-							clef,
-						});
+					if (!emittedClef) {
+						const clef = LILYPOND_CLEF_MAP[term.clefName];
+						if (clef) {
+							voice.events.push({
+								type: 'context',
+								clef,
+							});
+							emittedClef = true;
+						}
 					}
 				}
 				// Handle ottava shift
 				else if (term instanceof lilyParser.LilyTerms.OctaveShift) {
-					voice.events.push({
-						type: 'context',
-						ottava: term.value,
-					});
+					if (!emittedOttava) {
+						voice.events.push({
+							type: 'context',
+							ottava: term.value,
+						});
+						emittedOttava = true;
+					}
 				}
 				// Handle staff change
 				else if (term instanceof lilyParser.LilyTerms.Change) {
@@ -575,7 +596,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						});
 					}
 				}
-				// Handle standalone markup command
+				// Handle standalone markup command and barlines
 				else {
 					const termAny = term as any;
 					if (termAny.proto === 'Command' && (termAny.cmd === '\\markup' || termAny.cmd === 'markup')) {
@@ -586,6 +607,22 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 								content: text,
 							};
 							voice.events.push(markupEvent);
+						}
+					}
+					// Handle barline command - barlines belong to the previous measure
+					else if (termAny.proto === 'Command' && termAny.cmd === 'bar') {
+						const style = termAny.args?.[0]?.exp;
+						if (style && mi > 0) {
+							// Remove quotes from the style string
+							const barStyle = style.replace(/^"|"$/g, '');
+							// Add to previous measure's voice
+							const prevMeasure = measureMap.get(mi - 1);
+							if (prevMeasure && prevMeasure.voices[vi]) {
+								prevMeasure.voices[vi].events.push({
+									type: 'barline',
+									style: barStyle,
+								});
+							}
 						}
 					}
 				}
