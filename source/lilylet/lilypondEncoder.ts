@@ -153,31 +153,14 @@ const BARLINE_MAP: Record<string, string> = {
 
 /**
  * Generate a spacer rest that fills a measure based on time signature.
+ * Uses multiplication syntax: s{denominator}*{numerator}
  * @param timeSig - Time signature { numerator, denominator }
- * @returns LilyPond spacer rest string (e.g., "s1", "s2.", "s2")
+ * @returns LilyPond spacer rest string (e.g., "s4*3" for 3/4, "s8*6" for 6/8)
  */
 const getSpacerRest = (timeSig?: { numerator: number; denominator: number }): string => {
 	if (!timeSig) return 's1';
-
 	const { numerator, denominator } = timeSig;
-
-	// Calculate total beats in quarter notes
-	const quarterBeats = numerator * (4 / denominator);
-
-	// Map common durations to LilyPond notation
-	if (quarterBeats === 4) return 's1';        // 4/4
-	if (quarterBeats === 3) return 's2.';       // 3/4, 6/8
-	if (quarterBeats === 2) return 's2';        // 2/4, 2/2
-	if (quarterBeats === 1) return 's4';        // 1/4
-	if (quarterBeats === 6) return 's1.';       // 6/4, 12/8
-	if (quarterBeats === 1.5) return 's4.';     // 3/8
-	if (quarterBeats === 4.5) return 's1 s8';   // 9/8
-	if (quarterBeats === 3.5) return 's2.. ';   // 7/8
-	if (quarterBeats === 2.5) return 's2 s8';   // 5/8
-	if (quarterBeats === 5) return 's1 s4';     // 5/4
-
-	// Fallback: use whole note (might cause warnings but won't break)
-	return 's1';
+	return `s${denominator}*${numerator}`;
 };
 
 

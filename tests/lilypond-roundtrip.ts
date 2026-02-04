@@ -334,7 +334,7 @@ const main = async () => {
 	let errors = 0;
 
 	for (const filename of files) {
-		// Run encoding test (simpler, doesn't require roundtrip)
+		// Run encoding test (full roundtrip has decoder issues, use encoding test for now)
 		const result = testEncoding(filename);
 		results.push(result);
 
