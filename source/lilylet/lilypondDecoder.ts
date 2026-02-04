@@ -363,7 +363,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		let emittedKey = false;
 		let emittedTimeSig = false;
 		let emittedClef = false;
-		let emittedOttava = false;
+		let lastOttava: number | undefined = undefined;  // Track value changes
 		let emittedStemDirection = false;
 
 		const context = new lilyParser.TrackContext(undefined, {
@@ -457,13 +457,16 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						}
 					}
 
-					// Handle ottava (only emit once per voice)
-					if (context.octave?.value && !emittedOttava) {
-						voice.events.push({
-							type: 'context',
-							ottava: context.octave.value,
-						});
-						emittedOttava = true;
+					// Handle ottava (emit when value changes)
+					if (context.octave != null) {
+						const currentOttava = context.octave.value ?? 0;
+						if (currentOttava !== lastOttava) {
+							voice.events.push({
+								type: 'context',
+								ottava: currentOttava,
+							});
+							lastOttava = currentOttava;
+						}
 					}
 
 					// Handle stem direction context (only emit once per voice)
@@ -571,12 +574,12 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 				}
 				// Handle ottava shift
 				else if (term instanceof lilyParser.LilyTerms.OctaveShift) {
-					if (!emittedOttava) {
+					if (term.value !== lastOttava) {
 						voice.events.push({
 							type: 'context',
 							ottava: term.value,
 						});
-						emittedOttava = true;
+						lastOttava = term.value;
 					}
 				}
 				// Handle staff change

@@ -55,65 +55,61 @@ const normalizeLyl = (content: string): string => {
 
 /**
  * Compare two LilyletDoc structures
+ *
+ * Note: Measure boundaries may differ between lilylet parser (doesn't enforce time signatures)
+ * and lotus parser (enforces time signatures). We compare total events across all measures.
  */
 const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean; diff?: string } => {
 	// Filter helper - remove pitchReset events (parser artifact, not musical content)
 	const filterEvents = (events: Event[]) =>
 		events.filter(e => e.type !== 'pitchReset');
 
-	// Check if a measure has real content (not just pitchReset)
-	const hasRealContent = (m: typeof doc1.measures[0]) =>
-		m.parts.some(p => p.voices.some(v => filterEvents(v.events).length > 0));
+	// Collect all events from all measures for a voice track
+	const collectAllEvents = (measures: typeof doc1.measures, partIndex: number, voiceIndex: number) => {
+		const allEvents: Event[] = [];
+		for (const m of measures) {
+			const part = m.parts[partIndex];
+			if (part && part.voices[voiceIndex]) {
+				allEvents.push(...filterEvents(part.voices[voiceIndex].events));
+			}
+		}
+		return allEvents;
+	};
 
-	// Filter out empty measures from both documents
-	const measures1 = doc1.measures.filter(hasRealContent);
-	const measures2 = doc2.measures.filter(hasRealContent);
+	// Get max parts count
+	const maxParts1 = Math.max(...doc1.measures.map(m => m.parts.length), 0);
+	const maxParts2 = Math.max(...doc2.measures.map(m => m.parts.length), 0);
 
-	// Compare measure counts
-	if (measures1.length !== measures2.length) {
+	if (maxParts1 !== maxParts2) {
 		return {
 			equal: false,
-			diff: `Measure count differs: ${measures1.length} vs ${measures2.length}`
+			diff: `Part count differs: ${maxParts1} vs ${maxParts2}`
 		};
 	}
 
-	// Compare each measure
-	for (let mi = 0; mi < measures1.length; mi++) {
-		const m1 = measures1[mi];
-		const m2 = measures2[mi];
+	// Compare each part
+	for (let pi = 0; pi < maxParts1; pi++) {
+		// Get max voices for this part
+		const maxVoices1 = Math.max(...doc1.measures.map(m => m.parts[pi]?.voices.length || 0), 0);
+		const maxVoices2 = Math.max(...doc2.measures.map(m => m.parts[pi]?.voices.length || 0), 0);
 
-		// Compare parts count
-		if (m1.parts.length !== m2.parts.length) {
+		if (maxVoices1 !== maxVoices2) {
 			return {
 				equal: false,
-				diff: `Measure ${mi + 1}: Part count differs: ${m1.parts.length} vs ${m2.parts.length}`
+				diff: `Part ${pi + 1}: Voice count differs: ${maxVoices1} vs ${maxVoices2}`
 			};
 		}
 
-		// Compare each part
-		for (let pi = 0; pi < m1.parts.length; pi++) {
-			const p1 = m1.parts[pi];
-			const p2 = m2.parts[pi];
+		// Compare total events for each voice across all measures
+		for (let vi = 0; vi < maxVoices1; vi++) {
+			const v1Events = collectAllEvents(doc1.measures, pi, vi);
+			const v2Events = collectAllEvents(doc2.measures, pi, vi);
 
-			// Compare voices count
-			if (p1.voices.length !== p2.voices.length) {
+			if (v1Events.length !== v2Events.length) {
 				return {
 					equal: false,
-					diff: `Measure ${mi + 1}, Part ${pi + 1}: Voice count differs: ${p1.voices.length} vs ${p2.voices.length}`
+					diff: `Part ${pi + 1}, Voice ${vi + 1}: Total event count differs: ${v1Events.length} vs ${v2Events.length}`
 				};
-			}
-
-			// Compare each voice (filtering pitchReset)
-			for (let vi = 0; vi < p1.voices.length; vi++) {
-				const v1Events = filterEvents(p1.voices[vi].events);
-				const v2Events = filterEvents(p2.voices[vi].events);
-
-				if (v1Events.length !== v2Events.length) {
-					return {
-						equal: false,
-						diff: `Measure ${mi + 1}, Part ${pi + 1}, Voice ${vi + 1}: Event count differs: ${v1Events.length} vs ${v2Events.length}`
-					};
-				}
 			}
 		}
 	}
