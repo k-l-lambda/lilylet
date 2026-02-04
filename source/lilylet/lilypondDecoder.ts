@@ -209,6 +209,7 @@ interface ParsedMeasure {
 
 interface ParsedVoice {
 	staff: number;
+	partIndex: number;  // 1-based part index (from staff ID format "partIndex_staffIndex")
 	events: Event[];
 }
 
@@ -495,11 +496,29 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 			}
 		};
 
-		const staffName = track.contextDict?.Staff;
-		if (staffName) {
-			appendStaff(staffName);
+		// Parse staff name to extract partIndex and staff number
+		// Format: "partIndex_staffIndex" (e.g., "1_1", "1_2", "2_1")
+		// Falls back to partIndex=1 if format doesn't match
+		const parseStaffName = (name: string): { partIndex: number; staffNum: number } => {
+			const match = name.match(/^(\d+)_(\d+)$/);
+			if (match) {
+				return { partIndex: parseInt(match[1], 10), staffNum: parseInt(match[2], 10) };
+			}
+			// Fallback: single part, staff number from name or 1
+			const num = parseInt(name, 10);
+			return { partIndex: 1, staffNum: isNaN(num) ? 1 : num };
+		};
+
+		// Use track.contextDict.Staff as the authoritative staff name (from Staff definition)
+		// This won't be affected by \change Staff commands inside the track
+		const initialStaffName = track.contextDict?.Staff;
+		if (initialStaffName) {
+			appendStaff(initialStaffName);
 		}
-		let staff = staffName ? staffNames.indexOf(staffName) + 1 : 1;
+		const parsedStaff = initialStaffName ? parseStaffName(initialStaffName) : { partIndex: 1, staffNum: 1 };
+		// Use these as fixed values for this track - don't update from context.staffName
+		const trackStaff = parsedStaff.staffNum;
+		const trackPartIndex = parsedStaff.partIndex;
 
 		// Track emitted context events across measures for this voice
 		let lastKey: number | undefined = undefined;  // Track value changes (key fifths)
@@ -522,18 +541,13 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					});
 				}
 
-				// Update staff from context
-				if (context.staffName) {
-					appendStaff(context.staffName);
-					staff = staffNames.indexOf(context.staffName) + 1;
-				}
-
 				const measure = measureMap.get(mi)!;
 
-				// Initialize voice for this track
+				// Initialize voice for this track (use fixed staff/part from track definition)
 				if (!measure.voices[vi]) {
 					measure.voices[vi] = {
-						staff,
+						staff: trackStaff,
+						partIndex: trackPartIndex,
 						events: [],
 					};
 				}
@@ -560,8 +574,8 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 
 				// Handle music events
 				if (term instanceof lilyParser.MusicEvent) {
-					// Update staff from voice events
-					voice.staff = staff;
+					// Staff is fixed per track (from track definition)
+					voice.staff = trackStaff;
 
 					// Handle key context change (emit when value changes)
 					if (context.key && context.key.key !== lastKey) {
@@ -736,10 +750,8 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 				}
 				// Handle staff change
 				else if (term instanceof lilyParser.LilyTerms.Change) {
-					if (term.args?.[0]?.key === 'Staff') {
-						// Staff change mid-voice
-						voice.staff = staff;
-					}
+					// Ignore \change Staff commands - staff is fixed per track
+					// (Cross-staff notation is not supported in this decoder)
 				}
 				// Handle tempo
 				else if (term instanceof lilyParser.LilyTerms.Tempo) {
@@ -789,6 +801,21 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 								});
 							}
 						}
+					}
+					// Handle ChordSymbol (inline chord symbol: \chords "text")
+					else if (termAny.proto === 'ChordSymbol') {
+						// Extract text from LiteralString (e.g., { exp: '"C"' } -> "C")
+						let text = termAny.text;
+						if (typeof text === 'object' && text?.exp) {
+							text = text.exp.replace(/^"|"$/g, '');
+						} else if (typeof text === 'string') {
+							text = text.replace(/^"|"$/g, '');
+						}
+						const harmonyEvent: HarmonyEvent = {
+							type: 'harmony',
+							text: text,
+						};
+						voice.events.push(harmonyEvent);
 					}
 					// Handle tuplet
 					// Note: Lotus emits Chord events BEFORE the Tuplet term, so we need to
@@ -1077,17 +1104,30 @@ const extractMetadata = (lilyDocument: lilyParser.LilyDocument): Metadata | unde
 const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[], metadata?: Metadata): LilyletDoc => {
 	const measures: Measure[] = parsedMeasures.map(pm => {
 		// Filter out voices that only contain spacer rests and context changes
-		const voices = pm.voices
-			.filter(v => hasRealContent(v.events))
-			.map(v => ({
+		const filteredVoices = pm.voices.filter(v => hasRealContent(v.events));
+
+		// Group voices by partIndex
+		const partMap = new Map<number, Array<{ staff: number; events: Event[] }>>();
+		for (const v of filteredVoices) {
+			const pi = v.partIndex || 1;
+			if (!partMap.has(pi)) {
+				partMap.set(pi, []);
+			}
+			partMap.get(pi)!.push({
 				staff: v.staff,
 				events: v.events,
-			}));
+			});
+		}
 
+		// Convert to parts array (sorted by part index)
+		const partIndices = Array.from(partMap.keys()).sort((a, b) => a - b);
+		const parts = partIndices.map(pi => ({
+			voices: partMap.get(pi)!,
+		}));
+
+		// Fallback to single empty part if no voices
 		const measure: Measure = {
-			parts: [{
-				voices,
-			}],
+			parts: parts.length > 0 ? parts : [{ voices: [] }],
 		};
 
 		if (pm.key !== null) {

@@ -37,7 +37,7 @@
   "license": "ISC",
   "homepage": "https://github.com/k-l-lambda/lilylet#readme",
   "optionalDependencies": {
-    "@k-l-lambda/lotus": "^1.0.3"
+    "@k-l-lambda/lotus": "^1.0.5"
   },
   "devDependencies": {
     "@types/node": "^20.11.20",

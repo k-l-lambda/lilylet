@@ -586,11 +586,10 @@ const encodeBarlineEvent = (event: BarlineEvent): string => {
 
 /**
  * Encode a harmony event (chord symbol)
- * Note: LilyPond uses ChordNames context for chord symbols, not inline commands.
- * We encode as markup with a recognizable prefix for roundtrip decoding.
+ * Uses the lilylet extension: \chords "text" (parsed by modified lotus grammar)
  */
 const encodeHarmonyEvent = (event: HarmonyEvent): string => {
-	return `^\\markup { \\bold "${event.text}" }`;
+	return `\\chords "${event.text}"`;
 };
 
 
@@ -709,12 +708,25 @@ const encodeMetadata = (metadata: Metadata): string => {
 
 /**
  * Encode a complete LilyletDoc to LilyPond format
+ *
+ * Structure:
+ * - Multiple parts → outer <<>>
+ * - Part with multiple staves → GrandStaff
+ * - Part with single staff → standalone Staff
  */
 export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => {
 	const opts = { ...DEFAULT_OPTIONS, ...options };
 
-	// Collect all voices across measures, grouped by staff
-	const staffVoices: Map<number, string[][]> = new Map();  // staff -> measure -> voice content
+	// Determine number of parts from the document
+	const partCount = Math.max(...doc.measures.map(m => m.parts.length), 1);
+
+	// For each part, collect voices grouped by staff
+	// partVoices[partIndex][staff] = measureContents[][]  (measure -> voice contents)
+	type StaffVoicesMap = Map<number, string[][]>;
+	const partVoices: StaffVoicesMap[] = [];
+	for (let pi = 0; pi < partCount; pi++) {
+		partVoices.push(new Map());
+	}
 
 	// Track time signature for each measure (for spacer rests)
 	const measureTimeSigs: Array<{ numerator: number; denominator: number } | undefined> = [];
@@ -733,15 +745,18 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 		measureTimeSigs[mi] = currentTimeSig;
 
 		// Process each part
-		for (const part of measure.parts) {
+		for (let pi = 0; pi < measure.parts.length; pi++) {
+			const part = measure.parts[pi];
+			const staffMap = partVoices[pi];
+
 			for (let vi = 0; vi < part.voices.length; vi++) {
 				const voice = part.voices[vi];
 				const staff = voice.staff || 1;
 
-				if (!staffVoices.has(staff)) {
-					staffVoices.set(staff, []);
+				if (!staffMap.has(staff)) {
+					staffMap.set(staff, []);
 				}
-				const staffMeasures = staffVoices.get(staff)!;
+				const staffMeasures = staffMap.get(staff)!;
 
 				// Ensure we have enough measure slots
 				while (staffMeasures.length <= mi) {
@@ -760,13 +775,9 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 		}
 	}
 
-	// Build music content
-	const staffCount = Math.max(...Array.from(staffVoices.keys()));
-	const staffStrings: string[] = [];
-
-	for (let si = 1; si <= staffCount; si++) {
-		const measures = staffVoices.get(si) || [];
-
+	// Build a staff string (used for both GrandStaff children and standalone Staff)
+	// Staff ID format: "partIndex_staffIndex" (e.g., "1_1", "1_2", "2_1") for multi-part decoding
+	const buildStaffString = (staffNum: number, measures: string[][], staffId: string, indent: string): string => {
 		// Find max voices per measure for this staff
 		const maxVoices = Math.max(...measures.map(m => m.length), 1);
 
@@ -778,15 +789,62 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 				const spacer = getSpacerRest(measureTimeSigs[mi]);
 				const content = m[vi] || spacer;
 				// Wrap each measure in its own \relative c' to reset pitch context
-				return `        \\relative c' { ${content} } |  % ${mi + 1}`;
+				return `${indent}    \\relative c' { ${content} } |  % ${mi + 1}`;
 			});
-			voiceLines.push(`      \\new Voice {\n${measureContents.join('\n')}\n      }`);
+			voiceLines.push(`${indent}  \\new Voice {\n${measureContents.join('\n')}\n${indent}  }`);
 		}
 
-		staffStrings.push(`    \\new Staff = "${si}" <<\n${voiceLines.join('\n')}\n    >>`);
+		return `${indent}\\new Staff = "${staffId}" <<\n${voiceLines.join('\n')}\n${indent}>>`;
+	};
+
+	// Build music content for each part
+	const partStrings: string[] = [];
+
+	for (let pi = 0; pi < partCount; pi++) {
+		const staffMap = partVoices[pi];
+		const staffNums = Array.from(staffMap.keys()).sort((a, b) => a - b);
+
+		if (staffNums.length === 0) {
+			// Empty part, skip
+			continue;
+		}
+
+		const partIndex = pi + 1;  // 1-based part index
+
+		if (staffNums.length === 1) {
+			// Single staff part → standalone Staff
+			const staffNum = staffNums[0];
+			const measures = staffMap.get(staffNum)!;
+			const staffId = `${partIndex}_${staffNum}`;
+			const staffStr = buildStaffString(staffNum, measures, staffId, '    ');
+			partStrings.push(staffStr);
+		} else {
+			// Multiple staves → GrandStaff
+			const staffStrings: string[] = [];
+			for (const staffNum of staffNums) {
+				const measures = staffMap.get(staffNum)!;
+				const staffId = `${partIndex}_${staffNum}`;
+				const staffStr = buildStaffString(staffNum, measures, staffId, '      ');
+				staffStrings.push(staffStr);
+			}
+			partStrings.push(`    \\new GrandStaff <<\n${staffStrings.join('\n')}\n    >>`);
+		}
 	}
 
-	const musicContent = staffStrings.join('\n');
+	const musicContent = partStrings.join('\n');
+
+	// Determine outer wrapper
+	// - Single part with single staff → just Staff (no outer <<>>)
+	// - Single part with multiple staves → GrandStaff (no extra outer <<>>)
+	// - Multiple parts → outer <<>>
+	let scoreContent: string;
+	if (partCount === 1 && partStrings.length === 1) {
+		// Single part - use as-is (already has Staff or GrandStaff)
+		scoreContent = musicContent;
+	} else {
+		// Multiple parts - wrap in <<>>
+		scoreContent = `  <<\n${musicContent}\n  >>`;
+	}
 
 	// Build header
 	const headerContent = doc.metadata ? encodeMetadata(doc.metadata) : '  tagline = ##f';
@@ -820,9 +878,7 @@ ${headerContent}
 }
 
 \\score {
-  \\new GrandStaff <<
-${musicContent}
-  >>
+${scoreContent}
 
   \\layout { }${opts.withMIDI ? '\n  \\midi { }' : ''}
 }

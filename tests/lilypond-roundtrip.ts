@@ -66,6 +66,8 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			if (e.type === 'pitchReset') return false;
 			// Filter staff context events (handled at voice level, not as events)
 			if (e.type === 'context' && 'staff' in e) return false;
+			// Filter invisible/spacer rests (used for padding, not musical content)
+			if (e.type === 'rest' && (e as any).invisible) return false;
 			return true;
 		});
 
