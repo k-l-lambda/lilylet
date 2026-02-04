@@ -360,9 +360,9 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		let staff = staffName ? staffNames.indexOf(staffName) + 1 : 1;
 
 		// Track emitted context events across measures for this voice
-		let emittedKey = false;
-		let emittedTimeSig = false;
-		let emittedClef = false;
+		let lastKey: number | undefined = undefined;  // Track value changes (key fifths)
+		let lastTimeSig: string | undefined = undefined;  // Track value changes (as string for comparison)
+		let lastClef: Clef | undefined = undefined;  // Track value changes
 		let lastOttava: number | undefined = undefined;  // Track value changes
 		let emittedStemDirection = false;
 
@@ -421,39 +421,42 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					// Update staff from voice events
 					voice.staff = staff;
 
-					// Handle key context change (only emit once per voice)
-					if (context.key && !emittedKey) {
+					// Handle key context change (emit when value changes)
+					if (context.key && context.key.key !== lastKey) {
 						const key = convertKeySignature(context.key.key);
 						if (key) {
 							voice.events.push({
 								type: 'context',
 								key,
 							});
-							emittedKey = true;
+							lastKey = context.key.key;
 						}
 					}
 
-					// Handle time signature context change (only emit once per voice)
-					if (context.time && !emittedTimeSig) {
-						voice.events.push({
-							type: 'context',
-							timeSig: {
-								numerator: context.time.value.numerator,
-								denominator: context.time.value.denominator,
-							},
-						});
-						emittedTimeSig = true;
+					// Handle time signature context change (emit when value changes)
+					if (context.time) {
+						const timeSigStr = `${context.time.value.numerator}/${context.time.value.denominator}`;
+						if (timeSigStr !== lastTimeSig) {
+							voice.events.push({
+								type: 'context',
+								timeSig: {
+									numerator: context.time.value.numerator,
+									denominator: context.time.value.denominator,
+								},
+							});
+							lastTimeSig = timeSigStr;
+						}
 					}
 
-					// Handle clef context change (only emit once per voice)
-					if (context.clef && !emittedClef) {
+					// Handle clef context change (emit when value changes)
+					if (context.clef) {
 						const clef = LILYPOND_CLEF_MAP[context.clef.clefName];
-						if (clef) {
+						if (clef && clef !== lastClef) {
 							voice.events.push({
 								type: 'context',
 								clef,
 							});
-							emittedClef = true;
+							lastClef = clef;
 						}
 					}
 
@@ -559,17 +562,15 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						}
 					}
 				}
-				// Handle standalone clef
+				// Handle standalone clef (emit when value changes)
 				else if (term instanceof lilyParser.LilyTerms.Clef) {
-					if (!emittedClef) {
-						const clef = LILYPOND_CLEF_MAP[term.clefName];
-						if (clef) {
-							voice.events.push({
-								type: 'context',
-								clef,
-							});
-							emittedClef = true;
-						}
+					const clef = LILYPOND_CLEF_MAP[term.clefName];
+					if (clef && clef !== lastClef) {
+						voice.events.push({
+							type: 'context',
+							clef,
+						});
+						lastClef = clef;
 					}
 				}
 				// Handle ottava shift
