@@ -20,6 +20,7 @@ import {
 	RestEvent,
 	ContextChange,
 	MarkupEvent,
+	TupletEvent,
 	Pitch,
 	Duration,
 	Mark,
@@ -233,6 +234,79 @@ const convertDuration = (duration: any): Duration => {
 	return {
 		division: Math.pow(2, duration.division),
 		dots: duration.dots || 0,
+	};
+};
+
+
+// Parse raw pitch string (e.g., "c'", "fis''", "bes,") to Pitch
+const parseRawPitch = (pitchStr: string): Pitch | undefined => {
+	if (!pitchStr) return undefined;
+
+	// Match: base note (a-g), optional accidentals (is/es/isis/eses), optional octave marks ('/, or ,)
+	const match = pitchStr.match(/^([a-g])(isis|eses|is|es)?([',]*)$/);
+	if (!match) return undefined;
+
+	const [, note, accidental, octaveMarks] = match;
+
+	// Map note to phonet
+	const phonetMap: Record<string, Phonet> = {
+		c: Phonet.c, d: Phonet.d, e: Phonet.e, f: Phonet.f,
+		g: Phonet.g, a: Phonet.a, b: Phonet.b,
+	};
+	const phonet = phonetMap[note];
+	if (!phonet) return undefined;
+
+	// Map accidental
+	const accidentalMap: Record<string, Accidental> = {
+		is: Accidental.sharp,
+		es: Accidental.flat,
+		isis: Accidental.doubleSharp,
+		eses: Accidental.doubleFlat,
+	};
+	const acc = accidental ? accidentalMap[accidental] : undefined;
+
+	// Calculate octave from marks (default octave 0 = C4)
+	let octave = 0;
+	for (const mark of octaveMarks || '') {
+		if (mark === "'") octave++;
+		else if (mark === ",") octave--;
+	}
+
+	return { phonet, accidental: acc, octave };
+};
+
+
+// Parse raw duration object from tuplet body
+const parseRawDuration = (duration: any): Duration | undefined => {
+	if (!duration) return undefined;
+	const number = parseInt(duration.number, 10);
+	if (isNaN(number)) return undefined;
+	return {
+		division: number,
+		dots: duration.dots || 0,
+	};
+};
+
+
+// Convert raw Chord from tuplet body to NoteEvent
+const convertRawChord = (chord: any, defaultDuration?: Duration): NoteEvent | undefined => {
+	if (!chord || chord.proto !== 'Chord') return undefined;
+
+	const pitches: Pitch[] = [];
+	for (const pitchElem of chord.pitches || []) {
+		const pitch = parseRawPitch(pitchElem.pitch);
+		if (pitch) pitches.push(pitch);
+	}
+
+	if (pitches.length === 0) return undefined;
+
+	const duration = parseRawDuration(chord.duration) || defaultDuration;
+	if (!duration) return undefined;
+
+	return {
+		type: 'note',
+		pitches,
+		duration,
 	};
 };
 
@@ -629,6 +703,53 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 							}
 						}
 					}
+					// Handle tuplet
+					// Note: Lotus emits Chord events BEFORE the Tuplet term, so we need to
+					// remove the already-added notes and wrap them in a TupletEvent
+					else if (termAny.proto === 'Tuplet') {
+						const ratioStr = termAny.args?.[0];  // e.g., "3/2"
+						const body = termAny.args?.[1]?.body || [];
+
+						if (ratioStr && body.length > 0) {
+							// Parse ratio string
+							const ratioMatch = ratioStr.match(/^(\d+)\/(\d+)$/);
+							if (ratioMatch) {
+								const [, num, denom] = ratioMatch;
+								const ratio: Fraction = {
+									numerator: parseInt(denom, 10),  // Swapped: lilylet uses actual/normal
+									denominator: parseInt(num, 10),
+								};
+
+								// Count how many note/rest events are in the tuplet body
+								const noteCount = body.filter((item: any) =>
+									item.proto === 'Chord' || item.proto === 'Rest'
+								).length;
+
+								// Remove the last noteCount note/rest events from voice.events
+								// (they were already added by the Chord/Rest handlers)
+								const tupletEvents: Event[] = [];
+								let removed = 0;
+								while (removed < noteCount && voice.events.length > 0) {
+									const lastEvent = voice.events[voice.events.length - 1];
+									if (lastEvent.type === 'note' || lastEvent.type === 'rest') {
+										tupletEvents.unshift(voice.events.pop()!);
+										removed++;
+									} else {
+										break;  // Stop if we hit a non-note/rest event
+									}
+								}
+
+								if (tupletEvents.length > 0) {
+									const tupletEvent: TupletEvent = {
+										type: 'tuplet',
+										ratio,
+										events: tupletEvents,
+									};
+									voice.events.push(tupletEvent);
+								}
+							}
+						}
+					}
 				}
 			},
 		});
@@ -653,6 +774,8 @@ const hasRealContent = (events: Event[]): boolean => {
 	return events.some(e => {
 		if (e.type === 'note') return true;
 		if (e.type === 'rest' && !(e as RestEvent).invisible) return true;
+		if (e.type === 'tuplet') return true;
+		if (e.type === 'tremolo') return true;
 		return false;
 	});
 };
