@@ -254,10 +254,13 @@ const testEncoding = (filename: string): TestResult => {
 		// Step 5: Save LilyPond output for inspection
 		fs.writeFileSync(path.join(OUTPUT_DIR, `${baseName}.ly`), generatedLy);
 
-		// Step 6: Verify content - check pitch encoding
+		// Step 6: Verify content - check pitch encoding and spacer rests
 		// Each measure should have pitches with correct octave values
+		let currentTimeSig: { numerator: number; denominator: number } | undefined;
 		for (let mi = 0; mi < doc.measures.length; mi++) {
 			const measure = doc.measures[mi];
+			if (measure.timeSig) currentTimeSig = measure.timeSig;
+
 			for (const part of measure.parts) {
 				for (const voice of part.voices) {
 					for (const event of voice.events) {
@@ -276,6 +279,21 @@ const testEncoding = (filename: string): TestResult => {
 						}
 					}
 				}
+			}
+		}
+
+		// Step 7: Verify spacer rests match time signature
+		if (currentTimeSig) {
+			const { numerator, denominator } = currentTimeSig;
+			const quarterBeats = numerator * (4 / denominator);
+
+			// Check for incorrect s1 in non-4/4 time
+			if (quarterBeats !== 4 && generatedLy.includes('{ s1 }')) {
+				return {
+					filename,
+					status: "fail",
+					error: `Spacer rest 's1' used in ${numerator}/${denominator} time (should be duration matching ${quarterBeats} quarter beats)`
+				};
 			}
 		}
 

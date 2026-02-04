@@ -149,6 +149,38 @@ const BARLINE_MAP: Record<string, string> = {
 };
 
 
+// === Helper Functions ===
+
+/**
+ * Generate a spacer rest that fills a measure based on time signature.
+ * @param timeSig - Time signature { numerator, denominator }
+ * @returns LilyPond spacer rest string (e.g., "s1", "s2.", "s2")
+ */
+const getSpacerRest = (timeSig?: { numerator: number; denominator: number }): string => {
+	if (!timeSig) return 's1';
+
+	const { numerator, denominator } = timeSig;
+
+	// Calculate total beats in quarter notes
+	const quarterBeats = numerator * (4 / denominator);
+
+	// Map common durations to LilyPond notation
+	if (quarterBeats === 4) return 's1';        // 4/4
+	if (quarterBeats === 3) return 's2.';       // 3/4, 6/8
+	if (quarterBeats === 2) return 's2';        // 2/4, 2/2
+	if (quarterBeats === 1) return 's4';        // 1/4
+	if (quarterBeats === 6) return 's1.';       // 6/4, 12/8
+	if (quarterBeats === 1.5) return 's4.';     // 3/8
+	if (quarterBeats === 4.5) return 's1 s8';   // 9/8
+	if (quarterBeats === 3.5) return 's2.. ';   // 7/8
+	if (quarterBeats === 2.5) return 's2 s8';   // 5/8
+	if (quarterBeats === 5) return 's1 s4';     // 5/4
+
+	// Fallback: use whole note (might cause warnings but won't break)
+	return 's1';
+};
+
+
 // === Pitch Environment for Relative Mode ===
 
 interface PitchEnv {
@@ -699,8 +731,11 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 	// Collect all voices across measures, grouped by staff
 	const staffVoices: Map<number, string[][]> = new Map();  // staff -> measure -> voice content
 
+	// Track time signature for each measure (for spacer rests)
+	const measureTimeSigs: Array<{ numerator: number; denominator: number } | undefined> = [];
+
 	let currentKey: KeySignature | undefined;
-	let currentTimeSig: any;
+	let currentTimeSig: { numerator: number; denominator: number } | undefined;
 
 	for (let mi = 0; mi < doc.measures.length; mi++) {
 		const measure = doc.measures[mi];
@@ -708,6 +743,9 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 		// Update context from measure
 		if (measure.key) currentKey = measure.key;
 		if (measure.timeSig) currentTimeSig = measure.timeSig;
+
+		// Store time signature for this measure
+		measureTimeSigs[mi] = currentTimeSig;
 
 		// Process each part
 		for (const part of measure.parts) {
@@ -751,7 +789,9 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 		const voiceLines: string[] = [];
 		for (let vi = 0; vi < maxVoices; vi++) {
 			const measureContents = measures.map((m, mi) => {
-				const content = m[vi] || 's1';  // Space rest if no content
+				// Use correct spacer rest based on time signature
+				const spacer = getSpacerRest(measureTimeSigs[mi]);
+				const content = m[vi] || spacer;
 				// Wrap each measure in its own \relative c' to reset pitch context
 				return `        \\relative c' { ${content} } |  % ${mi + 1}`;
 			});
