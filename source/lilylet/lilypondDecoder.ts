@@ -425,6 +425,17 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						}
 					}
 
+					// Handle time signature context change
+					if (context.time && !voice.events.some(e => e.type === 'context' && (e as ContextChange).timeSig)) {
+						voice.events.push({
+							type: 'context',
+							timeSig: {
+								numerator: context.time.value.numerator,
+								denominator: context.time.value.denominator,
+							},
+						});
+					}
+
 					// Handle clef context change
 					if (context.clef && !voice.events.some(e => e.type === 'context' && (e as ContextChange).clef)) {
 						const clef = LILYPOND_CLEF_MAP[context.clef.clefName];
