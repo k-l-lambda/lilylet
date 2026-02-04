@@ -61,18 +61,26 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 	const filterEvents = (events: Event[]) =>
 		events.filter(e => e.type !== 'pitchReset');
 
+	// Check if a measure has real content (not just pitchReset)
+	const hasRealContent = (m: typeof doc1.measures[0]) =>
+		m.parts.some(p => p.voices.some(v => filterEvents(v.events).length > 0));
+
+	// Filter out empty measures from both documents
+	const measures1 = doc1.measures.filter(hasRealContent);
+	const measures2 = doc2.measures.filter(hasRealContent);
+
 	// Compare measure counts
-	if (doc1.measures.length !== doc2.measures.length) {
+	if (measures1.length !== measures2.length) {
 		return {
 			equal: false,
-			diff: `Measure count differs: ${doc1.measures.length} vs ${doc2.measures.length}`
+			diff: `Measure count differs: ${measures1.length} vs ${measures2.length}`
 		};
 	}
 
 	// Compare each measure
-	for (let mi = 0; mi < doc1.measures.length; mi++) {
-		const m1 = doc1.measures[mi];
-		const m2 = doc2.measures[mi];
+	for (let mi = 0; mi < measures1.length; mi++) {
+		const m1 = measures1[mi];
+		const m2 = measures2[mi];
 
 		// Compare parts count
 		if (m1.parts.length !== m2.parts.length) {
