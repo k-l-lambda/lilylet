@@ -8,7 +8,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { parseCode, serializeLilyletDoc, lilypondEncoder } from "../source/lilylet/index.js";
-import type { LilyletDoc } from "../source/lilylet/types.js";
+import type { LilyletDoc, Event } from "../source/lilylet/types.js";
 
 // Import the LilyPond decoder
 import { decode as decodeLilypond } from "../source/lilylet/lilypondDecoder.js";
@@ -57,6 +57,10 @@ const normalizeLyl = (content: string): string => {
  * Compare two LilyletDoc structures
  */
 const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean; diff?: string } => {
+	// Filter helper - remove pitchReset events (parser artifact, not musical content)
+	const filterEvents = (events: Event[]) =>
+		events.filter(e => e.type !== 'pitchReset');
+
 	// Compare measure counts
 	if (doc1.measures.length !== doc2.measures.length) {
 		return {
@@ -91,16 +95,15 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 				};
 			}
 
-			// Compare each voice
+			// Compare each voice (filtering pitchReset)
 			for (let vi = 0; vi < p1.voices.length; vi++) {
-				const v1 = p1.voices[vi];
-				const v2 = p2.voices[vi];
+				const v1Events = filterEvents(p1.voices[vi].events);
+				const v2Events = filterEvents(p2.voices[vi].events);
 
-				// Compare event counts
-				if (v1.events.length !== v2.events.length) {
+				if (v1Events.length !== v2Events.length) {
 					return {
 						equal: false,
-						diff: `Measure ${mi + 1}, Part ${pi + 1}, Voice ${vi + 1}: Event count differs: ${v1.events.length} vs ${v2.events.length}`
+						diff: `Measure ${mi + 1}, Part ${pi + 1}, Voice ${vi + 1}: Event count differs: ${v1Events.length} vs ${v2Events.length}`
 					};
 				}
 			}
@@ -334,8 +337,8 @@ const main = async () => {
 	let errors = 0;
 
 	for (const filename of files) {
-		// Run encoding test (full roundtrip has decoder issues, use encoding test for now)
-		const result = testEncoding(filename);
+		// Run full roundtrip test
+		const result = await testFile(filename);
 		results.push(result);
 
 		const statusIcon = result.status === "pass" ? "✅" :
