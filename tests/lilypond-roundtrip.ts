@@ -69,6 +69,25 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			return true;
 		});
 
+	// Remove redundant consecutive context events (e.g., repeated stemDirection)
+	const dedupeContextEvents = (events: Event[]): Event[] => {
+		const result: Event[] = [];
+		let lastStemDirection: string | undefined;
+
+		for (const e of events) {
+			if (e.type === 'context' && 'stemDirection' in e) {
+				const stemDir = (e as any).stemDirection;
+				if (stemDir === lastStemDirection) {
+					// Skip duplicate stem direction
+					continue;
+				}
+				lastStemDirection = stemDir;
+			}
+			result.push(e);
+		}
+		return result;
+	};
+
 	// Collect all events from all measures for a voice track
 	const collectAllEvents = (measures: typeof doc1.measures, partIndex: number, voiceIndex: number) => {
 		const allEvents: Event[] = [];
@@ -78,7 +97,7 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 				allEvents.push(...filterEvents(part.voices[voiceIndex].events));
 			}
 		}
-		return allEvents;
+		return dedupeContextEvents(allEvents);
 	};
 
 	// Get max parts count

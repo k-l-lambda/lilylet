@@ -586,9 +586,11 @@ const encodeBarlineEvent = (event: BarlineEvent): string => {
 
 /**
  * Encode a harmony event (chord symbol)
+ * Note: LilyPond uses ChordNames context for chord symbols, not inline commands.
+ * We encode as markup with a recognizable prefix for roundtrip decoding.
  */
 const encodeHarmonyEvent = (event: HarmonyEvent): string => {
-	return `^\\markup { ${event.text} }`;
+	return `^\\markup { \\bold "${event.text}" }`;
 };
 
 

@@ -20,6 +20,7 @@ import {
 	RestEvent,
 	ContextChange,
 	MarkupEvent,
+	HarmonyEvent,
 	TupletEvent,
 	TremoloEvent,
 	Pitch,
@@ -312,25 +313,79 @@ const convertRawChord = (chord: any, defaultDuration?: Duration): NoteEvent | un
 };
 
 
-// Convert key fifths to KeySignature
-const convertKeySignature = (fifths: number): KeySignature | undefined => {
-	const mapping = KEY_FIFTHS_MAP[fifths];
-	if (mapping) {
+// Parse pitch name with accidental (e.g., "cf" -> { pitch: Phonet.c, accidental: Accidental.flat })
+const parsePitchName = (name: string): { pitch: Phonet; accidental?: Accidental } | undefined => {
+	if (!name || name.length === 0) return undefined;
+
+	const phonetChar = name[0].toLowerCase();
+	const phonet = {
+		'c': Phonet.c, 'd': Phonet.d, 'e': Phonet.e, 'f': Phonet.f,
+		'g': Phonet.g, 'a': Phonet.a, 'b': Phonet.b
+	}[phonetChar];
+
+	if (!phonet) return undefined;
+
+	const accidentalPart = name.slice(1);
+	let accidental: Accidental | undefined;
+	if (accidentalPart === 's' || accidentalPart === 'is') {
+		accidental = Accidental.sharp;
+	} else if (accidentalPart === 'ss' || accidentalPart === 'isis') {
+		accidental = Accidental.doubleSharp;
+	} else if (accidentalPart === 'f' || accidentalPart === 'es') {
+		accidental = Accidental.flat;
+	} else if (accidentalPart === 'ff' || accidentalPart === 'eses') {
+		accidental = Accidental.doubleFlat;
+	}
+
+	return { pitch: phonet, accidental };
+};
+
+// Convert key from context to KeySignature
+const convertKeySignature = (keyContext: any): KeySignature | undefined => {
+	const args = keyContext?.args;
+
+	// Always parse from args to get correct pitch and mode
+	if (Array.isArray(args) && args.length >= 2) {
+		const pitchStr = args[0];
+		const modeStr = args[1];
+
+		const pitchInfo = parsePitchName(pitchStr);
+		if (pitchInfo) {
+			const mode = modeStr?.includes('minor') ? 'minor' : 'major';
+			return {
+				pitch: pitchInfo.pitch,
+				accidental: pitchInfo.accidental,
+				mode,
+			};
+		}
+	}
+
+	// Fallback to fifths lookup for compatibility (major keys only)
+	const fifths = keyContext?.key;
+	if (fifths !== undefined && KEY_FIFTHS_MAP[fifths]) {
+		const mapping = KEY_FIFTHS_MAP[fifths];
 		return {
 			pitch: mapping.pitch,
 			accidental: mapping.accidental,
 			mode: mapping.mode,
 		};
 	}
+
 	return undefined;
 };
 
 
-// Parse post-events to marks
-const parsePostEvents = (postEvents: any[]): Mark[] => {
-	const marks: Mark[] = [];
+// Parse post-events to marks and detect harmony events
+interface PostEventResult {
+	marks: Mark[];
+	harmonyText?: string;
+}
 
-	if (!postEvents) return marks;
+const parsePostEvents = (postEvents: any[]): PostEventResult => {
+	const marks: Mark[] = [];
+	let harmonyText: string | undefined;
+
+	if (!postEvents) return { marks };
 
 	for (const event of postEvents) {
 		// String events
@@ -384,7 +439,31 @@ const parsePostEvents = (postEvents: any[]): Mark[] => {
 				} else if (cmd === 'segno') {
 					marks.push({ markType: 'navigation', type: NavigationMarkType.segno });
 				} else if (cmd === '\\markup' || cmd === 'markup') {
-					// Markup attached to note
+					// Check if this is a harmony (chord symbol) - marked with \bold
+					const harmony = extractHarmonyFromMarkup(arg.args);
+					if (harmony) {
+						harmonyText = harmony;
+					} else {
+						// Regular markup attached to note
+						const text = extractTextFromObject(arg.args);
+						if (text && !containsTempoWord(text)) {
+							const direction = event.direction;
+							const placement: Placement | undefined =
+								direction === 'up' ? Placement.above :
+								direction === 'down' ? Placement.below : undefined;
+							marks.push({ markType: 'markup', content: text, placement });
+						}
+					}
+				}
+			}
+
+			// Handle markup command directly (proto: 'MarkupCommand')
+			if (arg && typeof arg === 'object' && arg.proto === 'MarkupCommand') {
+				// Check if this is a harmony (chord symbol) - marked with \bold
+				const harmony = extractHarmonyFromMarkup(arg.args);
+				if (harmony) {
+					harmonyText = harmony;
+				} else {
 					const text = extractTextFromObject(arg.args);
 					if (text && !containsTempoWord(text)) {
 						const direction = event.direction;
@@ -395,22 +474,10 @@ const parsePostEvents = (postEvents: any[]): Mark[] => {
 					}
 				}
 			}
-
-			// Handle markup command directly (proto: 'Command' with \\markup)
-			if (arg && typeof arg === 'object' && arg.proto === 'Command' && arg.cmd === '\\markup') {
-				const text = extractTextFromObject(arg.args);
-				if (text && !containsTempoWord(text)) {
-					const direction = event.direction;
-					const placement: Placement | undefined =
-						direction === 'up' ? Placement.above :
-						direction === 'down' ? Placement.below : undefined;
-					marks.push({ markType: 'markup', content: text, placement });
-				}
-			}
 		}
 	}
 
-	return marks;
+	return { marks, harmonyText };
 };
 
 
@@ -439,7 +506,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		let lastTimeSig: string | undefined = undefined;  // Track value changes (as string for comparison)
 		let lastClef: Clef | undefined = undefined;  // Track value changes
 		let lastOttava: number | undefined = undefined;  // Track value changes
-		let emittedStemDirection = false;
+		let lastStemDirection: string | undefined = undefined;  // Track value changes
 
 		const context = new lilyParser.TrackContext(undefined, {
 			listener: (term: lilyParser.BaseTerm, context: lilyParser.TrackContext) => {
@@ -498,7 +565,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 
 					// Handle key context change (emit when value changes)
 					if (context.key && context.key.key !== lastKey) {
-						const key = convertKeySignature(context.key.key);
+						const key = convertKeySignature(context.key);
 						if (key) {
 							voice.events.push({
 								type: 'context',
@@ -547,8 +614,8 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						}
 					}
 
-					// Handle stem direction context (only emit once per voice)
-					if (context.stemDirection && !emittedStemDirection) {
+					// Handle stem direction context change (emit when value changes)
+					if (context.stemDirection && context.stemDirection !== lastStemDirection) {
 						const stemDir = context.stemDirection === 'Up' ? StemDirection.up :
 							context.stemDirection === 'Down' ? StemDirection.down : undefined;
 						if (stemDir) {
@@ -556,7 +623,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 								type: 'context',
 								stemDirection: stemDir,
 							});
-							emittedStemDirection = true;
+							lastStemDirection = context.stemDirection;
 						}
 					}
 
@@ -575,7 +642,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						}
 
 						if (pitches.length > 0) {
-							const marks = parsePostEvents(term.post_events);
+							const { marks, harmonyText } = parsePostEvents(term.post_events);
 
 							// Add beam marks
 							if (term.beamOn) {
@@ -601,6 +668,15 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 							}
 
 							voice.events.push(noteEvent);
+
+							// Add harmony event if detected (chord symbol encoded as \bold markup)
+							if (harmonyText) {
+								const harmonyEvent: HarmonyEvent = {
+									type: 'harmony',
+									text: harmonyText,
+								};
+								voice.events.push(harmonyEvent);
+							}
 						}
 					}
 					// Process Rest
@@ -623,9 +699,9 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						voice.events.push(restEvent);
 					}
 				}
-				// Handle standalone stem direction
+				// Handle standalone stem direction (emit when value changes)
 				else if (term instanceof lilyParser.LilyTerms.StemDirection) {
-					if (!emittedStemDirection) {
+					if (term.direction !== lastStemDirection) {
 						const stemDir = term.direction === 'Up' ? StemDirection.up :
 							term.direction === 'Down' ? StemDirection.down : undefined;
 						if (stemDir) {
@@ -633,7 +709,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 								type: 'context',
 								stemDirection: stemDir,
 							});
-							emittedStemDirection = true;
+							lastStemDirection = term.direction;
 						}
 					}
 				}
@@ -679,13 +755,23 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 				else {
 					const termAny = term as any;
 					if (termAny.proto === 'Command' && (termAny.cmd === '\\markup' || termAny.cmd === 'markup')) {
-						const text = extractTextFromObject(termAny.args);
-						if (text && !containsTempoWord(text)) {
-							const markupEvent: MarkupEvent = {
-								type: 'markup',
-								content: text,
+						// Check if this is a harmony (chord symbol) - marked with \bold
+						const harmonyText = extractHarmonyFromMarkup(termAny.args);
+						if (harmonyText) {
+							const harmonyEvent: HarmonyEvent = {
+								type: 'harmony',
+								text: harmonyText,
 							};
-							voice.events.push(markupEvent);
+							voice.events.push(harmonyEvent);
+						} else {
+							const text = extractTextFromObject(termAny.args);
+							if (text && !containsTempoWord(text)) {
+								const markupEvent: MarkupEvent = {
+									type: 'markup',
+									content: text,
+								};
+								voice.events.push(markupEvent);
+							}
 						}
 					}
 					// Handle barline command - barlines belong to the previous measure
@@ -894,6 +980,43 @@ const extractTextFromObject = (obj: any): string | undefined => {
 	// Fallback: try value property
 	if (obj.value !== undefined) {
 		return extractTextFromObject(obj.value);
+	}
+
+	return undefined;
+};
+
+
+// Check if markup contains \bold command (indicates harmony/chord symbol)
+// Returns the text if it's a harmony, undefined otherwise
+const extractHarmonyFromMarkup = (obj: any): string | undefined => {
+	if (!obj) return undefined;
+
+	// Check array of args
+	if (Array.isArray(obj)) {
+		for (const item of obj) {
+			const result = extractHarmonyFromMarkup(item);
+			if (result !== undefined) return result;
+		}
+		return undefined;
+	}
+
+	if (obj && typeof obj === 'object') {
+		// Check if this is a \bold command (can be Command or MarkupCommand)
+		if ((obj.proto === 'Command' || obj.proto === 'MarkupCommand') &&
+			(obj.cmd === 'bold' || obj.cmd === '\\bold')) {
+			// Extract the text from args
+			return extractTextFromObject(obj.args);
+		}
+
+		// Recursively search InlineBlock body
+		if (obj.proto === 'InlineBlock' && obj.body) {
+			return extractHarmonyFromMarkup(obj.body);
+		}
+
+		// Recursively search args
+		if (obj.args) {
+			return extractHarmonyFromMarkup(obj.args);
+		}
 	}
 
 	return undefined;
