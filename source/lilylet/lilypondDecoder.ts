@@ -761,7 +761,9 @@ const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[], metadata?: Metadat
 		}
 
 		return measure;
-	});
+	})
+	// Filter out empty measures (no voices in any part)
+	.filter(m => m.parts.some(p => p.voices.length > 0));
 
 	const doc: LilyletDoc = { measures };
 	if (metadata) {
