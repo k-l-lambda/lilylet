@@ -21,6 +21,7 @@ import {
 	ContextChange,
 	MarkupEvent,
 	TupletEvent,
+	TremoloEvent,
 	Pitch,
 	Duration,
 	Mark,
@@ -746,6 +747,47 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 										events: tupletEvents,
 									};
 									voice.events.push(tupletEvent);
+								}
+							}
+						}
+					}
+					// Handle repeat tremolo
+					else if (termAny.proto === 'Repeat' && termAny.args?.[0] === 'tremolo') {
+						const count = parseInt(termAny.args?.[1], 10);
+						const body = termAny.args?.[2]?.body || [];
+
+						if (!isNaN(count) && body.length === 2) {
+							// Double tremolo has exactly 2 pitches
+							const pitch1 = body[0]?.pitches?.[0]?.pitch;
+							const pitch2 = body[1]?.pitches?.[0]?.pitch;
+							const duration = body[0]?.duration;
+
+							if (pitch1 && pitch2 && duration) {
+								const pitchA = parseRawPitch(pitch1);
+								const pitchB = parseRawPitch(pitch2);
+								const div = parseInt(duration.number, 10);
+
+								if (pitchA && pitchB && !isNaN(div)) {
+									// Remove the 2 notes that were already added
+									let removed = 0;
+									while (removed < 2 && voice.events.length > 0) {
+										const lastEvent = voice.events[voice.events.length - 1];
+										if (lastEvent.type === 'note') {
+											voice.events.pop();
+											removed++;
+										} else {
+											break;
+										}
+									}
+
+									const tremoloEvent: TremoloEvent = {
+										type: 'tremolo',
+										pitchA: [pitchA],
+										pitchB: [pitchB],
+										count,
+										division: div,
+									};
+									voice.events.push(tremoloEvent);
 								}
 							}
 						}
