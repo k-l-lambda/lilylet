@@ -414,6 +414,17 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					// Update staff from voice events
 					voice.staff = staff;
 
+					// Handle key context change
+					if (context.key && !voice.events.some(e => e.type === 'context' && (e as ContextChange).key)) {
+						const key = convertKeySignature(context.key.key);
+						if (key) {
+							voice.events.push({
+								type: 'context',
+								key,
+							});
+						}
+					}
+
 					// Handle clef context change
 					if (context.clef && !voice.events.some(e => e.type === 'context' && (e as ContextChange).clef)) {
 						const clef = LILYPOND_CLEF_MAP[context.clef.clefName];
