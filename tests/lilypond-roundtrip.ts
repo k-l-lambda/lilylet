@@ -60,9 +60,14 @@ const normalizeLyl = (content: string): string => {
  * and lotus parser (enforces time signatures). We compare total events across all measures.
  */
 const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean; diff?: string } => {
-	// Filter helper - remove pitchReset events (parser artifact, not musical content)
+	// Filter helper - remove parser artifacts that don't represent musical content
 	const filterEvents = (events: Event[]) =>
-		events.filter(e => e.type !== 'pitchReset');
+		events.filter(e => {
+			if (e.type === 'pitchReset') return false;
+			// Filter staff context events (handled at voice level, not as events)
+			if (e.type === 'context' && 'staff' in e) return false;
+			return true;
+		});
 
 	// Collect all events from all measures for a voice track
 	const collectAllEvents = (measures: typeof doc1.measures, partIndex: number, voiceIndex: number) => {
