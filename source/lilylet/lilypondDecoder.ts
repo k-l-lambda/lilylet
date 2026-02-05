@@ -10,7 +10,7 @@ import * as lilyParser from "@k-l-lambda/lotus/lib/inc/lilyParser/index.js";
 
 // Import pre-compiled LilyPond parser (browser-compatible)
 // @ts-ignore - CommonJS module
-import * as lilypondParser from "@k-l-lambda/lotus/lib/lilyParser.js";
+import * as lilypondParser from "@k-l-lambda/lotus/lib.browser/lib/lilyParser.js";
 
 import {
 	LilyletDoc,
