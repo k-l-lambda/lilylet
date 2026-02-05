@@ -66,6 +66,8 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			if (e.type === 'pitchReset') return false;
 			// Filter staff context events (handled at voice level, not as events)
 			if (e.type === 'context' && 'staff' in e) return false;
+			// Filter stemDirection context (depends on voice structure, which may change in roundtrip)
+			if (e.type === 'context' && 'stemDirection' in e) return false;
 			// Filter invisible/spacer rests (used for padding, not musical content)
 			if (e.type === 'rest' && (e as any).invisible) return false;
 			return true;
@@ -121,16 +123,35 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		return result;
 	};
 
-	// Collect all events from all measures for a voice track
-	const collectAllEvents = (measures: typeof doc1.measures, partIndex: number, voiceIndex: number) => {
+	// Collect all events from all measures for a specific staff within a part
+	// This handles roundtrip where voice structure may change but staff content is preserved
+	const collectEventsByStaff = (measures: typeof doc1.measures, partIndex: number, staff: number) => {
 		const allEvents: Event[] = [];
 		for (const m of measures) {
 			const part = m.parts[partIndex];
-			if (part && part.voices[voiceIndex]) {
-				allEvents.push(...filterEvents(part.voices[voiceIndex].events));
+			if (part) {
+				for (const voice of part.voices) {
+					if (voice.staff === staff) {
+						allEvents.push(...filterEvents(voice.events));
+					}
+				}
 			}
 		}
 		return dedupeContextEvents(allEvents);
+	};
+
+	// Get all unique staves used in a part across all measures
+	const getStaves = (measures: typeof doc1.measures, partIndex: number): number[] => {
+		const staves = new Set<number>();
+		for (const m of measures) {
+			const part = m.parts[partIndex];
+			if (part) {
+				for (const voice of part.voices) {
+					staves.add(voice.staff || 1);
+				}
+			}
+		}
+		return Array.from(staves).sort((a, b) => a - b);
 	};
 
 	// Get max parts count
@@ -144,28 +165,29 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		};
 	}
 
-	// Compare each part
+	// Compare each part by staff (not by voice index)
 	for (let pi = 0; pi < maxParts1; pi++) {
-		// Get max voices for this part
-		const maxVoices1 = Math.max(...doc1.measures.map(m => m.parts[pi]?.voices.length || 0), 0);
-		const maxVoices2 = Math.max(...doc2.measures.map(m => m.parts[pi]?.voices.length || 0), 0);
+		// Get all unique staves in this part
+		const staves1 = getStaves(doc1.measures, pi);
+		const staves2 = getStaves(doc2.measures, pi);
 
-		if (maxVoices1 !== maxVoices2) {
+		// Compare staff counts
+		if (staves1.length !== staves2.length) {
 			return {
 				equal: false,
-				diff: `Part ${pi + 1}: Voice count differs: ${maxVoices1} vs ${maxVoices2}`
+				diff: `Part ${pi + 1}: Staff count differs: ${staves1.length} vs ${staves2.length}`
 			};
 		}
 
-		// Compare total events for each voice across all measures
-		for (let vi = 0; vi < maxVoices1; vi++) {
-			const v1Events = collectAllEvents(doc1.measures, pi, vi);
-			const v2Events = collectAllEvents(doc2.measures, pi, vi);
+		// Compare events for each staff
+		for (const staff of staves1) {
+			const events1 = collectEventsByStaff(doc1.measures, pi, staff);
+			const events2 = collectEventsByStaff(doc2.measures, pi, staff);
 
-			if (v1Events.length !== v2Events.length) {
+			if (events1.length !== events2.length) {
 				return {
 					equal: false,
-					diff: `Part ${pi + 1}, Voice ${vi + 1}: Total event count differs: ${v1Events.length} vs ${v2Events.length}`
+					diff: `Part ${pi + 1}, Staff ${staff}: Total event count differs: ${events1.length} vs ${events2.length}`
 				};
 			}
 		}

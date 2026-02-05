@@ -641,7 +641,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						}
 					}
 
-					// Process Chord (note or chord)
+					// Process Chord (note or chord, or positioned rest if isRest)
 					if (term instanceof lilyParser.LilyTerms.Chord) {
 						const pitches: Pitch[] = [];
 
@@ -656,40 +656,50 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						}
 
 						if (pitches.length > 0) {
-							const { marks, harmonyText } = parsePostEvents(term.post_events);
-
-							// Add beam marks
-							if (term.beamOn) {
-								marks.push({ markType: 'beam', start: true });
-							} else if (term.beamOff) {
-								marks.push({ markType: 'beam', start: false });
-							}
-
-							// Add tie
-							if (term.isTying) {
-								marks.push({ markType: 'tie', start: true });
-							}
-
-							const noteEvent: NoteEvent = {
-								type: 'note',
-								pitches,
-								duration: convertDuration(term.durationValue),
-								grace: context.inGrace || undefined,
-							};
-
-							if (marks.length > 0) {
-								noteEvent.marks = marks;
-							}
-
-							voice.events.push(noteEvent);
-
-							// Add harmony event if detected (chord symbol encoded as \bold markup)
-							if (harmonyText) {
-								const harmonyEvent: HarmonyEvent = {
-									type: 'harmony',
-									text: harmonyText,
+							// Check if this is a positioned rest (a\rest syntax)
+							if (term.isRest) {
+								const restEvent: RestEvent = {
+									type: 'rest',
+									duration: convertDuration(term.durationValue),
+									pitch: pitches[0],  // Use first pitch for positioning
 								};
-								voice.events.push(harmonyEvent);
+								voice.events.push(restEvent);
+							} else {
+								const { marks, harmonyText } = parsePostEvents(term.post_events);
+
+								// Add beam marks
+								if (term.beamOn) {
+									marks.push({ markType: 'beam', start: true });
+								} else if (term.beamOff) {
+									marks.push({ markType: 'beam', start: false });
+								}
+
+								// Add tie
+								if (term.isTying) {
+									marks.push({ markType: 'tie', start: true });
+								}
+
+								const noteEvent: NoteEvent = {
+									type: 'note',
+									pitches,
+									duration: convertDuration(term.durationValue),
+									grace: context.inGrace || undefined,
+								};
+
+								if (marks.length > 0) {
+									noteEvent.marks = marks;
+								}
+
+								voice.events.push(noteEvent);
+
+								// Add harmony event if detected (chord symbol encoded as \bold markup)
+								if (harmonyText) {
+									const harmonyEvent: HarmonyEvent = {
+										type: 'harmony',
+										text: harmonyText,
+									};
+									voice.events.push(harmonyEvent);
+								}
 							}
 						}
 					}
@@ -1100,30 +1110,70 @@ const extractMetadata = (lilyDocument: lilyParser.LilyDocument): Metadata | unde
 };
 
 
+// Dedupe consecutive context events in merged voice
+// This is needed because multiple tracks merged into one voice may have redundant context events
+const dedupeContextEvents = (events: Event[]): Event[] => {
+	const result: Event[] = [];
+	let lastStemDirection: string | undefined;
+	let lastClef: string | undefined;
+
+	for (const e of events) {
+		if (e.type === 'context') {
+			const ctx = e as ContextChange;
+
+			// Dedupe stemDirection
+			if ('stemDirection' in ctx) {
+				if (ctx.stemDirection === lastStemDirection) continue;
+				lastStemDirection = ctx.stemDirection;
+			}
+
+			// Dedupe clef
+			if ('clef' in ctx) {
+				if (ctx.clef === lastClef) continue;
+				lastClef = ctx.clef;
+			}
+		}
+		result.push(e);
+	}
+	return result;
+};
+
+
 // Convert parsed measures to LilyletDoc
 const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[], metadata?: Metadata): LilyletDoc => {
 	const measures: Measure[] = parsedMeasures.map(pm => {
 		// Filter out voices that only contain spacer rests and context changes
 		const filteredVoices = pm.voices.filter(v => hasRealContent(v.events));
 
-		// Group voices by partIndex
-		const partMap = new Map<number, Array<{ staff: number; events: Event[] }>>();
+		// Group voices by partIndex, then merge voices on the same staff
+		const partMap = new Map<number, Map<number, Event[]>>();
 		for (const v of filteredVoices) {
 			const pi = v.partIndex || 1;
 			if (!partMap.has(pi)) {
-				partMap.set(pi, []);
+				partMap.set(pi, new Map());
 			}
-			partMap.get(pi)!.push({
-				staff: v.staff,
-				events: v.events,
-			});
+			const staffMap = partMap.get(pi)!;
+
+			// Merge events from voices on the same staff
+			if (!staffMap.has(v.staff)) {
+				staffMap.set(v.staff, []);
+			}
+			staffMap.get(v.staff)!.push(...v.events);
 		}
 
-		// Convert to parts array (sorted by part index)
+		// Convert to parts array (sorted by part index, then by staff)
+		// Apply deduplication to merged events
 		const partIndices = Array.from(partMap.keys()).sort((a, b) => a - b);
-		const parts = partIndices.map(pi => ({
-			voices: partMap.get(pi)!,
-		}));
+		const parts = partIndices.map(pi => {
+			const staffMap = partMap.get(pi)!;
+			const staffNums = Array.from(staffMap.keys()).sort((a, b) => a - b);
+			return {
+				voices: staffNums.map(staff => ({
+					staff,
+					events: dedupeContextEvents(staffMap.get(staff)!),
+				})),
+			};
+		});
 
 		// Fallback to single empty part if no voices
 		const measure: Measure = {
