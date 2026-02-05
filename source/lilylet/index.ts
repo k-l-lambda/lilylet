@@ -10,9 +10,11 @@ import * as musicXmlEncoder from "./musicXmlEncoder";
 
 // lilypondDecoder is optional - requires @k-l-lambda/lotus
 // Use dynamic import to avoid build-time dependency
-const loadLilypondDecoder = async () => {
+// @ts-ignore - lilypondDecoder.ts is excluded from build, pre-built .js is used
+const loadLilypondDecoder = async (): Promise<any> => {
 	try {
-		return await import("./lilypondDecoder.js");
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		return await import(/* webpackIgnore: true */ "./lilypondDecoder.js");
 	} catch {
 		return undefined;
 	}
