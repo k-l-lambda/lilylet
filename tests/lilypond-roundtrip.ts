@@ -71,19 +71,42 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			return true;
 		});
 
-	// Remove redundant consecutive context events (e.g., repeated stemDirection)
+	// Remove redundant consecutive context events (e.g., repeated stemDirection, clef, key, timeSig)
 	const dedupeContextEvents = (events: Event[]): Event[] => {
 		const result: Event[] = [];
 		let lastStemDirection: string | undefined;
+		let lastClef: string | undefined;
+		let lastKey: number | undefined;
+		let lastTimeSig: string | undefined;
 
 		for (const e of events) {
-			if (e.type === 'context' && 'stemDirection' in e) {
-				const stemDir = (e as any).stemDirection;
-				if (stemDir === lastStemDirection) {
-					// Skip duplicate stem direction
-					continue;
+			if (e.type === 'context') {
+				const ctx = e as any;
+
+				// Dedupe stemDirection
+				if ('stemDirection' in ctx) {
+					if (ctx.stemDirection === lastStemDirection) continue;
+					lastStemDirection = ctx.stemDirection;
 				}
-				lastStemDirection = stemDir;
+
+				// Dedupe clef
+				if ('clef' in ctx) {
+					if (ctx.clef === lastClef) continue;
+					lastClef = ctx.clef;
+				}
+
+				// Dedupe key
+				if ('key' in ctx) {
+					if (ctx.key === lastKey) continue;
+					lastKey = ctx.key;
+				}
+
+				// Dedupe timeSig
+				if ('timeSig' in ctx && ctx.timeSig) {
+					const timeSigStr = `${ctx.timeSig.numerator}/${ctx.timeSig.denominator}`;
+					if (timeSigStr === lastTimeSig) continue;
+					lastTimeSig = timeSigStr;
+				}
 			}
 			result.push(e);
 		}
