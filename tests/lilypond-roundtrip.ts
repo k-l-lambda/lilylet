@@ -71,13 +71,13 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			return true;
 		});
 
-	// Remove redundant consecutive context events (e.g., repeated stemDirection, clef, key, timeSig)
+	// Remove redundant consecutive context events (e.g., repeated stemDirection, clef, key, time/timeSig)
 	const dedupeContextEvents = (events: Event[]): Event[] => {
 		const result: Event[] = [];
 		let lastStemDirection: string | undefined;
 		let lastClef: string | undefined;
-		let lastKey: number | undefined;
-		let lastTimeSig: string | undefined;
+		let lastKey: string | undefined;
+		let lastTime: string | undefined;
 
 		for (const e of events) {
 			if (e.type === 'context') {
@@ -95,17 +95,25 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 					lastClef = ctx.clef;
 				}
 
-				// Dedupe key
+				// Dedupe key (use JSON for object comparison)
 				if ('key' in ctx) {
-					if (ctx.key === lastKey) continue;
-					lastKey = ctx.key;
+					const keyStr = JSON.stringify(ctx.key);
+					if (keyStr === lastKey) continue;
+					lastKey = keyStr;
 				}
 
-				// Dedupe timeSig
+				// Dedupe time (lilylet parser uses 'time' property)
+				if ('time' in ctx && ctx.time) {
+					const timeStr = `${ctx.time.numerator}/${ctx.time.denominator}`;
+					if (timeStr === lastTime) continue;
+					lastTime = timeStr;
+				}
+
+				// Dedupe timeSig (alternative name used in some contexts)
 				if ('timeSig' in ctx && ctx.timeSig) {
 					const timeSigStr = `${ctx.timeSig.numerator}/${ctx.timeSig.denominator}`;
-					if (timeSigStr === lastTimeSig) continue;
-					lastTimeSig = timeSigStr;
+					if (timeSigStr === lastTime) continue;
+					lastTime = timeSigStr;
 				}
 			}
 			result.push(e);
