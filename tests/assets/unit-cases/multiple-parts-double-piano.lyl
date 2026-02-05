@@ -1,4 +1,4 @@
 \staff "1" \time 2/4 \clef "treble" \ottava #1 g''4 c \\
-\staff "2" \time 2/4 \clef "treble" \ottava #1 g'4 c \\\
-\staff "1" \time 2/4 \clef "bass" r8 <g c e> r <g c e> \\
+\staff "2" \time 2/4 \clef "bass" r8 <g c e> r <g, c e> \\\
+\staff "1" \time 2/4 \clef "treble" \ottava #1 g'4 c \\
 \staff "2" \time 2/4 \clef "bass" c,8 r g r |
