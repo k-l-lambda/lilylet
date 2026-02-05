@@ -7,13 +7,12 @@ import * as meiEncoder from "./meiEncoder";
 import * as musicXmlDecoder from "./musicXmlDecoder";
 import * as lilypondEncoder from "./lilypondEncoder";
 import * as musicXmlEncoder from "./musicXmlEncoder";
+import * as lilypondDecoder from "./lilypondDecoder";
 
 export {
 	meiEncoder,
 	musicXmlDecoder,
 	lilypondEncoder,
 	musicXmlEncoder,
+	lilypondDecoder,
 };
-
-// Note: lilypondDecoder is optional and requires @k-l-lambda/lotus
-// Import it directly from '@k-l-lambda/lilylet/lib/lilypondDecoder.js' if needed
