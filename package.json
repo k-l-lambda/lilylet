@@ -1,6 +1,6 @@
 {
   "name": "@k-l-lambda/lilylet",
-  "version": "0.1.44",
+  "version": "0.1.45",
   "description": "Lilylet is a lilyopnd-like sheet music language designed for Markdown rendering and symbolic music representation in AIGC applications.",
   "type": "module",
   "main": "lib/index.js",
@@ -13,6 +13,10 @@
     "./browser": {
       "types": "./lib/browser.d.ts",
       "default": "./lib/browser.js"
+    },
+    "./lib/lilypondDecoder.js": {
+      "types": "./lib/lilypondDecoder.d.ts",
+      "default": "./lib/lilypondDecoder.js"
     }
   },
   "files": [
