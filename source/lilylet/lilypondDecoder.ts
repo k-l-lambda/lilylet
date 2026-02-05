@@ -595,7 +595,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						if (timeSigStr !== lastTimeSig) {
 							voice.events.push({
 								type: 'context',
-								timeSig: {
+								time: {
 									numerator: context.time.value.numerator,
 									denominator: context.time.value.denominator,
 								},
@@ -841,12 +841,12 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 
 								// Remove the last noteCount note/rest events from voice.events
 								// (they were already added by the Chord/Rest handlers)
-								const tupletEvents: Event[] = [];
+								const tupletEvents: (NoteEvent | RestEvent)[] = [];
 								let removed = 0;
 								while (removed < noteCount && voice.events.length > 0) {
 									const lastEvent = voice.events[voice.events.length - 1];
 									if (lastEvent.type === 'note' || lastEvent.type === 'rest') {
-										tupletEvents.unshift(voice.events.pop()!);
+										tupletEvents.unshift(voice.events.pop()! as NoteEvent | RestEvent);
 										removed++;
 									} else {
 										break;  // Stop if we hit a non-note/rest event
