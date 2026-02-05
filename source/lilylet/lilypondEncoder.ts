@@ -717,8 +717,29 @@ const encodeMetadata = (metadata: Metadata): string => {
 export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => {
 	const opts = { ...DEFAULT_OPTIONS, ...options };
 
+	// Filter out trailing empty measures (measures with no musical content)
+	const hasMusicContent = (measure: Measure): boolean => {
+		for (const part of measure.parts) {
+			for (const voice of part.voices) {
+				for (const event of voice.events) {
+					if (event.type === 'note' || event.type === 'rest' || event.type === 'tuplet' || event.type === 'tremolo') {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	};
+
+	// Trim trailing empty measures
+	let measureCount = doc.measures.length;
+	while (measureCount > 0 && !hasMusicContent(doc.measures[measureCount - 1])) {
+		measureCount--;
+	}
+	const measures = doc.measures.slice(0, measureCount);
+
 	// Determine number of parts from the document
-	const partCount = Math.max(...doc.measures.map(m => m.parts.length), 1);
+	const partCount = Math.max(...measures.map(m => m.parts.length), 1);
 
 	// For each part, collect voices grouped by staff
 	// partVoices[partIndex][staff] = measureContents[][]  (measure -> voice contents)
@@ -734,8 +755,8 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 	let currentKey: KeySignature | undefined;
 	let currentTimeSig: { numerator: number; denominator: number } | undefined;
 
-	for (let mi = 0; mi < doc.measures.length; mi++) {
-		const measure = doc.measures[mi];
+	for (let mi = 0; mi < measures.length; mi++) {
+		const measure = measures[mi];
 
 		// Update context from measure
 		if (measure.key) currentKey = measure.key;
@@ -777,7 +798,7 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 
 	// Build a staff string (used for both GrandStaff children and standalone Staff)
 	// Staff ID format: "partIndex_staffIndex" (e.g., "1_1", "1_2", "2_1") for multi-part decoding
-	const buildStaffString = (staffNum: number, measures: string[][], staffId: string, indent: string): string => {
+	const buildStaffString = (measures: string[][], staffId: string, indent: string): string => {
 		// Find max voices per measure for this staff
 		const maxVoices = Math.max(...measures.map(m => m.length), 1);
 
@@ -816,7 +837,7 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 			const staffNum = staffNums[0];
 			const measures = staffMap.get(staffNum)!;
 			const staffId = `${partIndex}_${staffNum}`;
-			const staffStr = buildStaffString(staffNum, measures, staffId, '    ');
+			const staffStr = buildStaffString(measures, staffId, '    ');
 			partStrings.push(staffStr);
 		} else {
 			// Multiple staves → GrandStaff
@@ -824,7 +845,7 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 			for (const staffNum of staffNums) {
 				const measures = staffMap.get(staffNum)!;
 				const staffId = `${partIndex}_${staffNum}`;
-				const staffStr = buildStaffString(staffNum, measures, staffId, '      ');
+				const staffStr = buildStaffString(measures, staffId, '      ');
 				staffStrings.push(staffStr);
 			}
 			partStrings.push(`    \\new GrandStaff <<\n${staffStrings.join('\n')}\n    >>`);
