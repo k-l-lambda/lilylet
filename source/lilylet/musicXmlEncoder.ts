@@ -349,6 +349,10 @@ const encodeNotations = (marks: Mark[], level: number): string => {
 				otherNotations.push(`<slur type="${mark.start ? 'start' : 'stop'}" number="1"/>`);
 				break;
 
+			case 'tuplet' as any:
+				otherNotations.push(`<tuplet type="${(mark as any).start ? 'start' : 'stop'}"/>`);
+				break;
+
 			case 'fingering':
 				// Fingering goes in technical
 				break;
@@ -487,6 +491,49 @@ const encodeRest = (
 	if (staff > 0) {
 		xml += `${indent(level + 1)}<staff>${staff}</staff>\n`;
 	}
+
+	xml += `${indent(level)}</note>\n`;
+
+	return xml;
+};
+
+
+/**
+ * Encode a rest event with tuplet notation start/stop
+ */
+const encodeRestWithTuplet = (
+	event: RestEvent,
+	voice: number,
+	staff: number,
+	level: number,
+	isFirst: boolean,
+	isLast: boolean
+): string => {
+	let xml = `${indent(level)}<note>\n`;
+
+	xml += `${indent(level + 1)}<rest`;
+	if (event.fullMeasure) {
+		xml += ' measure="yes"';
+	}
+	xml += '/>\n';
+
+	xml += encodeDuration(event.duration, level + 1);
+
+	xml += `${indent(level + 1)}<voice>${voice}</voice>\n`;
+
+	if (staff > 0) {
+		xml += `${indent(level + 1)}<staff>${staff}</staff>\n`;
+	}
+
+	// Add tuplet notations
+	xml += `${indent(level + 1)}<notations>\n`;
+	if (isFirst) {
+		xml += `${indent(level + 2)}<tuplet type="start"/>\n`;
+	}
+	if (isLast) {
+		xml += `${indent(level + 2)}<tuplet type="stop"/>\n`;
+	}
+	xml += `${indent(level + 1)}</notations>\n`;
 
 	xml += `${indent(level)}</note>\n`;
 
@@ -738,16 +785,44 @@ const encodeMeasure = (
 					}
 
 					case 'tuplet': {
-						for (const subEvent of event.events) {
+						const tupletEvents = event.events;
+						for (let ti = 0; ti < tupletEvents.length; ti++) {
+							const subEvent = tupletEvents[ti];
+							// Set tuplet ratio on duration so encodeDuration emits <time-modification>
+							const originalTuplet = subEvent.duration.tuplet;
+							subEvent.duration.tuplet = event.ratio;
+
+							const isFirst = ti === 0;
+							const isLast = ti === tupletEvents.length - 1;
+
 							if (subEvent.type === 'note') {
-								xml += encodeNote(subEvent, voiceNum, staff, level + 1);
+								// Add tuplet notation marks
+								const tupletMarks: Mark[] = [];
+								if (isFirst) tupletMarks.push({ markType: 'tuplet', start: true } as any);
+								if (isLast) tupletMarks.push({ markType: 'tuplet', start: false } as any);
+
+								if (tupletMarks.length > 0) {
+									const origMarks = subEvent.marks;
+									subEvent.marks = [...(subEvent.marks || []), ...tupletMarks];
+									xml += encodeNote(subEvent, voiceNum, staff, level + 1);
+									subEvent.marks = origMarks;
+								} else {
+									xml += encodeNote(subEvent, voiceNum, staff, level + 1);
+								}
 								const dur = calculateDuration(subEvent.duration);
 								voicePosition += dur;
 							} else if (subEvent.type === 'rest') {
-								xml += encodeRest(subEvent, voiceNum, staff, level + 1);
+								if (isFirst || isLast) {
+									xml += encodeRestWithTuplet(subEvent, voiceNum, staff, level + 1, isFirst, isLast);
+								} else {
+									xml += encodeRest(subEvent, voiceNum, staff, level + 1);
+								}
 								const dur = calculateDuration(subEvent.duration);
 								voicePosition += dur;
 							}
+
+							// Restore original tuplet value
+							subEvent.duration.tuplet = originalTuplet;
 						}
 						break;
 					}
