@@ -674,10 +674,11 @@ const encodeHarmony = (event: HarmonyEvent, level: number): string => {
 
 
 /**
- * Encode a complete measure
+ * Encode a complete measure for a single part
  */
 const encodeMeasure = (
 	measure: Measure,
+	partIndex: number,
 	measureNumber: number,
 	isFirst: boolean,
 	prevKey: KeySignature | undefined,
@@ -686,32 +687,33 @@ const encodeMeasure = (
 ): string => {
 	let xml = `${indent(level)}<measure number="${measureNumber}">\n`;
 
+	const part = measure.parts[partIndex];
+	if (!part) {
+		xml += `${indent(level)}</measure>\n`;
+		return xml;
+	}
+
 	// Determine if we need attributes
 	const needAttributes = isFirst ||
 		(measure.key && JSON.stringify(measure.key) !== JSON.stringify(prevKey)) ||
 		(measure.timeSig && JSON.stringify(measure.timeSig) !== JSON.stringify(prevTime));
 
-	// Find max staff number
+	// Find max staff number within this part
 	let maxStaff = 1;
-	for (const part of measure.parts) {
-		for (const voice of part.voices) {
-			maxStaff = Math.max(maxStaff, voice.staff || 1);
-		}
+	for (const voice of part.voices) {
+		maxStaff = Math.max(maxStaff, voice.staff || 1);
 	}
 
 	// Encode attributes if needed
 	if (needAttributes) {
-		// Find clef from first voice
+		// Find clef from first voice of this part
 		let clef: Clef | undefined;
-		for (const part of measure.parts) {
-			for (const voice of part.voices) {
-				for (const event of voice.events) {
-					if (event.type === 'context' && event.clef) {
-						clef = event.clef;
-						break;
-					}
+		for (const voice of part.voices) {
+			for (const event of voice.events) {
+				if (event.type === 'context' && event.clef) {
+					clef = event.clef;
+					break;
 				}
-				if (clef) break;
 			}
 			if (clef) break;
 		}
@@ -725,123 +727,121 @@ const encodeMeasure = (
 		});
 	}
 
-	// Encode voices
+	// Encode voices (voice numbering starts at 1 for each part)
 	let voiceNum = 1;
 	let currentPosition = 0;
 
-	for (const part of measure.parts) {
-		for (const voice of part.voices) {
-			const staff = voice.staff || 1;
-			let voicePosition = 0;
+	for (const voice of part.voices) {
+		const staff = voice.staff || 1;
+		let voicePosition = 0;
 
-			// Backup if needed
-			if (currentPosition > 0 && voiceNum > 1) {
-				xml += `${indent(level + 1)}<backup>\n`;
-				xml += `${indent(level + 2)}<duration>${currentPosition}</duration>\n`;
-				xml += `${indent(level + 1)}</backup>\n`;
-				voicePosition = 0;
-			}
+		// Backup if needed
+		if (currentPosition > 0 && voiceNum > 1) {
+			xml += `${indent(level + 1)}<backup>\n`;
+			xml += `${indent(level + 2)}<duration>${currentPosition}</duration>\n`;
+			xml += `${indent(level + 1)}</backup>\n`;
+			voicePosition = 0;
+		}
 
-			for (const event of voice.events) {
-				switch (event.type) {
-					case 'note': {
-						// Check for direction marks (dynamics, hairpins, pedals)
-						const directionMarks = event.marks?.filter(m =>
-							m.markType === 'dynamic' || m.markType === 'hairpin' || m.markType === 'pedal'
-						) || [];
-						if (directionMarks.length > 0) {
-							xml += encodeDirection(directionMarks, level + 1);
-						}
-
-						// Encode main note
-						xml += encodeNote(event, voiceNum, staff, level + 1);
-						const dur = calculateDuration(event.duration);
-						voicePosition += dur;
-
-						// Encode chord notes
-						for (let i = 1; i < event.pitches.length; i++) {
-							const chordEvent: NoteEvent = {
-								...event,
-								pitches: [event.pitches[i]],
-							};
-							xml += encodeNote(chordEvent, voiceNum, staff, level + 1, true);
-						}
-						break;
+		for (const event of voice.events) {
+			switch (event.type) {
+				case 'note': {
+					// Check for direction marks (dynamics, hairpins, pedals)
+					const directionMarks = event.marks?.filter(m =>
+						m.markType === 'dynamic' || m.markType === 'hairpin' || m.markType === 'pedal'
+					) || [];
+					if (directionMarks.length > 0) {
+						xml += encodeDirection(directionMarks, level + 1);
 					}
 
-					case 'rest': {
-						xml += encodeRest(event, voiceNum, staff, level + 1);
-						const dur = calculateDuration(event.duration);
-						voicePosition += dur;
-						break;
+					// Encode main note
+					xml += encodeNote(event, voiceNum, staff, level + 1);
+					const dur = calculateDuration(event.duration);
+					voicePosition += dur;
+
+					// Encode chord notes
+					for (let i = 1; i < event.pitches.length; i++) {
+						const chordEvent: NoteEvent = {
+							...event,
+							pitches: [event.pitches[i]],
+						};
+						xml += encodeNote(chordEvent, voiceNum, staff, level + 1, true);
 					}
+					break;
+				}
 
-					case 'context': {
-						if (event.tempo) {
-							xml += encodeTempo(event.tempo, level + 1);
-						}
-						// Other context changes are handled in attributes
-						break;
+				case 'rest': {
+					xml += encodeRest(event, voiceNum, staff, level + 1);
+					const dur = calculateDuration(event.duration);
+					voicePosition += dur;
+					break;
+				}
+
+				case 'context': {
+					if (event.tempo) {
+						xml += encodeTempo(event.tempo, level + 1);
 					}
+					// Other context changes are handled in attributes
+					break;
+				}
 
-					case 'tuplet': {
-						const tupletEvents = event.events;
-						for (let ti = 0; ti < tupletEvents.length; ti++) {
-							const subEvent = tupletEvents[ti];
-							// Set tuplet ratio on duration so encodeDuration emits <time-modification>
-							const originalTuplet = subEvent.duration.tuplet;
-							subEvent.duration.tuplet = event.ratio;
+				case 'tuplet': {
+					const tupletEvents = event.events;
+					for (let ti = 0; ti < tupletEvents.length; ti++) {
+						const subEvent = tupletEvents[ti];
+						// Set tuplet ratio on duration so encodeDuration emits <time-modification>
+						const originalTuplet = subEvent.duration.tuplet;
+						subEvent.duration.tuplet = event.ratio;
 
-							const isFirst = ti === 0;
-							const isLast = ti === tupletEvents.length - 1;
+						const isFirst = ti === 0;
+						const isLast = ti === tupletEvents.length - 1;
 
-							if (subEvent.type === 'note') {
-								// Add tuplet notation marks
-								const tupletMarks: Mark[] = [];
-								if (isFirst) tupletMarks.push({ markType: 'tuplet', start: true } as any);
-								if (isLast) tupletMarks.push({ markType: 'tuplet', start: false } as any);
+						if (subEvent.type === 'note') {
+							// Add tuplet notation marks
+							const tupletMarks: Mark[] = [];
+							if (isFirst) tupletMarks.push({ markType: 'tuplet', start: true } as any);
+							if (isLast) tupletMarks.push({ markType: 'tuplet', start: false } as any);
 
-								if (tupletMarks.length > 0) {
-									const origMarks = subEvent.marks;
-									subEvent.marks = [...(subEvent.marks || []), ...tupletMarks];
-									xml += encodeNote(subEvent, voiceNum, staff, level + 1);
-									subEvent.marks = origMarks;
-								} else {
-									xml += encodeNote(subEvent, voiceNum, staff, level + 1);
-								}
-								const dur = calculateDuration(subEvent.duration);
-								voicePosition += dur;
-							} else if (subEvent.type === 'rest') {
-								if (isFirst || isLast) {
-									xml += encodeRestWithTuplet(subEvent, voiceNum, staff, level + 1, isFirst, isLast);
-								} else {
-									xml += encodeRest(subEvent, voiceNum, staff, level + 1);
-								}
-								const dur = calculateDuration(subEvent.duration);
-								voicePosition += dur;
+							if (tupletMarks.length > 0) {
+								const origMarks = subEvent.marks;
+								subEvent.marks = [...(subEvent.marks || []), ...tupletMarks];
+								xml += encodeNote(subEvent, voiceNum, staff, level + 1);
+								subEvent.marks = origMarks;
+							} else {
+								xml += encodeNote(subEvent, voiceNum, staff, level + 1);
 							}
-
-							// Restore original tuplet value
-							subEvent.duration.tuplet = originalTuplet;
+							const dur = calculateDuration(subEvent.duration);
+							voicePosition += dur;
+						} else if (subEvent.type === 'rest') {
+							if (isFirst || isLast) {
+								xml += encodeRestWithTuplet(subEvent, voiceNum, staff, level + 1, isFirst, isLast);
+							} else {
+								xml += encodeRest(subEvent, voiceNum, staff, level + 1);
+							}
+							const dur = calculateDuration(subEvent.duration);
+							voicePosition += dur;
 						}
-						break;
-					}
 
-					case 'barline': {
-						xml += encodeBarline(event, level + 1);
-						break;
+						// Restore original tuplet value
+						subEvent.duration.tuplet = originalTuplet;
 					}
+					break;
+				}
 
-					case 'harmony': {
-						xml += encodeHarmony(event, level + 1);
-						break;
-					}
+				case 'barline': {
+					xml += encodeBarline(event, level + 1);
+					break;
+				}
+
+				case 'harmony': {
+					xml += encodeHarmony(event, level + 1);
+					break;
 				}
 			}
-
-			currentPosition = Math.max(currentPosition, voicePosition);
-			voiceNum++;
 		}
+
+		currentPosition = Math.max(currentPosition, voicePosition);
+		voiceNum++;
 	}
 
 	xml += `${indent(level)}</measure>\n`;
@@ -898,30 +898,42 @@ export const encode = (doc: LilyletDoc): string => {
 		xml += encodeMetadata(doc.metadata, 1);
 	}
 
-	// Part list (single part for now)
+	// Determine number of parts from first measure
+	const numParts = doc.measures.length > 0 ? doc.measures[0].parts.length : 1;
+
+	// Part list
 	xml += `${indent(1)}<part-list>\n`;
-	xml += `${indent(2)}<score-part id="P1">\n`;
-	xml += `${indent(3)}<part-name>${doc.metadata?.title ? escapeXml(doc.metadata.title) : 'Music'}</part-name>\n`;
-	xml += `${indent(2)}</score-part>\n`;
+	for (let pi = 0; pi < numParts; pi++) {
+		const partId = `P${pi + 1}`;
+		const partName = doc.measures[0]?.parts[pi]?.name
+			|| (numParts === 1 ? (doc.metadata?.title ? escapeXml(doc.metadata.title) : 'Music') : `Part ${pi + 1}`);
+		xml += `${indent(2)}<score-part id="${partId}">\n`;
+		xml += `${indent(3)}<part-name>${escapeXml(partName)}</part-name>\n`;
+		xml += `${indent(2)}</score-part>\n`;
+	}
 	xml += `${indent(1)}</part-list>\n`;
 
-	// Part content
-	xml += `${indent(1)}<part id="P1">\n`;
+	// Encode each part
+	for (let pi = 0; pi < numParts; pi++) {
+		const partId = `P${pi + 1}`;
+		xml += `${indent(1)}<part id="${partId}">\n`;
 
-	let prevKey: KeySignature | undefined;
-	let prevTime: Fraction | undefined;
+		let prevKey: KeySignature | undefined;
+		let prevTime: Fraction | undefined;
 
-	for (let i = 0; i < doc.measures.length; i++) {
-		const measure = doc.measures[i];
-		const isFirst = i === 0;
+		for (let i = 0; i < doc.measures.length; i++) {
+			const measure = doc.measures[i];
+			const isFirst = i === 0;
 
-		xml += encodeMeasure(measure, i + 1, isFirst, prevKey, prevTime, 2);
+			xml += encodeMeasure(measure, pi, i + 1, isFirst, prevKey, prevTime, 2);
 
-		if (measure.key) prevKey = measure.key;
-		if (measure.timeSig) prevTime = measure.timeSig;
+			if (measure.key) prevKey = measure.key;
+			if (measure.timeSig) prevTime = measure.timeSig;
+		}
+
+		xml += `${indent(1)}</part>\n`;
 	}
 
-	xml += `${indent(1)}</part>\n`;
 	xml += '</score-partwise>\n';
 
 	return xml;

@@ -1395,19 +1395,67 @@ export const decode = (xmlString: string): LilyletDoc => {
 	// Parse metadata
 	const metadata = parseMetadata(doc);
 
+	// Parse <part-list> to get part names
+	const partNames: Map<string, string> = new Map();
+	const partListEl = doc.getElementsByTagName('part-list')[0];
+	if (partListEl) {
+		const scorePartEls = getElements(partListEl, 'score-part');
+		for (const sp of scorePartEls) {
+			const id = getAttribute(sp, 'id');
+			const name = getElementText(sp, 'part-name');
+			if (id && name) {
+				partNames.set(id, name);
+			}
+		}
+	}
+
 	// Get parts
-	const partEls = Array.from(doc.getElementsByTagName('part'));
+	const partEls = getDirectChildren(root, 'part');
 	if (partEls.length === 0) {
 		throw new Error('No parts found in MusicXML');
 	}
 
-	// For now, convert only the first part
-	// TODO: Handle multiple parts
-	const firstPart = partEls[0];
-	const { measures } = convertPart(firstPart);
+	// Convert all parts
+	const allPartResults: { measures: Measure[]; name?: string; partId?: string }[] = [];
+	for (const partEl of partEls) {
+		const partId = getAttribute(partEl, 'id') || undefined;
+		const { measures } = convertPart(partEl);
+		const name = partId ? partNames.get(partId) : undefined;
+		allPartResults.push({ measures, name, partId });
+	}
+
+	// Merge parts: combine into multi-part measures
+	const numMeasures = Math.max(...allPartResults.map(p => p.measures.length));
+	const mergedMeasures: Measure[] = [];
+
+	for (let mi = 0; mi < numMeasures; mi++) {
+		const parts: Part[] = [];
+
+		for (const partResult of allPartResults) {
+			const sourceMeasure = partResult.measures[mi];
+			if (sourceMeasure && sourceMeasure.parts.length > 0) {
+				const part = sourceMeasure.parts[0];
+				if (partResult.name) {
+					part.name = partResult.name;
+				}
+				parts.push(part);
+			} else {
+				// Empty part placeholder
+				parts.push({ voices: [{ staff: 1, events: [] }] });
+			}
+		}
+
+		// Use key/timeSig from the first part's measure (they should be consistent)
+		const firstPartMeasure = allPartResults[0].measures[mi];
+		const measure: Measure = { parts };
+		if (firstPartMeasure?.key) measure.key = firstPartMeasure.key;
+		if (firstPartMeasure?.timeSig) measure.timeSig = firstPartMeasure.timeSig;
+
+		mergedMeasures.push(measure);
+	}
 
 	const result: LilyletDoc = {
-		measures,
+		measures: mergedMeasures,
 	};
 
 	if (Object.keys(metadata).length > 0) {

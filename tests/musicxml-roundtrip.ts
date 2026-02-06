@@ -16,8 +16,6 @@ const OUTPUT_DIR = path.join(import.meta.dirname, "output/musicxml-roundtrip");
 
 // Known limitations - skip these tests
 const SKIP_FILES = new Set([
-	'multiple-parts-double-piano.lyl',   // Encoder only supports single <part>
-	'multiple-parts-quartet.lyl',         // Encoder only supports single <part>
 	'multiple-staves-cross-staves.lyl',   // Encoder ignores mid-voice \staff context changes
 ]);
 
