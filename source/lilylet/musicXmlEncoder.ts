@@ -732,7 +732,7 @@ const encodeMeasure = (
 	let currentPosition = 0;
 
 	for (const voice of part.voices) {
-		const staff = voice.staff || 1;
+		let currentStaff = voice.staff || 1;
 		let voicePosition = 0;
 
 		// Backup if needed
@@ -755,7 +755,7 @@ const encodeMeasure = (
 					}
 
 					// Encode main note
-					xml += encodeNote(event, voiceNum, staff, level + 1);
+					xml += encodeNote(event, voiceNum, currentStaff, level + 1);
 					const dur = calculateDuration(event.duration);
 					voicePosition += dur;
 
@@ -765,13 +765,13 @@ const encodeMeasure = (
 							...event,
 							pitches: [event.pitches[i]],
 						};
-						xml += encodeNote(chordEvent, voiceNum, staff, level + 1, true);
+						xml += encodeNote(chordEvent, voiceNum, currentStaff, level + 1, true);
 					}
 					break;
 				}
 
 				case 'rest': {
-					xml += encodeRest(event, voiceNum, staff, level + 1);
+					xml += encodeRest(event, voiceNum, currentStaff, level + 1);
 					const dur = calculateDuration(event.duration);
 					voicePosition += dur;
 					break;
@@ -780,6 +780,9 @@ const encodeMeasure = (
 				case 'context': {
 					if (event.tempo) {
 						xml += encodeTempo(event.tempo, level + 1);
+					}
+					if (event.staff) {
+						currentStaff = event.staff;
 					}
 					// Other context changes are handled in attributes
 					break;
@@ -805,18 +808,18 @@ const encodeMeasure = (
 							if (tupletMarks.length > 0) {
 								const origMarks = subEvent.marks;
 								subEvent.marks = [...(subEvent.marks || []), ...tupletMarks];
-								xml += encodeNote(subEvent, voiceNum, staff, level + 1);
+								xml += encodeNote(subEvent, voiceNum, currentStaff, level + 1);
 								subEvent.marks = origMarks;
 							} else {
-								xml += encodeNote(subEvent, voiceNum, staff, level + 1);
+								xml += encodeNote(subEvent, voiceNum, currentStaff, level + 1);
 							}
 							const dur = calculateDuration(subEvent.duration);
 							voicePosition += dur;
 						} else if (subEvent.type === 'rest') {
 							if (isFirst || isLast) {
-								xml += encodeRestWithTuplet(subEvent, voiceNum, staff, level + 1, isFirst, isLast);
+								xml += encodeRestWithTuplet(subEvent, voiceNum, currentStaff, level + 1, isFirst, isLast);
 							} else {
-								xml += encodeRest(subEvent, voiceNum, staff, level + 1);
+								xml += encodeRest(subEvent, voiceNum, currentStaff, level + 1);
 							}
 							const dur = calculateDuration(subEvent.duration);
 							voicePosition += dur;

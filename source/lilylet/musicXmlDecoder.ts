@@ -237,6 +237,7 @@ class VoiceTracker {
 	private currentPosition: number = 0;
 	private divisions: number = 1;
 	private staves: number = 1;
+	private currentStaff: Map<number, number> = new Map();
 
 	setDivisions(div: number): void {
 		this.divisions = div;
@@ -260,6 +261,7 @@ class VoiceTracker {
 				events: [],
 				staff,
 			});
+			this.currentStaff.set(voiceNum, staff);
 		}
 		const voice = this.voices.get(voiceNum)!;
 		// Update staff if specified
@@ -271,6 +273,11 @@ class VoiceTracker {
 
 	addEvent(voiceNum: number, event: Event, duration: number, staff: number = 1): void {
 		const voice = this.getOrCreateVoice(voiceNum, staff);
+		const prevStaff = this.currentStaff.get(voiceNum) || 1;
+		if (staff > 0 && staff !== prevStaff) {
+			voice.events.push({ type: 'context', staff } as ContextChange);
+			this.currentStaff.set(voiceNum, staff);
+		}
 		voice.events.push(event);
 		voice.lastEvent = event;
 		this.currentPosition += duration;
@@ -306,6 +313,7 @@ class VoiceTracker {
 	reset(): void {
 		this.voices.clear();
 		this.currentPosition = 0;
+		this.currentStaff.clear();
 	}
 }
 
@@ -1283,6 +1291,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 	let lastKey: KeySignature | undefined;
 	let lastTimeSig: Fraction | undefined;
 	let isFirstMeasure = true;
+	let lastVoiceStaff = 1;  // Track last known primary voice staff for empty measure fallback
 	const lastClefs: Map<number, ContextChange> = new Map();  // Track last clef per staff
 
 	const measureEls = getDirectChildren(partEl, 'measure');
@@ -1351,7 +1360,9 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 
 		// If no voices found, create an empty one
 		if (voices.length === 0) {
-			voices.push({ staff: 1, events: [] });
+			voices.push({ staff: lastVoiceStaff, events: [] });
+		} else {
+			lastVoiceStaff = voices[0].staff || 1;
 		}
 
 		const measure: Measure = {

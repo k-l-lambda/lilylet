@@ -15,8 +15,7 @@ const UNIT_CASES_DIR = path.join(import.meta.dirname, "assets/unit-cases");
 const OUTPUT_DIR = path.join(import.meta.dirname, "output/musicxml-roundtrip");
 
 // Known limitations - skip these tests
-const SKIP_FILES = new Set([
-	'multiple-staves-cross-staves.lyl',   // Encoder ignores mid-voice \staff context changes
+const SKIP_FILES = new Set<string>([
 ]);
 
 
