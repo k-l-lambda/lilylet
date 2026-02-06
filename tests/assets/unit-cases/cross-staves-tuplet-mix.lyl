@@ -1,0 +1,1 @@
+\staff "2" \key c \major \time 4/4 \clef "bass" c4 \staff "1" \times 2/3 {d8[ e f]} \staff "2" g4 a |

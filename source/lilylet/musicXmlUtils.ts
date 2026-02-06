@@ -158,10 +158,13 @@ export const convertPitch = (
 	};
 };
 
-// ============ Duration Conversion ============
+// ============ Duration Constants & Mappings ============
+
+// Standard divisions per quarter note (shared by encoder/decoder)
+export const DIVISIONS = 4;
 
 // MusicXML note type to division (1=whole, 2=half, 4=quarter, etc.)
-const TYPE_TO_DIVISION: Record<string, number> = {
+export const TYPE_TO_DIVISION: Record<string, number> = {
 	maxima: 0.125,
 	long: 0.25,
 	breve: 0.5,
@@ -176,6 +179,43 @@ const TYPE_TO_DIVISION: Record<string, number> = {
 	'256th': 256,
 	'512th': 512,
 	'1024th': 1024,
+};
+
+// Division to MusicXML note type (inverse of TYPE_TO_DIVISION)
+export const DIVISION_TO_TYPE: Record<number, string> = Object.fromEntries(
+	Object.entries(TYPE_TO_DIVISION).map(([type, div]) => [div, type])
+);
+
+/**
+ * Calculate duration in MusicXML divisions.
+ * Shared by encoder (with DIVISIONS=4) and potentially decoder.
+ *
+ * Duration.tuplet is in Lilylet ratio semantics:
+ *   \times 2/3 → {numerator:2, denominator:3} → multiply by 2/3
+ */
+export const calculateDuration = (duration: Duration, divisions: number = DIVISIONS): number => {
+	// Base duration: divisions * (4 / division)
+	// e.g., quarter (4) = divisions * 1
+	//       half (2) = divisions * 2
+	//       eighth (8) = divisions * 0.5
+	let dur = divisions * (4 / duration.division);
+
+	// Apply dots
+	if (duration.dots) {
+		let dotValue = dur / 2;
+		for (let i = 0; i < duration.dots; i++) {
+			dur += dotValue;
+			dotValue /= 2;
+		}
+	}
+
+	// Apply tuplet ratio: Lilylet ratio num/den means multiply by num/den
+	// e.g., \times 2/3 means each note's actual duration = written * 2/3
+	if (duration.tuplet) {
+		dur = dur * duration.tuplet.numerator / duration.tuplet.denominator;
+	}
+
+	return Math.round(dur);
 };
 
 /**
@@ -218,9 +258,11 @@ export const convertDuration = (
 	};
 
 	if (timeModification) {
+		// Store as Lilylet ratio: normalNotes/actualNotes
+		// MusicXML actual=3, normal=2 (triplet) → Lilylet ratio {num:2, den:3}
 		result.tuplet = {
-			numerator: timeModification.actualNotes,
-			denominator: timeModification.normalNotes,
+			numerator: timeModification.normalNotes,
+			denominator: timeModification.actualNotes,
 		};
 	}
 

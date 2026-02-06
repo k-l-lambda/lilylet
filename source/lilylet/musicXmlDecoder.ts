@@ -66,6 +66,7 @@ import {
 	convertBarlineStyle,
 	convertHarmonyToText,
 	createFraction,
+	TYPE_TO_DIVISION,
 } from './musicXmlUtils';
 
 // ============ Spanner Tracker ============
@@ -163,12 +164,9 @@ class TupletTracker {
 		// Add to all active tuplets (in case of nested tuplets)
 		for (const [, tuplet] of this.activeTuplets) {
 			// Set ratio from first event's duration.tuplet
+			// convertDuration already stores Lilylet ratio semantics (normalNotes/actualNotes)
 			if (!tuplet.ratio && event.duration.tuplet) {
-				// In Lilylet, ratio is denominator/numerator (e.g., 2/3 for triplet)
-				tuplet.ratio = {
-					numerator: event.duration.tuplet.denominator,
-					denominator: event.duration.tuplet.numerator,
-				};
+				tuplet.ratio = { ...event.duration.tuplet };
 			}
 			// Store event without tuplet info in duration (it's handled at TupletEvent level)
 			const cleanEvent = { ...event, duration: { ...event.duration } };
@@ -833,20 +831,6 @@ const notationsToMarks = (
 	return marks;
 };
 
-// MusicXML beat-unit to division mapping
-const BEAT_UNIT_TO_DIVISION: Record<string, number> = {
-	'maxima': 0.125,
-	'long': 0.25,
-	'breve': 0.5,
-	'whole': 1,
-	'half': 2,
-	'quarter': 4,
-	'eighth': 8,
-	'16th': 16,
-	'32nd': 32,
-	'64th': 64,
-};
-
 // Common tempo words that should be converted to \tempo
 const TEMPO_WORDS = new Set([
 	// Very slow
@@ -886,7 +870,7 @@ const directionToContextChange = (
 	// Metronome → Tempo (may combine with words)
 	if (direction.metronome) {
 		const { beatUnit, beatUnitDot, perMinute } = direction.metronome;
-		const division = BEAT_UNIT_TO_DIVISION[beatUnit] || 4;
+		const division = TYPE_TO_DIVISION[beatUnit] || 4;
 
 		// Check if there's accompanying tempo text
 		let tempoText: string | undefined;
@@ -1085,6 +1069,10 @@ const convertMeasure = (
 			const voiceNum = note.voice;
 			const staffNum = note.staff || 1;
 			currentVoice = voiceNum;
+
+			// Ensure voice exists with correct staff tracking (needed for cross-staff tuplets
+			// where notes go to tupletTracker but voice must be initialized for staff detection)
+			voiceTracker.getOrCreateVoice(voiceNum, staffNum);
 
 			// Check for tuplet start BEFORE processing the note
 			const tupletNotation = note.notations?.tuplet;

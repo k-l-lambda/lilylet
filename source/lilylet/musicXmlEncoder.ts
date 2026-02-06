@@ -37,11 +37,14 @@ import {
 	Fraction,
 } from "./types";
 
+import {
+	DIVISIONS,
+	DIVISION_TO_TYPE,
+	calculateDuration,
+} from "./musicXmlUtils";
+
 
 // === Constants and Reverse Mappings ===
-
-// Standard divisions per quarter note
-const DIVISIONS = 4;
 
 // Phonet to MusicXML step
 const PHONET_TO_STEP: Record<string, string> = {
@@ -61,19 +64,6 @@ const ACCIDENTAL_TO_ALTER: Record<string, number> = {
 	doubleSharp: 2,
 	doubleFlat: -2,
 	natural: 0,
-};
-
-// Division to MusicXML note type
-const DIVISION_TO_TYPE: Record<number, string> = {
-	0.5: 'breve',
-	1: 'whole',
-	2: 'half',
-	4: 'quarter',
-	8: 'eighth',
-	16: '16th',
-	32: '32nd',
-	64: '64th',
-	128: '128th',
 };
 
 // Key signature to fifths (major keys)
@@ -162,34 +152,6 @@ const indent = (level: number): string => '  '.repeat(level);
 // === Encoding Functions ===
 
 /**
- * Calculate duration in MusicXML divisions
- */
-const calculateDuration = (duration: Duration): number => {
-	// Base duration: DIVISIONS * (4 / division)
-	// e.g., quarter (4) = DIVISIONS * 1 = 4
-	//       half (2) = DIVISIONS * 2 = 8
-	//       eighth (8) = DIVISIONS * 0.5 = 2
-	let dur = DIVISIONS * (4 / duration.division);
-
-	// Apply dots
-	if (duration.dots) {
-		let dotValue = dur / 2;
-		for (let i = 0; i < duration.dots; i++) {
-			dur += dotValue;
-			dotValue /= 2;
-		}
-	}
-
-	// Apply tuplet ratio
-	if (duration.tuplet) {
-		dur = dur * duration.tuplet.denominator / duration.tuplet.numerator;
-	}
-
-	return Math.round(dur);
-};
-
-
-/**
  * Encode pitch to MusicXML
  */
 const encodePitch = (pitch: Pitch, level: number): string => {
@@ -224,9 +186,12 @@ const encodeDuration = (duration: Duration, level: number): string => {
 	}
 
 	if (duration.tuplet) {
+		// MusicXML: actual-notes = notes played (Lilylet denominator)
+		//           normal-notes = normal count (Lilylet numerator)
+		// e.g., \times 2/3 → actual=3, normal=2
 		xml += `${indent(level)}<time-modification>\n`;
-		xml += `${indent(level + 1)}<actual-notes>${duration.tuplet.numerator}</actual-notes>\n`;
-		xml += `${indent(level + 1)}<normal-notes>${duration.tuplet.denominator}</normal-notes>\n`;
+		xml += `${indent(level + 1)}<actual-notes>${duration.tuplet.denominator}</actual-notes>\n`;
+		xml += `${indent(level + 1)}<normal-notes>${duration.tuplet.numerator}</normal-notes>\n`;
 		xml += `${indent(level)}</time-modification>\n`;
 	}
 
