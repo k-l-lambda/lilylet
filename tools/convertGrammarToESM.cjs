@@ -12,6 +12,14 @@ function convertGrammar(inputPath, outputPaths, globalName) {
 
   // Check if already converted to ESM
   if (cjs.includes('export default __grammar')) {
+    // Already converted — just copy to all output paths
+    for (const outputPath of outputPaths) {
+      const dir = require('path').dirname(outputPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(outputPath, cjs);
+    }
     console.log(`${inputPath} already converted to ES module format`);
     return;
   }
@@ -58,13 +66,13 @@ export default __grammar;
 // Convert lilylet grammar
 convertGrammar(
   'source/lilylet/grammar.jison.js',
-  ['lib/grammar.jison.js', 'source/lilylet/grammar.jison.js'],
+  ['lib/grammar.jison.js', 'lib/lilylet/grammar.jison.js', 'source/lilylet/grammar.jison.js'],
   '__lilyletGrammar__'
 );
 
 // Convert ABC grammar
 convertGrammar(
   'source/abc/grammar.jison.js',
-  ['source/abc/grammar.jison.js'],
+  ['lib/abc/grammar.jison.js', 'source/abc/grammar.jison.js'],
   '__abcGrammar__'
 );
