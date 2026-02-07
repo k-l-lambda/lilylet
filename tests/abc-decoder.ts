@@ -3,14 +3,19 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { abcDecoder } from "../source/lilylet/index";
+import { serializeLilyletDoc } from "../source/lilylet/serializer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ABC_DIR = path.join(__dirname, "assets/abc");
+const OUTPUT_DIR = path.join(__dirname, "output/from-abc");
 
 
 const main = () => {
 	const files = fs.readdirSync(ABC_DIR).filter(f => f.endsWith(".abc")).sort();
 	console.log(`Found ${files.length} ABC files\n`);
+
+	// Ensure output directory exists
+	fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
 	let pass = 0;
 	let fail = 0;
@@ -18,6 +23,8 @@ const main = () => {
 
 	for (const file of files) {
 		const filePath = path.join(ABC_DIR, file);
+		const baseName = path.basename(file, ".abc");
+
 		try {
 			const content = fs.readFileSync(filePath, "utf-8");
 			const doc = abcDecoder.decode(content);
@@ -26,26 +33,39 @@ const main = () => {
 				throw new Error("No measures produced");
 			}
 
+			// Write JSON output
+			const jsonPath = path.join(OUTPUT_DIR, `${baseName}.json`);
+			fs.writeFileSync(jsonPath, JSON.stringify(doc, null, 2));
+
+			// Write .lyl output
+			const lylContent = serializeLilyletDoc(doc);
+			const lylPath = path.join(OUTPUT_DIR, `${baseName}.lyl`);
+			fs.writeFileSync(lylPath, lylContent);
+
+			const measureCount = doc.measures.length;
+			const noteCount = doc.measures.reduce((sum, m) =>
+				sum + m.parts.reduce((psum, p) =>
+					psum + p.voices.reduce((vsum, v) =>
+						vsum + v.events.filter(e => e.type === "note").length, 0), 0), 0);
+
+			console.log(`  ${file}`);
+			console.log(`    Measures: ${measureCount}, Notes: ${noteCount}`);
+			console.log(`    -> ${baseName}.json, ${baseName}.lyl`);
+
 			pass++;
 		} catch (err: any) {
 			fail++;
 			errors.push({ file, error: err.message || String(err) });
-			if (errors.length <= 20) {
-				console.log(`FAIL: ${file}`);
-				console.log(`  ${err.message?.substring(0, 200)}\n`);
-			}
+			console.log(`FAIL: ${file}`);
+			console.log(`  ${err.message?.substring(0, 200)}\n`);
 		}
 	}
 
 	console.log(`\n${"=".repeat(60)}`);
 	console.log(`Results: ${pass} pass, ${fail} fail out of ${files.length}`);
-
-	if (errors.length > 20) {
-		console.log(`\n(Showing first 20 errors, ${errors.length - 20} more hidden)`);
-	}
+	console.log(`Output: ${OUTPUT_DIR}`);
 
 	if (fail > 0) {
-		// Show error distribution
 		const errorTypes = new Map<string, number>();
 		for (const e of errors) {
 			const key = e.error.substring(0, 80);
