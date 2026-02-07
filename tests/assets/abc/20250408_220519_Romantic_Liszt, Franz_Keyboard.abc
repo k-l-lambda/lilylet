@@ -1,0 +1,56 @@
+X:1
+%%score { ( 1 4 ) | ( 2 3 ) }
+L:1/8
+Q:1/4=104
+M:6/8
+K:C
+V:1 treble nm="Piano" snm="Pno."
+V:4 treble 
+V:2 bass
+V:3 bass
+[V:1]!p!"^Allegretto con moto." z|[V:2](E,|[V:3]x1|[V:4]x1|
+[V:1]z2 z z2 (E|[V:2]A,2 C E2) z|[V:3]x6|[V:4]x6|
+[V:1]!<(! A2 c!<)!!>(! e2!>)! [A^d])|[V:2]z2 z z2 [F,B,]|[V:3]x6|[V:4]x6|
+[V:1]!wedge![^Ge] z (TB/c/4d/4 !wedge!c) z (TG/A/4B/4|[V:2][E,B,] z z [A,E] z z|[V:3]x6|[V:4]x6|
+[V:1]!wedge!A) z (TE/^D/4E/4 !wedge!F) z z|[V:2][F,C] z z [D,A,] z (F,|[V:3]x6|[V:4]x6|
+[V:1]z2 z z2 (F|[V:2]B,2 D F2) z|[V:3]x6|[V:4]x6|
+[V:1]!<(! B2 d!<)!!>(! f2!>)! [B^e])|[V:2]z2 z z2 [G,^C]|[V:3]x6|[V:4]x6|
+[V:1]!wedge![^A^f] z (T^c/d/4e/4 !wedge!d) z (TA/B/4c/4|[V:2][^F,^C] z z [B,^F] z z|[V:3]x6|[V:4]x6|
+[V:1]!wedge!B) z (T^F/^E/4F/4 !wedge!G) z z|[V:2][G,D] z z [E,B,] z (E,|[V:3]x6|[V:4]x6|
+[V:1]z2 z z2 (G|[V:2]G,2 C E2) z|[V:3]x6|[V:4]x6|
+[V:1]!<(! c2 e!<)!!>(! g2!>)! [^c^f])|[V:2]z2 z z2 [A,^D]|[V:3]x6|[V:4]x6|
+[V:1]!wedge![Bg] z (T^d/e/4^f/4 !wedge!e) z (TB/c/4d/4|[V:2][G,E] z z[K:treble] [CG] z z|[V:3]x3[K:treble] x3|[V:4]x6|
+[V:1]!wedge!c) z (TG/^F/4G/4 !wedge!A) z z|[V:2][A,E] z z[K:bass] [^F,C] z (F,|[V:3]x3[K:bass] x3|[V:4]x6|
+[V:1]z2 z z2 (A|[V:2]A,2 D ^F2) z|[V:3]x6|[V:4]x6|
+[V:1]!<(! d2 ^f!<)!!>(! a2!>)! [^d^g])|[V:2]z2 z z2 [B,^E]|[V:3]x6|[V:4]x6|
+[V:1]!wedge![^ca] z (T^e/^f/4^g/4 !wedge!f) z (T^c/d/4e/4|[V:2][A,^F] z z[K:treble] [DA] z z|[V:3]x3[K:treble] x3|[V:4]x6|
+[V:1]!wedge!d) z (TA/^G/4A/4 !wedge!B) z z|[V:2][B,^F] z z[K:bass] [^G,D] z (G,|[V:3]x3[K:bass] x3|[V:4]x6|
+[V:1]z2 z z2 B|[V:2]B,2[K:treble] E ^G2) z|[V:3]x2[K:treble] x4|[V:4]x6|
+[V:1]!<(! (e2 ^g!<)!!>(! b2!>)! [^da])|[V:2]z2 z z2 [B,^F]|[V:3]x6|[V:4]x6|
+[V:1]!wedge![e^g] z (T^d/e/4^f/4 !wedge!e) z (TB/^c/4d/4|[V:2][E^G] z z [^CG] z z|[V:3]x6|[V:4]x6|
+[V:1]!wedge!^c) z (T^G/^F/4G/4 !wedge!A) z z|[V:2][A,E] z z[K:bass] [^F,^C] z (F,|[V:3]x3[K:bass] x3|[V:4]x6|
+[V:1]z2 z z2 A|[V:2]A,2[K:treble] D ^F2) z|[V:3]x2[K:treble] x4|[V:4]x6|
+[V:1]!<(! (d2 ^f!<)!!>(! a2!>)! [^cg])|[V:2]z2 z z2 [A,E]|[V:3]x6|[V:4]x6|
+[V:1]!wedge![d^f] z (T^c/d/4e/4 !wedge!d) z (TA/B/4c/4|[V:2][D^F] z z [B,F] z z|[V:3]x6|[V:4]x6|
+[V:1]!wedge!B) z (T^F/E/4F/4 !wedge!G) z z|[V:2][G,D] z z[K:bass] [E,B,] z (B,|[V:3]x3[K:bass] x3|[V:4]x6|
+[V:1]z2 z z2 (G|[V:2][K:treble] E2 G B2) z|[V:3][K:treble] x6|[V:4]x6|
+[V:1]!<(! B2 e!<)!!>(! g2!>)! [A^d])|[V:2]z2 z z2[K:bass] [F,B,]|[V:3]x5[K:bass] x|[V:4]x6|
+[V:1]!wedge![^Ge] z (TB/c/4d/4 !wedge!c) z (TG/A/4B/4|[V:2][E,B,] z z [A,E] z z|[V:3]x6|[V:4]x6|
+[V:1]!wedge!A) z (TE/^D/4E/4 !wedge!F) z z|[V:2][F,C] z z [D,A,] z (F,|[V:3]x6|[V:4]x6|
+[V:1]z2 z z2 (F|[V:2]B,2 D F2) z|[V:3]x6|[V:4]x6|
+[V:1]!<(! B2 d!<)!!>(! f2!>)! [G^c])|[V:2]z2 z z2 [_E,A,]|[V:3]x6|[V:4]x6|
+[V:1]!wedge![^Fd] z (TA/_B/4c/4 !wedge!B) z (TF/E/4F/4|[V:2][D,A,] z z [G,D] z z|[V:3]x6|[V:4]x6|
+[V:1]!wedge!G) z (TD/^C/4D/4 !wedge!_E) z z|[V:2][_E,_B,] z z [C,G,] z (E,|[V:3]x6|[V:4]x6|
+[V:1]z2 z z2 (_E|[V:2]_A,2 C _E2) z|[V:3]x6|[V:4]x6|
+[V:1]!<(! _A2 c!<)!!>(! _e2!>)! [^Fc])|[V:2]z2 z z2 [_A,,D,]|[V:3]x6|[V:4]x6|
+[V:1]!wedge![Ec] z (TG/^F/4G/4 !wedge!_A) z (T_E/D/4E/4|[V:2][G,,_E,] z z [G,,C,] z z|[V:3]x6|[V:4]x6|
+[V:1]!wedge!F) z (TC/B,/4C/4 !wedge!D) z[K:bass] (TB,/A,/4B,/4|[V:2][G,,_A,,] z z [G,,F,] z z|[V:3]x6|[V:4]x5[K:bass] x|
+[V:1]!wedge!C) z (TG,/^F,/4G,/4 !wedge!_A,) z (T_E,/D,/4E,/4|[V:2][C,,_E,] z z [C,,^F,,] z z|[V:3]x6|[V:4]x6|
+[V:1]!wedge!F,) z (TC,/B,,/4C,/4 !wedge!D,) z (TB,,/A,,/4B,,/4|[V:2][C,,D,,] z z [C,,F,,] z z|[V:3]x6|[V:4]x6|
+[V:1]C,) z z z2 z|[V:2][C,,E,,] z (TG,,/^F,,/4G,,/4 C,) z (TG,/^F,/4G,/4|[V:3]x6|[V:4]x6|
+[V:1][K:treble] z2 z (([B,G]3|[V:2]C) z z ([G,,F,]3|[V:3]x6|[V:4][K:treble] x6|
+[V:1]C)) z z z2 z|[V:2][C,E,]) z (TG,,/^F,,/4G,,/4 C,) z (TG,/^F,/4G,/4|[V:3]E, x5|[V:4]x6|
+[V:1]z2 z (([Bg]3|[V:2]C) z z[K:treble] ([G,F]3|[V:3]x3[K:treble] x3|[V:4]x6|
+[V:1]c)) z z!>(! (Tb3{ab}|[V:2][CE]) z z ([Gdf]3|[V:3]x6|[V:4]e) x5|
+[V:1]c')!>)! z z!pp!!8va(! [e'c'']!8va)! z z|[V:2][ce]) z z [cg] z z|[V:3]x6|[V:4]x3!8va(! x!8va)! x2|
+[V:1][K:bass] C, z z z2 z|][V:2][K:bass] C,, z z z2 z|][V:3][K:bass] x6|][V:4][K:bass] x6|]

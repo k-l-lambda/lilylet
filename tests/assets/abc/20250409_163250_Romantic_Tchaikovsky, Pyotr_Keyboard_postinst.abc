@@ -1,0 +1,57 @@
+X:1
+%Romantic
+%Tchaikovsky, Pyotr
+%Keyboard
+%%score { ( 1 4 ) | ( 2 3 ) }
+L:1/8
+Q:1/4=108
+M:6/8
+K:Eb
+V:1 treble nm="Piano" snm="F-no"
+V:4 treble 
+V:2 bass 
+V:3 bass 
+[V:1]"^Allegretto moderato"!pp! z6|[V:2]z2 .[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]!>!C,,3- C,, z z|[V:4]x6|
+[V:1]z6|[V:2]z .[E,G,C].[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]!p! (GCE GEG)|[V:2]z2 .[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1](!>!c3 B3)|[V:2]z .[=E,G,C].[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]z (AG{/G} FEF)|[V:2]z2 .[F,A,C] .[F,A,C].[F,A,C].[F,A,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1](!>!A3 G3)|[V:2]z .[E,G,C].[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1](GDE FDG)|[V:2]z2 .[F,G,=B,] .[F,G,B,].[F,G,B,].[F,G,B,]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]!<(! (EGc ed!<)!c)|[V:2]z2 .[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]!>(! (BAG{/B} AG^F)!>)!|[V:2]z2 .[F,A,C] z2 .[E,=A,C]|[V:3]F,,3 A,,3|[V:4]x6|
+[V:1]G3- G z z|[V:2]z .[D,G,=B,].[D,G,B,] .[D,G,B,].[D,G,B,].[D,G,B,]|[V:3]G,,3- G,, z z|[V:4]x6|
+[V:1]!pp! (gce geg)|[V:2]z2 .[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1](!>!c'3 b3)|[V:2]z .[=E,G,C].[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]z (ag{/g} fef)|[V:2]z2 .[F,A,C] .[F,A,C].[F,A,C].[F,A,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1](!>!a3 g3)|[V:2]z .[E,G,C].[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1](gde fdg)|[V:2]z2 .[F,G,=B,] .[F,G,B,].[F,G,B,].[F,G,B,]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]!<(! (egc' e'd'!<)!c')|[V:2]z2 .[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]!>(! (bag{/b} afd)!>)!|[V:2]z2 .[F,A,C] z2 .[F,G,=B,]|[V:3]F,,3 G,,3|[V:4]x6|
+[V:1]c3- c z z|:[V:2]z .[E,G,C].[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|:[V:3]C,,3- C,, z z|:[V:4]x6|:
+[V:1]!mf! (d2 G) (edc)|[V:2]z .[G,=B,D].[G,B,D] z .[G,CE].[G,CE]|[V:3]G,,3 G,,3|[V:4]x6|
+[V:1](d2 G) (edc)|[V:2]z .[G,=B,D].[G,B,D] z .[G,CE].[G,CE]|[V:3]G,,3 G,,3|[V:4]x6|
+[V:1]!>(! (=BAG)!>)! (AG^F)|[V:2]z .[G,=B,D].[G,B,D] z .[A,CE].[A,CE]|[V:3]G,,3 G,,3|[V:4]x6|
+[V:1]!p! (G3 g) z z|[V:2]z .[G,=B,D].[G,B,D] .[G,B,D].[G,B,D].[G,B,D]|[V:3]G,,3- G,, z z|[V:4]x6|
+[V:1]!f! ([Aa]2 [Cc]) ([Bb][Aa][Gg])|[V:2]z .[C,F,A,].[C,F,A,] z .[C,=E,B,].[C,E,B,]|[V:3]F,,3 G,,3|[V:4]x6|
+[V:1]!>(! ([Ff]2 [Ee] [Dd]2!>)! [Cc])|[V:2]z .[C,F,].[C,F,] z .[D,^F,].[D,F,]|[V:3]A,,3 =A,,3|[V:4]x6|
+[V:1]!pp!"^molto rall." (G6-|[V:2]z .[E,G,].[E,G,] .[F,G,].[F,G,].[F,G,]|[V:3]G,,3- G,, z z|[V:4]z z (C DED|
+[V:1]G6|[V:2]z .[F,G,].[F,G,] .[F,G,].[F,G,].[F,G,]|[V:3]G,,3- G,, z z|[V:4]^CDC E2 D)|
+[V:1]!pp!"^a Tempo" .G)(CE GEG)|[V:2]z2 .[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1](!>!c3 B3)|[V:2]z .[=E,G,C].[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]z (AG{/G} FEF)|[V:2]z2 .[F,A,C] .[F,A,C].[F,A,C].[F,A,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1](!>!A3 G3)|[V:2]z .[E,G,C].[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1](GDE FDG)|[V:2]z2 .[F,G,=B,] .[F,G,B,].[F,G,B,].[F,G,B,]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]!<(! (EGc ed!<)!c)|[V:2]z2 .[E,G,C] .[E,G,C].[E,G,C].[E,G,C]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]!>(! (BAG{/B} AG^F)!>)!|[V:2]z2 .[F,A,C] z2 .[E,=A,C]|[V:3]F,,3 A,,3|[V:4]x6|
+[V:1]G3- G z z|[V:2]z .[D,G,=B,].[D,G,B,] .[D,G,B,].[D,G,B,].[D,G,B,]|[V:3]G,,3- G,, z z|[V:4]x6|
+[V:1]!pp! (gc=e geg)|[V:2]z2 .[G,B,C] .[G,B,C].[G,B,C].[G,B,C]|[V:3]=E,,3- E,, z z|[V:4]x6|
+[V:1](!>!c'3 f2) z|[V:2]z2 .[F,=A,C] .[F,A,C].[F,A,C].[F,A,C]|[V:3]E,,3- E,, z z|[V:4]x6|
+[V:1](fBd fdf)|[V:2]z2 .[F,A,B,] .[F,A,B,].[F,A,B,].[F,A,B,]|[V:3]D,,3- D,, z z|[V:4]x6|
+[V:1](!>!b3 e2) z|[V:2]z2 .[E,G,B,] .[E,G,B,].[E,G,B,].[E,G,B,]|[V:3]_D,,3- D,, z z|[V:4]x6|
+[V:1]!<(! (eAc ece)!<)!|[V:2]z2 .[E,_G,A,] .[E,G,A,].[E,G,A,].[E,G,A,]|[V:3]C,,3- C,, z z|[V:4]x6|
+[V:1]!>(! (a2 g f{/gf}ed)!>)!|[V:2]z2 .[D,F,A,] z .[=B,,F,A,].[B,,F,A,]|[V:3]=B,,,3 D,,3|[V:4]x6|
+[V:1]"^rallentando" (gec) (AG=B,)|[V:2]z .[C,E,G,].[C,E,G,] z .[E,G,].[F,G,]|[V:3]E,,3 G,,3|[V:4]x6|
+[V:1](C3 c) z z:|[V:2]z [E,G,][E,G,] [E,G,] z z:|[V:3]C,,3- C,, x2:|[V:4]x6:|
+[V:1]!pp! [Ec]3- [Ec] z z|[V:2][C,G,]3- [C,G,] z z|[V:3]x6|[V:4]x6|
+[V:1][I:staff +1] C,2[I:staff -1] z z2 z|][V:2][C,,,C,,]2 z z2 z|][V:3]x6|][V:4]x6|]

@@ -1,0 +1,95 @@
+X:1
+%%score { ( 1 3 ) | ( 2 4 ) }
+L:1/8
+Q:1/4=92
+M:6/8
+K:Bb
+V:1 treble nm="Piano" snm="Pno."
+V:3 treble 
+V:2 bass
+V:4 bass
+[V:1]"^Andante con moto"!p! z6|[V:2]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4]x2[K:treble] x4|
+[V:1]z2 z z2 (d|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]d'3- d'2 ^c'|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]c'ba g2 b)|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!<(! (d6-|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([A,D^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]d2 A d2 e!<)!|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([A,D^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!>(! d3 c3-|[V:2][K:bass]!ped! .[^F,,,^F,,] z[K:treble] ([A,D^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]c2 d B2 A!>)!|[V:2][K:bass]!ped! .[D,,,D,,] z[K:treble] ([A,D^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!pp! B3 G3-)|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]G2 z z2 (d|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]d'3- d'2 ^c'|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]c'ba g2 b)|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!<(! (d6-|[V:2][K:bass]!ped! .[A,,,A,,] z[K:treble] ([A,D^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]d2 A f2 g!<)!|[V:2][K:bass]!ped! .[A,,,A,,] z[K:treble] ([A,DF] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!>(! f3 =e3-|[V:2][K:bass]!ped! .[A,,,A,,] z[K:treble] ([A,^CG] [CGA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]e2 f d2 ^c!>)!|[V:2][K:bass]!ped! .[A,,,A,,] z[K:treble] ([A,^CG] [CGA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!pp! d6-)|[V:2][K:bass]!ped! .[D,,D,] z[K:treble] ([A,DF] [DFA]) z z|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]d2 z z2 d|[V:2][K:bass] .[D,,D,] z[K:treble] ([A,DF] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!<(! (e3 f3|[V:2][K:bass]!ped! .[C,,C,] z[K:treble] ([CEG] [EGc]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]g3 a3!<)!|[V:2][K:bass]!ped! .[F,,F,] z[K:treble] ([CEF] [EFc]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!>(! c'3 b3-|[V:2][K:bass]!ped! .[B,,,B,,] z[K:treble] ([B,DF] [DFB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]b2 a g2 f)!>)!|[V:2][K:bass]!ped! .[D,,D,] z[K:treble] ([B,DF] [DFB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!<(! (e3 f3|[V:2][K:bass]!ped! .[C,,C,] z[K:treble] ([CEG] [EGc]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]g3 a3!<)!|[V:2][K:bass]!ped! .[F,,F,] z[K:treble] ([CEF] [EFc]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!>(! c'3 b3-|[V:2][K:bass]!ped! .[B,,,B,,] z[K:treble] ([B,DF] [DFB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]b2) (b a2 g)!>)!|[V:2][K:bass]!ped! .[D,,D,] z[K:treble] ([B,DF] [DFB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]"_poco cresc." (^f3 g3|[V:2][K:bass]!ped! .[D,,D,] z[K:treble] ([A,D^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]a3 d'3|[V:2][K:bass]!ped! .[D,,D,] z[K:treble] ([A,D^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]c'3 b3-|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]b2) (b a2 g)|[V:2][K:bass]!ped! .[B,,,B,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!f! (f3 =e3|[V:2][K:bass]!ped! .[A,,,A,,] z[K:treble] ([A,DF] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!>(! g3 ^c3!>)!|[V:2][K:bass]!ped! .[A,,,A,,] z[K:treble] ([A,=EG] [EGA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!pp! d6-)|[V:2][K:bass]!ped! .[D,,D,] z[K:treble] ([A,D^F] [DFA]) z z|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]d2 z z2 (d|[V:2][K:bass] .[D,,D,] z[K:treble] ([A,D^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]"_poco piu mosso" e'3- e'2 d'|[V:2][K:bass]!ped! .[^F,,,^F,,] z[K:treble] ([CEA] [EAc]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]c'2 b a2 b)|[V:2][K:bass]!ped! .[D,,,D,,] z[K:treble] ([C^FA] [FAc]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!<(! (g3 ^f3-|[V:2][K:bass]!ped! .[A,,,A,,] z[K:treble] ([A,CE] [CEA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]f2 g a2 b)!<)!|[V:2][K:bass]!ped! .[D,,,D,,] z[K:treble] ([CD^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!>(! (g3 ^f3-|[V:2][K:bass]!ped! .[A,,,A,,] z[K:treble] ([A,CE] [CEA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]f2 g a2 b)!>)!|[V:2][K:bass]!ped! .[D,,,D,,] z[K:treble] ([CD^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!pp! (g6-|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]z2 z z2 (d|[V:4][K:bass] x2[K:treble] x4|
+[V:1]g6-|[V:2][K:bass]!ped! .[F,,,F,,] z[K:treble] ([=B,DG] [DG=B]) z z!ped-up!|[V:3]d'3- d'2 ^c'|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!<(! g6|[V:2][K:bass]!ped! .[=E,,,=E,,] z[K:treble] ([C=EG] [EGc]) z z!ped-up!|[V:3]c'2 =b _b2 a|[V:4][K:bass] x2[K:treble] x4|
+[V:1]b2 g!<)!!>(! =e2 g!>)!|[V:2][K:bass]!ped! .[^C,,,^C,,] z[K:treble] ([^C=EG] [EG^c]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!pp!!<(! d6-|[V:2][K:bass]!ped! .[D,,,D,,] z[K:treble] ([=B,DG] [DG=B]) z z!ped-up!|[V:3]z2 z z2 (=b|[V:4][K:bass] x2[K:treble] x4|
+[V:1]d6-!<)!|[V:2][K:bass]!ped! .[^F,,,^F,,] z[K:treble] ([CDA] [DAc]) z z!ped-up!|[V:3]d'3- d'2 c'|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!>(! d6|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([=B,DG] [DG=B]) z z!ped-up!|[V:3]=b2 _b a2 g|[V:4][K:bass] x2[K:treble] x4|
+[V:1]^f2 d!>)!!pp! A2 d)|[V:2][K:bass]!ped! .[D,,,D,,] z[K:treble] ([A,D^F] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!pp! G6-|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,=B,D] [B,DG]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]G2 z z2!pp! ([=Bd]||[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,=B,D] [B,DG]) z z!ped-up!||[V:3]x6||[V:4][K:bass] x2[K:treble] x4||
+[V:1][K:G]"_dolce" [Bd]2 [ce] [Bd]2 [ce]|[V:2][K:G][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3][K:G] x6|[V:4][K:G][K:bass] x2[K:treble] x4|
+[V:1][Bd]2 [ce] [Bd]2 [ce]|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!<(! [Bd]3 [eg]3!<)!|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!>(! [df]3 [ce]3!>)!|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,CE] [CEG]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1][Bd]3 [GB]3-)|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1][GB]2 ([GB]{/d} [Ac]2 [GB]|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1][FA]3 [ce]3-)|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([A,DF] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1][ce]2 ([FA]{/c} [GB]2 [FA]|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([A,DF] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1][GB]3 [Bd]3-)|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1][Bd]3 z2 ([Bd]|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1][Bd]2 [ce] [Bd]2 [ce]|[V:2][K:bass]!ped! .[^G,,,^G,,] z[K:treble] ([^G,B,D] [B,D^G]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!<(! [Bd]2 [ce] [Bd]2 [ce]!<)!|[V:2][K:bass]!ped! .[^G,,,^G,,] z[K:treble] ([^G,B,D] [B,D^G]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!>(! [Bd]3 [Ac]3-)|[V:2][K:bass]!ped! .[A,,,A,,] z[K:treble] ([A,CE] [CEA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1][Ac]2 ([Ac]{/e} [Bd]2 [Ac]!>)!|[V:2][K:bass]!ped! .[C,,C,] z[K:treble] ([A,CE] [CEA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!p! [GB]2 [Bd] [df]2 [ce]|[V:2][K:bass]!ped! .[D,,D,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1][Bd]2 [Ac] [GB]2 [FA])|[V:2][K:bass]!ped! .[D,,,D,,] z[K:treble] ([A,DF] [DFA]) z z!ped-up!|[V:3]x6|[V:4][K:bass] x2[K:treble] x4|
+[V:1]G6-|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3]z2 z z2 (d|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!pp! G6-|[V:2][K:bass]!ped! .[=F,,,=F,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3]d'3- d'2 ^c'|[V:4][K:bass] x2[K:treble] x4|
+[V:1]G6|[V:2][K:bass]!ped! .[E,,,E,,] z[K:treble] ([G,CE] [CEG]) z z!ped-up!|[V:3]c'2 b _b2 a|[V:4][K:bass] x2[K:treble] x4|
+[V:1]_B2 G E2 G|[V:2][K:bass]!ped! .[^C,,,^C,,] z[K:treble] ([G,_B,E] [B,EG]) z z!ped-up!|[V:3]g3 e3|[V:4][K:bass] x2[K:treble] x4|
+[V:1]D6-|[V:2][K:bass]!ped! .[D,,,D,,] z[K:treble] ([G,B,D] [B,DG]) z z!ped-up!|[V:3]d3-) d2 (b|[V:4][K:bass] x2[K:treble] x4|
+[V:1]D6-|[V:2][K:bass]!ped! .[F,,,F,,] z[K:treble] ([A,CD] [CDA]) z z!ped-up!|[V:3]d'3- d'2 c'|[V:4][K:bass] x2[K:treble] x4|
+[V:1]D6|[V:2][K:bass]!ped! .[G,,,G,,] z[K:treble] ([B,DG] [DGB]) z z!ped-up!|[V:3]b2 _b a2 g|[V:4][K:bass] x2[K:treble] x4|
+[V:1]F2 D A,2 D|[V:2][K:bass]!ped! .[D,,,D,,] z[K:treble] ([F,A,D] [A,DF]) z z!ped-up!|[V:3]f3 d3|[V:4][K:bass] x2[K:treble] x4|
+[V:1]!pp! G,6-)|[V:2][K:bass]!ped! .[G,,,G,,] z ([B,,D,] [D,G,]) z z!ped-up!|[V:3]G6-)|[V:4][K:bass] x6|
+[V:1]G,6-|[V:2]!ped! .[G,,,G,,] z ([B,,D,] [D,G,]) z z!ped-up!|[V:3]G6-|[V:4]x6|
+[V:1]G,6-|[V:2]!ped! [G,,,G,,]2 z z2 z|[V:3]G2 z z2 z|[V:4]x6|
+[V:1]G,6-|[V:2][G,,,G,,]2 z z2 z!ped-up!|[V:3]x6|[V:4]x6|
+[V:1]!ppp! G,2 z z2 z|[V:2]!ped! .[G,,,G,,]2 z z2 z|[V:3]x6|[V:4]x6|
+[V:1]z6|[V:2].[G,,,G,,]2 z z2 z|[V:3]x6|[V:4]x6|
+[V:1]z6|[V:2].[G,,,G,,]2 z z2 z|[V:3]x6|[V:4]x6|
+[V:1]z6|[V:2].[G,,,G,,]2 z z2 z!ped-up!|[V:3]x6|[V:4]x6|
+[V:1]z6|[V:2]!ped! .[G,,,G,,]2 z z2 z|[V:3]x6|[V:4]x6|
+[V:1]z6|[V:2].[G,,,G,,]2 z z2 z|[V:3]x6|[V:4]x6|
+[V:1]!fermata!z6|][V:2].[G,,,G,,]2 z!ped-up! !fermata!z2 z|][V:3]x6|][V:4]x6|]

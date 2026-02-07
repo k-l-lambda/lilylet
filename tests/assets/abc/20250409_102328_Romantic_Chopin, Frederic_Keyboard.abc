@@ -1,0 +1,77 @@
+X:1
+%%score { ( 1 4 ) | ( 2 3 ) }
+L:1/8
+Q:1/4=78
+M:2/4
+K:C
+V:1 treble nm="Piano" snm="Pno."
+V:4 treble 
+V:2 bass 
+V:3 bass 
+[V:1]"^Andante molto moderato."!p! z (!arpeggio!!>![G,EG]2 .[G,EG])|[V:2]!ped! z (!>![E,C]2 .[E,C])!ped-up!|[V:3]C,,4|[V:4]x4|
+[V:1]z (!arpeggio!!>![G,EG]2 .[G,EG])|[V:2]!ped! z (!>![E,C]2 .[E,C])!ped-up!|[V:3]C,,4|[V:4]x4|
+[V:1](e2 Ge)|[V:2]!ped! z [G,C]2 [G,C]!ped-up!|[V:3]C,,4|[V:4]z [CE]2 [CE]|
+[V:1](dc)B!<(!(c!<)!|[V:2]!ped! z [CG]2 [CG]!ped-up!|[V:3]E,,4|[V:4]z G2 G|
+[V:1]f2) !tenuto!f2|[V:2]!ped! z [CD]2 [CD]!ped-up!|[V:3]D,,4|[V:4]z [FG]2 [FG]|
+[V:1]!>(! (f2!>)! G) z|[V:2]!ped! z [G,D]2 [G,D]!ped-up!|[V:3]G,,4|[V:4]z [DF]2 [DF]|
+[V:1](e2 ^Ge)|[V:2]!ped! z [CE]2 [DE]!ped-up!|[V:3]C,2 B,,2|[V:4]z E2 E|
+[V:1](dc)B!<(!(c!<)!|[V:2]!ped! z [CE]2 [CE]!ped-up!|[V:3]A,,4|[V:4]z E2 E|
+[V:1]d2)!>(! !tenuto!d2!>)!|[V:2]!ped! z [CD]2 [CD]!ped-up!|[V:3]D,,4|[V:4]G G2 ^F|
+[V:1](d3 ^d)|[V:2]!ped! z [G,D]2 [G,D]!ped-up!|[V:3]G,,4|[V:4]G G2 F|
+[V:1](e2 Ge)|[V:2]!ped! z [G,C]2 [G,C]!ped-up!|[V:3]C,,4|[V:4]z [CE]2 [CE]|
+[V:1](dc)B!<(!(c!<)!|[V:2]!ped! z [CG]2 [CG]!ped-up!|[V:3]E,,4|[V:4]z G2 G|
+[V:1]a2) !tenuto!a2|[V:2]!ped! z [CF]2 [^CG]!ped-up!|[V:3]F,,2 E,,2|[V:4]z A z A|
+[V:1]!>(! (a2 !tenuto!B!>)!!tenuto!c)|[V:2]!ped! z[I:staff -1] [DFA]!ped-up![I:staff +1][^CG][=CD^F]|[V:3]D,,2 x2|[V:4]x4|
+[V:1]!p! (f2 !tenuto!d!tenuto!c)|[V:2]!p!!ped! z ([CE][DF][EG])!ped-up!|[V:3]G,,4-|[V:4]x4|
+[V:1]!>(!{/c} (A2!>)! B2)|[V:2]!>(!!ped![I:staff -1] (c2!>)!!ped-up! BA)!ped-up!|[V:3]G,,!ped!G,,,(G,,G,)!ped-up!|[V:4]x4|
+[V:1]"_rit."!<(! c2!<)!!>(! A,2!>)!|[V:2]"_rit."!ped!!<(![I:staff +1] z (C,2 C,-)!ped-up!!<)!|[V:3]C,,2 F,,2|[V:4]z!<(! [CE]2 [CE]-!<)!|
+[V:1]!>(! _E2!>)!"_enerante" D2|[V:2]!>(! C,!ped! C,2!>)!!ped-up! D,!ped-up!|[V:3]E,,2 D,,2|[V:4][CE]!>(! [CG]2!>)! [B,G]|
+[V:1]"^a tempo."!pp! (e2 Ge)|[V:2]!pp!!ped! z [G,C]2 [G,C]!ped-up!|[V:3]C,,4|[V:4]z [CE]2 [CE]|
+[V:1](dc)B!<(!(c!<)!|[V:2]!ped! z [CG]2 [CG]!ped-up!|[V:3]E,,4|[V:4]z G2 G|
+[V:1]f2) !tenuto!f2|[V:2]!ped! z [CD]2 [CD]!ped-up!|[V:3]D,,4|[V:4]z [FG]2 [FG]|
+[V:1]!>(! (f2!>)! G) z|[V:2]!ped! z [G,D]2 [G,D]!ped-up!|[V:3]G,,4|[V:4]z [DF]2 [DF]|
+[V:1](e2 ^Ge)|[V:2]!ped! z [CE]2 [DE]!ped-up!|[V:3]C,2 B,,2|[V:4]z E2 E|
+[V:1](dc)B!<(!(c!<)!|[V:2]!ped! z [CE]2 [CE]!ped-up!|[V:3]A,,4|[V:4]z E2 E|
+[V:1]d2)!>(! !tenuto!d2!>)!|[V:2]!ped! z [CD]2 [CD]!ped-up!|[V:3]D,,4|[V:4]G G2 ^F|
+[V:1](d3 ^d)|[V:2]!ped! z [G,D]2 [G,D]!ped-up!|[V:3]G,,4|[V:4]G G2 F|
+[V:1](e2 Ge)|[V:2]!ped! z [G,C]2 [G,C]!ped-up!|[V:3]C,,4|[V:4]z [CE]2 [CE]|
+[V:1](dc)B!<(!(c!<)!|[V:2]!ped! z [CG]2 [CG]!ped-up!|[V:3]E,,4|[V:4]z G2 G|
+[V:1]a2) !tenuto!a2|[V:2]!ped! z [CF]2 [^CG]!ped-up!|[V:3]F,,2 E,,2|[V:4]z A z A|
+[V:1]!>(! (a2 !tenuto!B!>)!!tenuto!c)|[V:2]!ped! z[I:staff -1] [DFA]!ped-up![I:staff +1][^CG][=CD^F]|[V:3]D,,2 x2|[V:4]x4|
+[V:1]!p! (f2 !tenuto!d!tenuto!c)|[V:2]!p!!ped! z ([CE][DF][EG])!ped-up!|[V:3]G,,4-|[V:4]x4|
+[V:1]!>(!{/c} (A2!>)! B2)|[V:2]!>(!!ped![I:staff -1] (c2!>)!!ped-up! BA)!ped-up!|[V:3]G,,!ped!G,,,(G,,G,)!ped-up!|[V:4]x4|
+[V:1]"_rit."!<(! c4-!<)!|[V:2]"_rit."!ped!!<(![I:staff +1] z (C,2 C,-!ped-up!!<)!|[V:3]C,,2 F,,2|[V:4]z!<(! [CE]2 [CE]-!<)!|
+[V:1]!>(! c4!>)!||[V:2]!>(! C,!ped! C,2!ped-up! C,)!>)!||[V:3]E,,2 D,,2||[V:4][CE]!>(! [CE]2 [CE]!>)!||
+[V:1]!ppp!"^[in tempo]" (_e2 _dc)|[V:2]!ppp!!ped! z [_E_A]2 [EA]!ped-up!|[V:3]C,,4|[V:4]z _A2 A|
+[V:1](_A2 _Bc)|[V:2]!ped! z [_E_A]2 [EA]!ped-up!|[V:3]_D,4|[V:4]z F2 F|
+[V:1](_d2 c_B)|[V:2]!ped! z [_DG]2 [DG]!ped-up!|[V:3]_D,4|[V:4]z _F2 F|
+[V:1](G2 _A_B)|[V:2]!ped! z [_DG]2 [DG]!ped-up!|[V:3]_D,4|[V:4]z _E2 E|
+[V:1]!<(! c2 _d_e|[V:2]!ped!!<(! z [CG]2 [CF]!ped-up!|[V:3]C,4|[V:4]z _E2 E|
+[V:1]f2)!<)! (c'_b|[V:2]!ped! z [CF]2 [_B,F]!ped-up!!<)!!ped-up!|[V:3]C,4|[V:4]z _A2 _a|
+[V:1]!<(! _a2){/_ba} gf|[V:2]!ped!!>(! z [_B,F]2 [_A,F]!ped-up!|[V:3]C,2 B,,2|[V:4]f4|
+[V:1]_e3)!<)! _d|[V:2]!ped! z [_A,_E]2 [G,_D])!ped-up!!>)!|[V:3]_B,,3 _A,,|[V:4]_e!>(! _d2 B!>)!|
+[V:1]!p!"_cresc. molto" c _B2 _A)|[V:2]!ped!!<(! [C_A]2!ped-up!!ped! [C^G]2!<)!!ped-up!|[V:3]_A,,2 G,,2|[V:4]x4|
+[V:1]!<(! (F2 !tenuto!G!<)!!tenuto!_A)|[V:2]!ped!!>(! [CF]2!ped-up!!ped! [A,^C]2!>)!!ped-up!|[V:3]F,,2 E,,2|[V:4]F [A,C]2 [A,C]|
+[V:1]!tenuto!c!tenuto!_B!tenuto!_A!tenuto!G|[V:2]!ped! z [DF]2 [DF]!ped-up!|[V:3]D,,4|[V:4]z _A2 A|
+[V:1]!>(!"^riten." (E2!>)! !tenuto!F!tenuto!G))|[V:2]!ped! z [DF]2 [DF]!ped-up!!>)!|[V:3]G,,,4|[V:4]z"_dim." G2 G|
+[V:1]!p!"^poco rit." (_A2 !tenuto!_B!tenuto!c)|[V:2]!ped!"_dim." z [CF]2 [CF]!ped-up!|[V:3]G,,,4|[V:4]x4|
+[V:1]!pp! (_a2!pp!!>(!{/!fermata!B} !fermata!e>!>)!d)|[V:2]!ped! z [CF]2!ppp! !fermata![B,F]!ped-up!|[V:3]G,,,4|[V:4]z _A z G|
+[V:1]"^a tempo."!ppp! (c2 Ge)|[V:2]!ppp!!ped! z [G,C]2 [G,C]!ped-up!|[V:3]C,,4|[V:4]z [CE]2 [CE]|
+[V:1](dc)B!<(!(c!<)!|[V:2]!ped! z [CG]2 [CG]!ped-up!|[V:3]E,,4|[V:4]z G2 G|
+[V:1]f2)) !tenuto!f2|[V:2]!ped! z [B,G]2 [B,G]!ped-up!|[V:3]D,,4|[V:4]z [FG]2 [FG]|
+[V:1]!>(! (f2!>)! G) z|[V:2]!ped! z [G,D]2 [G,D]!ped-up!|[V:3]G,,4|[V:4]z [DF]2 [DF]|
+[V:1](e2 ^Ge)|[V:2]!ped! z [CE]2 [DE]!ped-up!|[V:3]C,2 B,,2|[V:4]z E2 E|
+[V:1](dc)B!<(!(c!<)!|[V:2]!ped! z [CE]2 [CE]!ped-up!|[V:3]A,,4|[V:4]z E2 E|
+[V:1]d2)!>(! !tenuto!d2!>)!|[V:2]!ped! z [CD]2 [CD]!ped-up!|[V:3]D,,4|[V:4]G G2 ^F|
+[V:1](d3 ^d)|[V:2]!ped! z [G,D]2 [G,D]!ped-up!|[V:3]G,,4|[V:4]G G2 F|
+[V:1]"_cresc. molto" (e2 Ge)|[V:2]!ped! z [G,C]2 [G,C]!ped-up!|[V:3]C,,4|[V:4]z [CE]2 [CE]|
+[V:1](dc)B!<(!(c!<)!|[V:2]!ped! z [CG]2 [CG]!ped-up!|[V:3]E,,4|[V:4]z G2 G|
+[V:1]a2) !tenuto!a2|[V:2]!ped! z [DA]2 [^CA]!ped-up!|[V:3]F,,4|[V:4]z"_cresc." A2 A|
+[V:1]!>(! (aA)(!tenuto!B!tenuto!c)!>)!|[V:2]!ped!!>(! z[I:staff -1] [DFA][DFA][DFA]!ped-up!!>)!|[V:3]D,,2 z2|[V:4]x4|
+[V:1]!p!"_piu dim." (f d2 c)|[V:2]!pp!!ped![I:staff +1] z [_A,CF][A,CF][A,CF]!ped-up!|[V:3]D,,2 z2|[V:4]x4|
+[V:1]!<(! (_A!<)!_D)!>(!(=A>!>)!B)|[V:2]!ped!!<(! F,2!ped-up!!ped!!ped-up!!ped! (D>!<)!C)!ped-up!|[V:3]D,D,,(G,,>F,,)|[V:4]x2 z [DF]|
+[V:1]"_smorz. rit." (c E2!>(! G)|[V:2]"_dim."!ped! (C!>(! G,2 E,)!ped-up!|[V:3]E,,4|[V:4]x4|
+[V:1](ceg>c')!>)!|[V:2]!ped! (G,CE>G)!ped-up!!>)!|[V:3]E,,4|[V:4]x4|
+[V:1]!pp!"_dim. molto" e'4|[V:2]!ppp!!ped![I:staff -1] c4|[V:3]x4|[V:4]x4|
+[V:1]!arpeggio![G,CEG]4-|[V:2][I:staff +1] !arpeggio![C,,G,,C,E,]4-|[V:3]x4|[V:4]x4|
+[V:1][G,CEG]2 z2|][V:2][C,,G,,C,E,]2!ped-up! z2|][V:3]x4|][V:4]x4|]

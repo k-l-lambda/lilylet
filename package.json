@@ -31,6 +31,7 @@
     "test:mei": "npx tsx ./tests/mei.ts",
     "test:unit": "npx tsx ./tests/unit/encodePitch.test.ts",
     "test:decoder": "npx tsx ./tests/lilypondDecoder.ts",
+    "test:abc": "npx tsx ./tests/abc-decoder.ts",
     "ts": "npx tsx"
   },
   "repository": {

@@ -1,0 +1,66 @@
+X:1
+%%score { ( 1 4 ) | ( 2 3 ) }
+L:1/8
+Q:1/4=92
+M:3/4
+K:Ab
+V:1 treble nm="Piano" snm="Pno."
+V:4 treble 
+V:2 bass 
+V:3 bass 
+[V:1]"^Andante"!p!"_dolce" (c2 A>B (3cf3/2e/|[V:2]"_legato" z [CE][CE][CE][C=E][CE]|[V:3]A,6|[V:4]x6|
+[V:1]e4 d2)|[V:2]z [DE][DE][DE][DE][DE]|[V:3]B,6|[V:4]x6|
+[V:1](B2!<(! G>A (3Be3/2!<)!d/|[V:2]z [DE][DE][DE][DE][DE]|[V:3]G,6|[V:4]x6|
+[V:1]!>(! d4 c2)!>)!|[V:2]z [CE][CE][CE][CE][CE]|[V:3]A,6|[V:4]x6|
+[V:1](c2!<(! =A>B (3cf3/2!<)!e/|[V:2]z [CEF][CEF][CEF][CEF][CEF]|[V:3]=A,6|[V:4]x6|
+[V:1]!>(! e4!>)! d2)|[V:2]z [DF][DF][DF][DF][DF]|[V:3]B,6|[V:4]x6|
+[V:1]!>(! (c>B!>)! (3=ABc{/e} (3dc3/2B/|[V:2]z [A,B,F][A,B,F][A,B,F][A,B,F][A,B,F]|[V:3]=D,6|[V:4]x6|
+[V:1]"_ritard." e2-!>(! (3e=d_d (3c{/e}d3/2!>)!B/)|[V:2]z [G,B,E][G,B,E][G,B,E][G,B,E][G,B,E]|[V:3]E,6|[V:4]x6|
+[V:1]"_a tempo" (c2 A>B (3cf3/2e/|[V:2]"_legato" z [CE][CE][CE][C=E][CE]|[V:3]A,6|[V:4]x6|
+[V:1]e4 d2)|[V:2]z [DE][DE][DE][DE][DE]|[V:3]B,6|[V:4]x6|
+[V:1](B2!<(! G>A (3Be3/2!<)!d/|[V:2]z [DE][DE][DE][DE][DE]|[V:3]G,6|[V:4]x6|
+[V:1]!>(! d4 c2)!>)!|[V:2]z [CE][CE][CE][CE][CE]|[V:3]A,6|[V:4]x6|
+[V:1]!<(! (c2 =A>B (3cf3/2!<)!e/|[V:2]z [CEF][CEF][CEF][CEF][CEF]|[V:3]=A,6|[V:4]x6|
+[V:1]!>(! e2 =d2 _d2)!>)!|[V:2]z [B,F]z[B,F]z[B,_F]|[V:3]B,2 A,2 G,2|[V:4]x6|
+[V:1]!>(! (c>B (3=ABc!>)!{/e} (3dF3/2G/|[V:2]z [CE] z [B,D] z [B,D]|[V:3]A,2 D,2 E,2|[V:4]x6|
+[V:1]!>(! B4 A2)!>)!|[V:2](D4 C2)|[V:3]z2 E,2 A,2|[V:4]x6|
+[V:1]!mf! z ([EGB]2 [EGB][E^F=Ac][EGBe])|[V:2](B,2 G,>A, (3B,C3/2B,/|[V:3]x6|[V:4]x6|
+[V:1]z ([FAB=d]2 [FABd][FAB^c][FABd])|[V:2]B,4 F,2)|[V:3]x6|[V:4]x6|
+[V:1]z ([FAB=d]2 [FABd][FAB^c][FABd])|[V:2](B,2 F,>G, (3A,C3/2B,/|[V:3]x6|[V:4]x6|
+[V:1]z ([GBe]2 [GBe][AB=d][GBe])|[V:2]B,4 E2)|[V:3]x6|[V:4]x6|
+[V:1]!<(! z ([GBe]2 [GBe][G=B=df][Gceg])!<)!|[V:2](E2 B,>=D (3CD3/2E/|[V:3]x6|[V:4]x6|
+[V:1]!>(! z ([GB=dg]2 [GBdg][GBd^f][GBdg])!>)!|[V:2]G,4 =D2)|[V:3]x6|[V:4]x6|
+[V:1]!<(! z ([GB=dg]2 [GBdg][ABda][ABdb])!<)!|[V:2](=D2 G,>C (3B,A,3/2F,/|[V:3]x6|[V:4]x6|
+[V:1]!>(! z ([Begb]2 [Begb][=Ae^f=a][Begb])!>)!|[V:2]E,4 E2)|[V:3]x6|[V:4]x6|
+[V:1]"_cresc." ([Begb] [Begb]2 [Begb][cegc'][Begb])|[V:2](E2 =D>E (3FG3/2F/|[V:3]x6|[V:4]x6|
+[V:1]([B=dab] [Bdab]2 [Bdab][cdac'][Bdab])|[V:2]F4 B,2)|[V:3]x6|[V:4]x6|
+[V:1]([B=dab] [Bdab]2 [Bdab][cdac'][Bdab])|[V:2](F2 =E>F (3AG3/2F/|[V:3]x6|[V:4]x6|
+[V:1]!f!!>(! ([Begb] [Begb]2 [Begb][B=dab]!>)![Bdgb])|[V:2]E4 B,2)|[V:3]x6|[V:4]x6|
+[V:1]!p! ([Begb] [Begb]2 [Begb][cegc'][Begb])|[V:2](E2 =D>E (3FG3/2F/|[V:3]x6|[V:4]x6|
+[V:1]([B=dab] [Bdab]2 [Bdab][cdac'][Bdab])|[V:2]F4 B,2)|[V:3]x6|[V:4]x6|
+[V:1]!<(! ([Bdab] [Bdab]2 [Bdab][_cda_c'][Bdab])!<)!|[V:2](_F2 E>F (3A_G3/2F/|[V:3]x6|[V:4]x6|
+[V:1]!>(! ([Begb] [Begb]2 [Begb][Bdgb][Bdgb])!>)!|[V:2]E6)|[V:3]x6|[V:4]x6|
+[V:1]!p! ([cc']2 [Aa]>[Bb] (3[cc'][ff']3/2[ee']/|[V:2][K:bass]"_legato" z [CE][CE][CE][C=E][CE]|[V:3][K:bass] A,6|[V:4]x6|
+[V:1][ee']4 [dd']2)|[V:2]z [DE][DE][DE][DE][DE]|[V:3]B,6|[V:4]x6|
+[V:1]([Bb]2!<(! [Gg]>[Aa] (3[Bb][ee']3/2!<)![dd']/|[V:2]z [DE][DE][DE][DE][DE]|[V:3]G,6|[V:4]x6|
+[V:1]!>(! [dd']4 [cc']2)!>)!|[V:2]z [CE][CE][CE][CE][CE]|[V:3]A,6|[V:4]x6|
+[V:1]([cc']2!<(! [=A=a]>[Bb] (3[cc'][ff']3/2!<)![ee']/|[V:2]z [CEF][CEF][CEF][CEF][CEF]|[V:3]=A,6|[V:4]x6|
+[V:1]!>(! [ee']4 [dd']2)!>)!|[V:2]z [DF][DF][DF][DF][DF]|[V:3]B,6|[V:4]x6|
+[V:1]!>(! ([cc']>[Bb]!>)! (3[=A=a][Bb][cc']{/[ee']} (3[dd'][Ff]3/2[Gg]/|[V:2]z [A,B,F] z [A,B,F] z [B,DE]|[V:3]=D,2 D,2 E,2|[V:4]x6|
+[V:1][Aa]6)!fine!||[V:2]z2 [CE]4||[V:3]A,,2 A,4||[V:4]x6||
+[V:1]!p!"_dolce" (c4 f>c|[V:2]"_legato" z [CF][CF][CF][CF][CF]|[V:3]A,6|[V:4]x6|
+[V:1]e4 d2)|[V:2]z [DF][DF][DF][DF][DF]|[V:3]B,6|[V:4]x6|
+[V:1](c3 B{/cB}=AB)|[V:2]z [G,DE][G,DE][G,DE][G,DE][G,DE]|[V:3]E,6|[V:4]x6|
+[V:1](e2 d2 c2)|[V:2]z [CE][CE][CE][CE][CE]|[V:3]A,6|[V:4]x6|
+[V:1](c'3 g{/b} a>g)|[V:2]z [CG][CG][CG][CG][CG]|[V:3]=E,6|[V:4]x6|
+[V:1](c'3 f{/a} g>f)|[V:2]z [CF][CF][CF][CF][CF]|[V:3]F,6|[V:4]x6|
+[V:1]"_cresc." (fe=de{/g} (3fed)|[V:2]z [C=D][CD][CD][=B,D][B,D]|[V:3]A,4 G,2|[V:4]x6|
+[V:1]!>(! (c4 B2)!>)!|[V:2]z [CE][CE][CE][DE][DE]|[V:3]A,4 G,2|[V:4]x6|
+[V:1]!p! (c4 f>c|[V:2]"_legato" z [CF][CF][CF][CF][CF]|[V:3]A,6|[V:4]x6|
+[V:1]e4 d2)|[V:2]z [DF][DF][DF][DF][DF]|[V:3]B,6|[V:4]x6|
+[V:1](c3 B{/cB}=AB)|[V:2]z [G,DE][G,DE][G,DE][G,DE][G,DE]|[V:3]E,6|[V:4]x6|
+[V:1](!>!=B2 c4)|[V:2]z [CE][CE][CE][CE][CE]|[V:3]A,6|[V:4]x6|
+[V:1]!pp! (f3 c{/e} d>c)|[V:2]z [F,=A,E][F,A,E][F,A,E][F,A,E][F,A,E]|[V:3]F,,6|[V:4]x6|
+[V:1](f3 B{/d} c>B)|[V:2]z [F,B,D][F,B,D][F,B,D] z [_F,A,=D]|[V:3]B,,4 _F,,2|[V:4]x6|
+[V:1]"_ritard." (e=d _dE c>B)|[V:2]z2 [A,C]2 [G,D]2|[V:3]E,,4 E,2|[V:4]x4 G2|
+[V:1]A6!D.C.!|][V:2]z2 [A,C]4|][V:3]A,,2 E,4|][V:4]z2 E4|]
