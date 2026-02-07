@@ -103,7 +103,7 @@ const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<
 
 
 // Generate index.html gallery
-const generateIndexHtml = (files: string[], outputDir: string): void => {
+const generateIndexHtml = (files: string[], outputDir: string, lylDir: string): void => {
 	// Group files by category (prefix before first dash or hyphen pattern)
 	const getCategory = (file: string): string => {
 		const name = file.replace('.lyl', '');
@@ -126,13 +126,18 @@ const generateIndexHtml = (files: string[], outputDir: string): void => {
 		return parts[0];
 	};
 
+	// Escape HTML entities
+	const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 	const categories = [...new Set(files.map(getCategory))].sort();
 
 	const cards = files.map(file => {
 		const name = file.replace('.lyl', '');
 		const category = getCategory(file);
+		const source = fs.readFileSync(`${lylDir}/${file}`, 'utf-8').trim();
 		return `        <div class="card" data-category="${category}">
             <div class="card-header">${name} <span class="category">${category}</span></div>
+            <div class="card-source"><code>${escHtml(source)}</code></div>
             <div class="card-body"><img src="${name}.svg" alt="${name}"></div>
             <div class="card-footer"><a href="${name}.mei">MEI</a><a href="${name}.svg" target="_blank">SVG</a></div>
         </div>`;
@@ -162,6 +167,8 @@ const generateIndexHtml = (files: string[], outputDir: string): void => {
         .card.hidden { display: none; }
         .card-header { padding: 12px 16px; background: #f8f9fa; border-bottom: 1px solid #eee; font-weight: 500; font-size: 14px; }
         .card-header .category { float: right; font-size: 12px; color: #888; font-weight: normal; }
+        .card-source { padding: 10px 16px; background: #1e1e1e; border-bottom: 1px solid #eee; }
+        .card-source code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace; font-size: 13px; color: #d4d4d4; white-space: pre-wrap; word-break: break-all; }
         .card-body { padding: 16px; text-align: center; min-height: 100px; display: flex; align-items: center; justify-content: center; }
         .card-body img { max-width: 100%; height: auto; }
         .card-footer { padding: 12px 16px; background: #f8f9fa; border-top: 1px solid #eee; display: flex; gap: 10px; }
@@ -265,7 +272,7 @@ const main = async (): Promise<void> => {
 	}
 
 	// Generate index.html gallery
-	generateIndexHtml(files, outputDir);
+	generateIndexHtml(files, outputDir, lylDir);
 };
 
 

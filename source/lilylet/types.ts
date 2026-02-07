@@ -286,6 +286,7 @@ export interface Metadata {
 	opus?: string;
 	instrument?: string;
 	genre?: string;
+	autoBeam?: 'auto' | 'on' | 'off';
 }
 
 // Part within a measure: can be a single staff or grand staff (multiple staves)

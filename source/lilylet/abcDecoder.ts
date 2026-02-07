@@ -90,7 +90,7 @@ const convertAccidental = (acc: number | null): Accidental | undefined => {
 	switch (acc) {
 		case -2: return Accidental.doubleFlat;
 		case -1: return Accidental.flat;
-		case 0: return Accidental.natural;
+		case 0: return undefined;  // natural: omit since lilylet parser doesn't support '!'
 		case 1: return Accidental.sharp;
 		case 2: return Accidental.doubleSharp;
 		default: return undefined;
@@ -494,7 +494,7 @@ const processExpressiveTerm = (
 			} else if (scope === ")") {
 				pendingMarks.push({ markType: "hairpin", type: HairpinType.diminuendoEnd });
 			} else {
-				pendingMarks.push({ markType: "hairpin", type: HairpinType.accent });
+				pendingMarks.push({ markType: "articulation", type: ArticulationType.accent });
 			}
 		}
 		// Dynamics

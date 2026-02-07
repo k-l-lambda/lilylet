@@ -17,10 +17,12 @@ import {
 	OrnamentType,
 	StemDirection,
 	Mark,
+	Beam,
 	HairpinType,
 	PedalType,
 	NavigationMarkType,
 	Tempo,
+	Event,
 } from "./types";
 
 
@@ -1764,6 +1766,278 @@ const encodeScoreDef = (
 };
 
 
+// === Auto-beam logic ===
+
+// Check if any NoteEvent in the document has a beam mark
+const docHasBeamMarks = (doc: LilyletDoc): boolean => {
+	for (const measure of doc.measures) {
+		for (const part of measure.parts) {
+			for (const voice of part.voices) {
+				for (const event of voice.events) {
+					if (event.type === 'note') {
+						const note = event as NoteEvent;
+						if (note.marks) {
+							for (const m of note.marks) {
+								if (m.markType === 'beam') return true;
+							}
+						}
+					} else if (event.type === 'tuplet') {
+						const tuplet = event as TupletEvent;
+						for (const e of tuplet.events) {
+							if (e.type === 'note') {
+								const note = e as NoteEvent;
+								if (note.marks) {
+									for (const m of note.marks) {
+										if (m.markType === 'beam') return true;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false;
+};
+
+// Resolve whether auto-beam should be applied
+const resolveAutoBeam = (doc: LilyletDoc): boolean => {
+	if (doc.metadata?.autoBeam === 'off') return false;
+	if (doc.metadata?.autoBeam === 'on') return true;
+	// 'auto' or undefined: auto-beam if no manual beam marks exist
+	return !docHasBeamMarks(doc);
+};
+
+// Compute beam group sizes in eighth-note units for a given time signature
+const getBeamGroups = (timeNum: number, timeDen: number): number[] => {
+	// Compound meters (n/8 where n is divisible by 3, and n > 3)
+	if (timeDen === 8 && timeNum % 3 === 0 && timeNum > 3) {
+		const groupCount = timeNum / 3;
+		return Array(groupCount).fill(3);
+	}
+
+	// Specific common time signatures (LilyPond defaults)
+	if (timeDen === 8 && timeNum === 3) return [3];
+	if (timeDen === 4 && timeNum === 2) return [2, 2];
+	if (timeDen === 4 && timeNum === 3) return [3, 3];
+	if (timeDen === 4 && timeNum === 4) return [4, 4];
+	if (timeDen === 2 && timeNum === 2) return [4, 4];
+
+	// Generic simple meters: each beat = 8/den eighths
+	const eighthsPerBeat = 8 / timeDen;
+	if (eighthsPerBeat >= 1) {
+		return Array(timeNum).fill(eighthsPerBeat);
+	}
+
+	// Fallback: one group for the whole measure
+	const totalEighths = timeNum * 8 / timeDen;
+	return [totalEighths];
+};
+
+// Calculate duration in eighth-note units
+const durationInEighths = (division: number, dots: number, tupletRatio?: { numerator: number; denominator: number }): number => {
+	// Base duration in eighths: 8 / division
+	let dur = 8 / division;
+	// Dot multiplier: 1 + 1/2 + 1/4 + ... = 2 - 1/2^dots
+	if (dots > 0) {
+		dur *= (2 - Math.pow(0.5, dots));
+	}
+	// Tuplet ratio: multiply by num/den (LilyPond semantics)
+	if (tupletRatio) {
+		dur *= tupletRatio.numerator / tupletRatio.denominator;
+	}
+	return dur;
+};
+
+// Apply auto-beam to the document, mutating events' marks arrays in-place
+const applyAutoBeam = (doc: LilyletDoc): void => {
+	// Track time signature across measures
+	let timeNum = 4;
+	let timeDen = 4;
+
+	// Get initial time signature
+	if (doc.measures.length > 0 && doc.measures[0].timeSig) {
+		timeNum = doc.measures[0].timeSig.numerator;
+		timeDen = doc.measures[0].timeSig.denominator;
+	}
+
+	for (const measure of doc.measures) {
+		// Update time signature if changed
+		if (measure.timeSig) {
+			timeNum = measure.timeSig.numerator;
+			timeDen = measure.timeSig.denominator;
+		}
+
+		const beamGroups = getBeamGroups(timeNum, timeDen);
+
+		for (const part of measure.parts) {
+			for (const voice of part.voices) {
+				applyAutoBeamToVoice(voice.events, beamGroups);
+			}
+		}
+	}
+};
+
+// A beamable note reference: points to a NoteEvent that can receive beam marks
+interface BeamableNote {
+	note: NoteEvent;
+	position: number; // position in eighths at start of this note
+}
+
+// Apply auto-beam to a single voice's events
+const applyAutoBeamToVoice = (events: Event[], beamGroups: number[]): void => {
+	// Compute group boundary positions in eighths
+	const groupBoundaries: number[] = [];
+	let boundary = 0;
+	for (const size of beamGroups) {
+		boundary += size;
+		groupBoundaries.push(boundary);
+	}
+	const totalMeasureEighths = boundary;
+
+	// Collect beamable notes with their positions
+	let position = 0;
+	const beamableRuns: BeamableNote[][] = [];
+	let currentRun: BeamableNote[] = [];
+
+	// Helper: find which group index a position belongs to
+	const getGroupIndex = (pos: number): number => {
+		for (let i = 0; i < groupBoundaries.length; i++) {
+			if (pos < groupBoundaries[i]) return i;
+		}
+		return groupBoundaries.length - 1;
+	};
+
+	// Helper: flush current run into beamableRuns
+	const flushRun = () => {
+		if (currentRun.length >= 2) {
+			beamableRuns.push(currentRun);
+		}
+		currentRun = [];
+	};
+
+	for (const event of events) {
+		if (event.type === 'note') {
+			const note = event as NoteEvent;
+			if (note.grace) continue; // skip grace notes
+
+			const dur = durationInEighths(note.duration.division, note.duration.dots);
+
+			if (note.duration.division >= 8) {
+				// Beamable note
+				const groupIdx = getGroupIndex(position);
+				const noteEndPos = position + dur;
+				const endGroupIdx = getGroupIndex(Math.min(noteEndPos - 0.001, totalMeasureEighths - 0.001));
+
+				// Note must start and end within the same group
+				if (groupIdx === endGroupIdx) {
+					// Check if current run is in the same group
+					if (currentRun.length > 0) {
+						const lastGroupIdx = getGroupIndex(currentRun[0].position);
+						if (lastGroupIdx !== groupIdx) {
+							flushRun();
+						}
+					}
+					currentRun.push({ note, position });
+				} else {
+					// Note spans group boundary — break
+					flushRun();
+				}
+			} else {
+				// Non-beamable note (quarter or longer) — break
+				flushRun();
+			}
+
+			position += dur;
+		} else if (event.type === 'rest') {
+			const rest = event as RestEvent;
+			const dur = durationInEighths(rest.duration.division, rest.duration.dots);
+			// Rests break beam groups
+			flushRun();
+			position += dur;
+		} else if (event.type === 'tuplet') {
+			const tuplet = event as TupletEvent;
+			const ratio = tuplet.ratio; // LilyPond ratio: num/den
+
+			// Check if all inner notes are beamable (division >= 8)
+			const innerNotes: { note: NoteEvent; dur: number }[] = [];
+			let allBeamable = true;
+			let tupletDur = 0;
+
+			for (const e of tuplet.events) {
+				if (e.type === 'note') {
+					const note = e as NoteEvent;
+					if (note.grace) continue;
+					const dur = durationInEighths(note.duration.division, note.duration.dots, ratio);
+					innerNotes.push({ note, dur });
+					tupletDur += dur;
+					if (note.duration.division < 8) {
+						allBeamable = false;
+					}
+				} else if (e.type === 'rest') {
+					allBeamable = false;
+					const dur = durationInEighths(e.duration.division, e.duration.dots, ratio);
+					tupletDur += dur;
+				}
+			}
+
+			if (allBeamable && innerNotes.length > 0) {
+				const groupIdx = getGroupIndex(position);
+				const endGroupIdx = getGroupIndex(Math.min(position + tupletDur - 0.001, totalMeasureEighths - 0.001));
+
+				if (groupIdx === endGroupIdx) {
+					// Tuplet fits within one group — add inner notes to current run
+					if (currentRun.length > 0) {
+						const lastGroupIdx = getGroupIndex(currentRun[0].position);
+						if (lastGroupIdx !== groupIdx) {
+							flushRun();
+						}
+					}
+					let innerPos = position;
+					for (const { note, dur } of innerNotes) {
+						currentRun.push({ note, position: innerPos });
+						innerPos += dur;
+					}
+				} else {
+					flushRun();
+				}
+			} else {
+				flushRun();
+			}
+
+			position += tupletDur;
+		} else if (event.type === 'context' || event.type === 'pitchReset' || event.type === 'barline' || event.type === 'harmony' || event.type === 'markup') {
+			// Non-musical events: don't advance position, don't break beams
+			continue;
+		} else if (event.type === 'tremolo') {
+			// Tremolo breaks beams
+			const trem = event as TremoloEvent;
+			// Total duration = count * 2 * (1/division) in whole notes
+			// In eighths: count * 2 * (8/division)
+			const dur = trem.count * 2 * (8 / trem.division);
+			flushRun();
+			position += dur;
+		}
+	}
+
+	// Flush any remaining run
+	flushRun();
+
+	// Apply beam marks to collected runs
+	for (const run of beamableRuns) {
+		const first = run[0].note;
+		const last = run[run.length - 1].note;
+
+		if (!first.marks) first.marks = [];
+		first.marks.push({ markType: 'beam', start: true } as Beam);
+
+		if (!last.marks) last.marks = [];
+		last.marks.push({ markType: 'beam', start: false } as Beam);
+	}
+};
+
+
 // Main encode function
 const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	const indent = options.indent || "    ";
@@ -1796,6 +2070,12 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	}
 
 	const keySig = KEY_SIGS[currentKey] || "0";
+
+	// Apply auto-beam if needed (before encoding so beam marks are picked up by encodeLayer)
+	const shouldAutoBeam = resolveAutoBeam(doc);
+	if (shouldAutoBeam) {
+		applyAutoBeam(doc);
+	}
 
 	// Build MEI document
 	const xmlDecl = options.xmlDeclaration !== false

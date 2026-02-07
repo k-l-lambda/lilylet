@@ -2,7 +2,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { abcDecoder } from "../source/lilylet/index";
+import { abcDecoder, parseCode } from "../source/lilylet/index";
 import { serializeLilyletDoc } from "../source/lilylet/serializer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,8 +48,12 @@ const main = () => {
 					psum + p.voices.reduce((vsum, v) =>
 						vsum + v.events.filter(e => e.type === "note").length, 0), 0), 0);
 
+			// Verify .lyl can be parsed back
+			const reparsed = parseCode(lylContent);
+			const reparsedMeasures = reparsed.measures.length;
+
 			console.log(`  ${file}`);
-			console.log(`    Measures: ${measureCount}, Notes: ${noteCount}`);
+			console.log(`    Measures: ${measureCount}, Notes: ${noteCount}, Reparsed: ${reparsedMeasures} measures`);
 			console.log(`    -> ${baseName}.json, ${baseName}.lyl`);
 
 			pass++;

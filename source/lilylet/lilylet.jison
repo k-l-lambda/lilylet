@@ -165,6 +165,7 @@
 \[opus							return 'HEADER_OPUS'
 \[instrument					return 'HEADER_INSTRUMENT'
 \[genre							return 'HEADER_GENRE'
+\[auto\-beam					return 'HEADER_AUTOBEAM'
 \]								return ']'
 
 \"[^"]*\"						return 'STRING'
@@ -307,6 +308,7 @@ header
 	| HEADER_OPUS STRING ']'					-> ({ opus: $2.slice(1, -1) })
 	| HEADER_INSTRUMENT STRING ']'				-> ({ instrument: $2.slice(1, -1) })
 	| HEADER_GENRE STRING ']'					-> ({ genre: $2.slice(1, -1) })
+	| HEADER_AUTOBEAM STRING ']'				-> ({ autoBeam: $2.slice(1, -1) })
 	;
 
 measures
