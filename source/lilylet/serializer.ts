@@ -31,6 +31,7 @@ import {
 	PedalType,
 	Tempo,
 	Placement,
+	Metadata,
 } from "./types";
 
 
@@ -259,6 +260,9 @@ const serializeMarks = (marks: Mark[]): string => {
 				if (pedalStr) parts.push(pedalStr);
 				break;
 			}
+			case 'fingering':
+				parts.push('-' + mark.finger);
+				break;
 		}
 	}
 
@@ -584,14 +588,16 @@ const findVoiceClef = (voice: Voice): Clef | undefined => {
 // Takes currentStaff (what parser thinks staff is) and returns { str, newStaff }
 // If isGrandStaff is true, always output \staff command for clarity
 // measureContext provides key/time for first voice
-// staffClef is the clef for this voice's staff (tracked across measures)
+// allStaffClefs is the clef map for all staves (tracked across measures)
+// emittedClefs tracks which clefs have already been output (avoids duplicates)
 const serializeVoice = (
 	voice: Voice,
 	currentStaff: number,
 	isGrandStaff: boolean = false,
 	measureContext?: MeasureContext,
 	isFirstVoice: boolean = false,
-	staffClef?: Clef
+	allStaffClefs?: Record<number, Clef>,
+	emittedClefs?: Record<number, Clef>
 ): { str: string; newStaff: number } => {
 	const parts: string[] = [];
 	let prevDuration: Duration | undefined;
@@ -625,22 +631,60 @@ const serializeVoice = (
 		}
 	}
 
-	// Output clef for every voice (use staff clef tracked across measures, or find from voice events)
-	const voiceClef = staffClef || findVoiceClef(voice);
-	if (voiceClef) {
+	// Output clef only if not yet emitted or changed for this staff
+	const voiceClef = allStaffClefs?.[voice.staff] || findVoiceClef(voice);
+	const clefAlreadyEmitted = voiceClef && emittedClefs?.[voice.staff] === voiceClef;
+	if (voiceClef && !clefAlreadyEmitted) {
 		parts.push('\\clef "' + CLEF_MAP[voiceClef] + '"');
+		if (emittedClefs) emittedClefs[voice.staff] = voiceClef;
 	}
+	// Skip redundant clef context events if this staff's clef is already established
+	const clefOutputted = !!voiceClef && !!emittedClefs?.[voice.staff];
 
-	// Track if we've already output the clef to avoid duplication
-	let clefOutputted = !!voiceClef;
+	let activeStaff = voice.staff;
+	let activeStemDir: StemDirection | undefined;
 
 	for (const event of voice.events) {
-		// Skip clef context events if we've already output the clef at the beginning
-		if (clefOutputted && event.type === 'context') {
+		if (event.type === 'context') {
 			const ctx = event as ContextChange;
-			if (ctx.clef && !ctx.key && !ctx.time && !ctx.ottava && !ctx.stemDirection && !ctx.tempo && !ctx.staff) {
-				// This is a clef-only context event, skip it
+			// Skip context events that belong to a different staff (cross-staff clef/ottava)
+			if (ctx.staff && ctx.staff !== voice.staff) {
 				continue;
+			}
+			// Skip clef-only context events if clef already established for this staff
+			if (clefOutputted && ctx.clef && !ctx.key && !ctx.time && !ctx.ottava && !ctx.stemDirection && !ctx.tempo) {
+				continue;
+			}
+		}
+
+		if (event.type === 'note') {
+			const noteEvt = event as NoteEvent;
+
+			// Cross-staff: emit \staff when note's effective staff differs from active
+			const effectiveStaff = noteEvt.staff || voice.staff;
+			if (effectiveStaff !== activeStaff) {
+				activeStaff = effectiveStaff;
+				parts.push('\\staff "' + activeStaff + '"');
+				// Emit the target staff's clef if it differs from what was last emitted for this staff
+				const targetClef = allStaffClefs?.[activeStaff];
+				if (targetClef && emittedClefs?.[activeStaff] !== targetClef) {
+					parts.push('\\clef "' + CLEF_MAP[targetClef] + '"');
+					if (emittedClefs) emittedClefs[activeStaff] = targetClef;
+				}
+			}
+
+			// Stem direction: emit \stemUp/\stemDown/\stemNeutral on change
+			const stemDir = noteEvt.stemDirection;
+			if (stemDir !== activeStemDir) {
+				if (stemDir === StemDirection.up) {
+					parts.push('\\stemUp');
+				} else if (stemDir === StemDirection.down) {
+					parts.push('\\stemDown');
+				} else if (activeStemDir) {
+					// Was set, now undefined → reset to neutral
+					parts.push('\\stemNeutral');
+				}
+				activeStemDir = stemDir;
 			}
 		}
 
@@ -656,6 +700,9 @@ const serializeVoice = (
 			prevDuration = (event as NoteEvent).duration;
 		} else if (event.type === 'rest') {
 			prevDuration = (event as RestEvent).duration;
+		} else if (event.type === 'context' && (event as ContextChange).clef && emittedClefs) {
+			const ctx = event as ContextChange;
+			emittedClefs[ctx.staff || activeStaff] = ctx.clef!;
 		}
 	}
 
@@ -671,7 +718,8 @@ const serializePart = (
 	isGrandStaff: boolean = false,
 	measureContext?: MeasureContext,
 	isFirstPart: boolean = false,
-	clefsByStaff?: Record<number, Clef>
+	clefsByStaff?: Record<number, Clef>,
+	emittedClefs?: Record<number, Clef>
 ): { str: string; newStaff: number } => {
 	if (part.voices.length === 0) {
 		return { str: '', newStaff: currentStaff };
@@ -683,10 +731,8 @@ const serializePart = (
 	for (let i = 0; i < part.voices.length; i++) {
 		const voice = part.voices[i];
 		// Pass measureContext to all voices, isFirstVoice for key/time
-		// Pass staff clef from clefsByStaff map
 		const isFirstVoice = isFirstPart && i === 0;
-		const staffClef = clefsByStaff?.[voice.staff];
-		const { str, newStaff } = serializeVoice(voice, staff, isGrandStaff, measureContext, isFirstVoice, staffClef);
+		const { str, newStaff } = serializeVoice(voice, staff, isGrandStaff, measureContext, isFirstVoice, clefsByStaff, emittedClefs);
 		voiceStrs.push(str);
 		staff = newStaff;
 	}
@@ -705,7 +751,8 @@ const serializeMeasure = (
 	isGrandStaff: boolean = false,
 	currentKey?: KeySignature,
 	currentTime?: { numerator: number; denominator: number; symbol?: 'common' | 'cut' },
-	staffClefs?: Record<number, Clef>
+	staffClefs?: Record<number, Clef>,
+	emittedClefs?: Record<number, Clef>
 ): { str: string; newStaff: number } => {
 	const parts: string[] = [];
 
@@ -723,7 +770,7 @@ const serializeMeasure = (
 	// Parts
 	let staff = currentStaff;
 	if (measure.parts.length === 1) {
-		const { str: partStr, newStaff } = serializePart(measure.parts[0], staff, isGrandStaff, measureContext, true, clefsByStaff);
+		const { str: partStr, newStaff } = serializePart(measure.parts[0], staff, isGrandStaff, measureContext, true, clefsByStaff, emittedClefs);
 		if (partStr) {
 			parts.push(partStr);
 		}
@@ -734,7 +781,7 @@ const serializeMeasure = (
 		for (let i = 0; i < measure.parts.length; i++) {
 			const part = measure.parts[i];
 			// Pass measureContext to all parts, isFirstPart to first part only
-			const { str, newStaff } = serializePart(part, staff, isGrandStaff, measureContext, i === 0, clefsByStaff);
+			const { str, newStaff } = serializePart(part, staff, isGrandStaff, measureContext, i === 0, clefsByStaff, emittedClefs);
 			if (str) {
 				partStrs.push(str);
 			}
@@ -753,7 +800,7 @@ const escapeString = (str: string): string => {
 };
 
 // Serialize metadata
-const serializeMetadata = (metadata: any): string => {
+const serializeMetadata = (metadata: Metadata): string => {
 	const lines: string[] = [];
 
 	if (metadata.title) {
@@ -809,6 +856,7 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 	let currentKey: KeySignature | undefined;
 	let currentTime: { numerator: number; denominator: number; symbol?: 'common' | 'cut' } | undefined;
 	const staffClefs: Record<number, Clef> = {}; // Track clef per staff
+	const emittedClefs: Record<number, Clef> = {}; // Track which clefs have been output
 
 	for (let i = 0; i < doc.measures.length; i++) {
 		const measure = doc.measures[i];
@@ -825,13 +873,16 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 			for (const voice of part.voices) {
 				for (const event of voice.events) {
 					if (event.type === 'context' && (event as ContextChange).clef) {
-						staffClefs[voice.staff] = (event as ContextChange).clef!;
+						const ctx = event as ContextChange;
+						// Use the event's staff if specified (cross-staff), otherwise the voice's staff
+						const clefStaff = ctx.staff || voice.staff;
+						staffClefs[clefStaff] = ctx.clef!;
 					}
 				}
 			}
 		}
 
-		const { str: measureStr, newStaff } = serializeMeasure(measure, i === 0, currentStaff, isGrandStaff, currentKey, currentTime, staffClefs);
+		const { str: measureStr, newStaff } = serializeMeasure(measure, i === 0, currentStaff, isGrandStaff, currentKey, currentTime, staffClefs, emittedClefs);
 		// Always include measure, even if empty (use space rest for empty measures)
 		measureStrs.push(measureStr || 's1');
 		currentStaff = newStaff;
