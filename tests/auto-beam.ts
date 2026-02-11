@@ -34,7 +34,7 @@ console.log("\n--- Source without manual beams: c8 d e f g a b c ---\n");
 
 {
 	// undefined (default) → should auto-beam
-	const doc = parseCode("\\clef treble c8 d e f g a b c'");
+	const doc = parseCode("\\clef \"treble\" c8 d e f g a b c'");
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
 	assert(beams > 0, "autoBeam=undefined, no manual beams → auto-beam applied", `beam count: ${beams}`);
@@ -42,7 +42,7 @@ console.log("\n--- Source without manual beams: c8 d e f g a b c ---\n");
 
 {
 	// 'auto' → should auto-beam (same as undefined)
-	const doc = parseCode("\\clef treble c8 d e f g a b c'");
+	const doc = parseCode("\\clef \"treble\" c8 d e f g a b c'");
 	doc.metadata = { autoBeam: 'auto' };
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
@@ -51,7 +51,7 @@ console.log("\n--- Source without manual beams: c8 d e f g a b c ---\n");
 
 {
 	// 'on' → should auto-beam
-	const doc = parseCode("\\clef treble c8 d e f g a b c'");
+	const doc = parseCode("\\clef \"treble\" c8 d e f g a b c'");
 	doc.metadata = { autoBeam: 'on' };
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
@@ -60,7 +60,7 @@ console.log("\n--- Source without manual beams: c8 d e f g a b c ---\n");
 
 {
 	// 'off' → should NOT auto-beam
-	const doc = parseCode("\\clef treble c8 d e f g a b c'");
+	const doc = parseCode("\\clef \"treble\" c8 d e f g a b c'");
 	doc.metadata = { autoBeam: 'off' };
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
@@ -72,7 +72,7 @@ console.log("\n--- Source with manual beams: c8[ d e f] g a b c ---\n");
 
 {
 	// undefined → should NOT auto-beam (manual beams detected)
-	const doc = parseCode("\\clef treble c8[ d e f] g a b c'");
+	const doc = parseCode("\\clef \"treble\" c8[ d e f] g a b c'");
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
 	assert(beams === 1, "autoBeam=undefined, has manual beams → only manual beams (1)", `beam count: ${beams}`);
@@ -80,7 +80,7 @@ console.log("\n--- Source with manual beams: c8[ d e f] g a b c ---\n");
 
 {
 	// 'auto' → should NOT auto-beam (manual beams detected)
-	const doc = parseCode("\\clef treble c8[ d e f] g a b c'");
+	const doc = parseCode("\\clef \"treble\" c8[ d e f] g a b c'");
 	doc.metadata = { autoBeam: 'auto' };
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
@@ -89,7 +89,7 @@ console.log("\n--- Source with manual beams: c8[ d e f] g a b c ---\n");
 
 {
 	// 'on' → should auto-beam even though manual beams exist
-	const doc = parseCode("\\clef treble c8[ d e f] g a b c'");
+	const doc = parseCode("\\clef \"treble\" c8[ d e f] g a b c'");
 	doc.metadata = { autoBeam: 'on' };
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
@@ -98,7 +98,7 @@ console.log("\n--- Source with manual beams: c8[ d e f] g a b c ---\n");
 
 {
 	// 'off' → should NOT auto-beam, but manual beams kept
-	const doc = parseCode("\\clef treble c8[ d e f] g a b c'");
+	const doc = parseCode("\\clef \"treble\" c8[ d e f] g a b c'");
 	doc.metadata = { autoBeam: 'off' };
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
@@ -110,7 +110,7 @@ console.log("\n--- Time signature grouping ---\n");
 
 {
 	// 6/8: groups of 3 eighths
-	const doc = parseCode("\\time 6/8 \\clef treble c8 d e f g a");
+	const doc = parseCode("\\time 6/8 \\clef \"treble\" c8 d e f g a");
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
 	assert(beams === 2, "6/8: 6 eighths → 2 beam groups (3+3)", `beam count: ${beams}`);
@@ -118,7 +118,7 @@ console.log("\n--- Time signature grouping ---\n");
 
 {
 	// 3/4: groups of 3 eighths
-	const doc = parseCode("\\time 3/4 \\clef treble c8 d e f g a");
+	const doc = parseCode("\\time 3/4 \\clef \"treble\" c8 d e f g a");
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
 	assert(beams === 2, "3/4: 6 eighths → 2 beam groups (3+3)", `beam count: ${beams}`);
@@ -126,7 +126,7 @@ console.log("\n--- Time signature grouping ---\n");
 
 {
 	// 2/4: groups of 2 eighths
-	const doc = parseCode("\\time 2/4 \\clef treble c8 d e f");
+	const doc = parseCode("\\time 2/4 \\clef \"treble\" c8 d e f");
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
 	assert(beams === 2, "2/4: 4 eighths → 2 beam groups (2+2)", `beam count: ${beams}`);
@@ -134,7 +134,7 @@ console.log("\n--- Time signature grouping ---\n");
 
 {
 	// Rest breaks beam
-	const doc = parseCode("\\clef treble c8 d r e f g r a");
+	const doc = parseCode("\\clef \"treble\" c8 d r e f g r a");
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
 	assert(beams === 2, "4/4: rests break beams → 2 beam groups", `beam count: ${beams}`);
@@ -142,7 +142,7 @@ console.log("\n--- Time signature grouping ---\n");
 
 {
 	// Single beamable note should NOT create beam
-	const doc = parseCode("\\clef treble c4 d8 e4 f4");
+	const doc = parseCode("\\clef \"treble\" c4 d8 e4 f4");
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
 	assert(beams === 0, "Lone eighth among quarters → no beam", `beam count: ${beams}`);
@@ -150,7 +150,7 @@ console.log("\n--- Time signature grouping ---\n");
 
 {
 	// Tuplet auto-beam
-	const doc = parseCode("\\clef treble \\times 2/3 { c8 d e } \\times 2/3 { f8 g a } c4 c4");
+	const doc = parseCode("\\clef \"treble\" \\times 2/3 { c8 d e } \\times 2/3 { f8 g a } c4 c4");
 	const mei = meiEncoder.encode(doc);
 	const beams = countBeams(mei);
 	assert(beams >= 1, "Tuplet eighths → at least 1 beam group", `beam count: ${beams}`);
@@ -160,7 +160,7 @@ console.log("\n--- Time signature grouping ---\n");
 console.log("\n--- Idempotency ---\n");
 
 {
-	const doc = parseCode("\\clef treble c8 d e f g a b c'");
+	const doc = parseCode("\\clef \"treble\" c8 d e f g a b c'");
 	const mei1 = meiEncoder.encode(doc);
 	const mei2 = meiEncoder.encode(doc);
 	// Note: encode adds beam marks in-place, so second call should still work
