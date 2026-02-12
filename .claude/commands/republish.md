@@ -19,4 +19,5 @@ Steps:
    - Commit: `git add package.json package-lock.json && git commit -m "chore: bump version"`
    - Push to main branch
    - Run `npm publish` in /home/camus/work/lilylet-live-editor
-7. Report the new versions published
+7. Monitor github action of lilylet-live-editor, and make sure it succeed
+8. Report the new versions published
