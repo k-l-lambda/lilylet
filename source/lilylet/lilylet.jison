@@ -509,10 +509,15 @@ tuplet_event
 	: CMD_TIMES NUMBER '/' NUMBER '{' voice_events '}'		-> tupletEvent(fraction(Number($2), Number($4)), $6.filter(e => e.type === 'note' || e.type === 'rest'))
 	;
 
+tremolo_pitches
+	: pitch										{ $$ = [$1]; }
+	| chord										-> $1
+	;
+
 tremolo_event
-	: CMD_REPEAT TREMOLO NUMBER '{' pitch duration pitch duration '}'		%{ currentDuration = $6; $$ = tremoloEvent([$5], [$7], Number($3), $6.division); %}
-	| CMD_REPEAT TREMOLO NUMBER '{' pitch duration pitch '}'				%{ currentDuration = $6; $$ = tremoloEvent([$5], [$7], Number($3), $6.division); %}
-	| CMD_REPEAT TREMOLO NUMBER '{' pitch pitch '}'							-> tremoloEvent([$5], [$6], Number($3), currentDuration.division)
+	: CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration tremolo_pitches duration '}'		%{ currentDuration = $6; $$ = tremoloEvent($5, $7, Number($3), $6.division); %}
+	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration tremolo_pitches '}'				%{ currentDuration = $6; $$ = tremoloEvent($5, $7, Number($3), $6.division); %}
+	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches tremolo_pitches '}'							-> tremoloEvent($5, $6, Number($3), currentDuration.division)
 	;
 
 post_events
