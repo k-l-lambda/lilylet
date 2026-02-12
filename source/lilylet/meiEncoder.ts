@@ -524,6 +524,10 @@ const noteEventToMEI = (
 	if (layerStaff && noteOptions.staff && noteOptions.staff !== layerStaff) {
 		chordAttrs += ` staff="${noteOptions.staff}"`;
 	}
+	if (noteOptions.tremolo) {
+		const stemMod = tremoloToStemMod(noteOptions.tremolo);
+		if (stemMod) chordAttrs += ` stem.mod="${stemMod}"`;
+	}
 
 	let result = `${indent}<chord ${chordAttrs}>\n`;
 
