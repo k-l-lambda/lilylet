@@ -616,6 +616,17 @@ interface TupletEventResult {
 	arpeggios: ArpegRef[];
 }
 
+// Check if a tuplet has internal beam groups (manual beam marks on its notes)
+const tupletHasInternalBeams = (event: TupletEvent): boolean => {
+	for (const e of event.events) {
+		if (e.type === 'note') {
+			const markOptions = extractMarkOptions((e as NoteEvent).marks);
+			if (markOptions.beamStart) return true;
+		}
+	}
+	return false;
+};
+
 // Convert TupletEvent to MEI
 const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false): TupletEventResult => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
@@ -641,18 +652,28 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	const turns: TurnRef[] = [];
 	const arpeggios: ArpegRef[] = [];
 
-	// If we're inside a parent beam, don't create internal beams - notes go directly into tuplet
-	// MEI allows: <beam><tuplet><note/>...</tuplet><tuplet><note/>...</tuplet></beam>
-	// Beam state is managed by encodeLayer, not here.
+	// Handle internal beam groups: if notes have manual beam marks, respect them
+	const hasInternalBeams = !inParentBeam && tupletHasInternalBeams(event);
+	let beamOpen = false;
 
 	for (const e of event.events) {
 		if (e.type === 'note') {
-			// For cross-staff notation: set note's staff if different from layerStaff
 			const noteEvent = e as NoteEvent;
+			const markOptions = extractMarkOptions(noteEvent.marks);
+
+			// Open beam if this note starts a beam group
+			if (hasInternalBeams && markOptions.beamStart && !beamOpen) {
+				xml += `${baseIndent}<beam xml:id="${generateId('beam')}">\n`;
+				beamOpen = true;
+			}
+
+			const noteIndent = beamOpen ? baseIndent + '    ' : baseIndent;
+
+			// For cross-staff notation: set note's staff if different from layerStaff
 			const effectiveNoteEvent = effectiveStaff && layerStaff && effectiveStaff !== layerStaff
 				? { ...noteEvent, staff: effectiveStaff }
 				: noteEvent;
-			const result = noteEventToMEI(effectiveNoteEvent, baseIndent, layerStaff, false, undefined, keyFifths, ottavaShift);
+			const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, false, undefined, keyFifths, ottavaShift);
 			xml += result.xml;
 
 			// Collect slur info
@@ -666,9 +687,21 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			if (result.mordent) mordents.push({ startid: result.elementId, form: result.mordent === 'upper' ? 'upper' : undefined });
 			if (result.turn) turns.push({ startid: result.elementId });
 			if (result.arpeggio) arpeggios.push({ plist: result.elementId });
+
+			// Close beam if this note ends a beam group
+			if (hasInternalBeams && markOptions.beamEnd && beamOpen) {
+				xml += `${baseIndent}</beam>\n`;
+				beamOpen = false;
+			}
 		} else if (e.type === 'rest') {
-			xml += restEventToMEI(e as RestEvent, baseIndent, keyFifths, ottavaShift);
+			const restIndent = beamOpen ? baseIndent + '    ' : baseIndent;
+			xml += restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift);
 		}
+	}
+
+	// Close any unclosed beam
+	if (beamOpen) {
+		xml += `${baseIndent}</beam>\n`;
 	}
 
 	xml += `${indent}</tuplet>\n`;
@@ -870,6 +903,11 @@ const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TremoloE
 	}
 	if (event.type === 'tuplet') {
 		const tuplet = event as TupletEvent;
+		// If the tuplet has internal beam groups, don't report beam marks to the parent
+		// so the parent won't wrap the tuplet in an external <beam>
+		if (tupletHasInternalBeams(tuplet)) {
+			return { beamStart: false, beamEnd: false };
+		}
 		let beamStart = false;
 		let beamEnd = false;
 		for (const e of tuplet.events) {
