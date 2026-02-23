@@ -616,15 +616,19 @@ interface TupletEventResult {
 	arpeggios: ArpegRef[];
 }
 
-// Check if a tuplet has internal beam groups (manual beam marks on its notes)
+// Check if a tuplet has balanced internal beam groups (both [ and ] inside the same tuplet)
+// Returns false for cross-tuplet beams where [ is in one tuplet and ] in another
 const tupletHasInternalBeams = (event: TupletEvent): boolean => {
+	let starts = 0;
+	let ends = 0;
 	for (const e of event.events) {
 		if (e.type === 'note') {
 			const markOptions = extractMarkOptions((e as NoteEvent).marks);
-			if (markOptions.beamStart) return true;
+			if (markOptions.beamStart) starts++;
+			if (markOptions.beamEnd) ends++;
 		}
 	}
-	return false;
+	return starts > 0 && starts === ends;
 };
 
 // Convert TupletEvent to MEI
