@@ -144,6 +144,7 @@ const DYNAMIC_MAP: Record<string, string> = {
 	fff: '\\fff',
 	sfz: '\\sfz',
 	rfz: '\\rfz',
+	fp: '\\fp',
 };
 
 

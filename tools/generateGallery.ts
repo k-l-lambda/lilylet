@@ -47,7 +47,10 @@ const getCategory = (name: string): string => {
     if (name.startsWith('time-signatures-')) return 'time-signatures';
     if (name.startsWith('tremolos-')) return 'tremolos';
     if (name.startsWith('tuplets-')) return 'tuplets';
+    if (name.startsWith('cross-staves-')) return 'cross-staves';
     if (name.startsWith('demo-')) return 'demo';
+    if (name === 'comments') return 'other';
+    if (name === 'headers') return 'other';
     return 'other';
 };
 

@@ -60,6 +60,7 @@ export enum DynamicType {
 	fff = 'fff',
 	sfz = 'sfz',
 	rfz = 'rfz',
+	fp = 'fp',
 }
 
 export enum HairpinType {

@@ -225,6 +225,7 @@
 "\\sfz"							return 'DYN_SFZ'
 "\\rfz"							return 'DYN_RFZ'
 "\\sf"							return 'DYN_SF'
+"\\fp"							return 'DYN_FP'
 "\\p"							return 'DYN_P'
 "\\f"							return 'DYN_F'
 
@@ -590,6 +591,7 @@ dynamic_mark
 	| DYN_SFZ									-> dynamic('sfz')
 	| DYN_RFZ									-> dynamic('rfz')
 	| DYN_SF									-> dynamic('sfz')
+	| DYN_FP									-> dynamic('fp')
 	;
 
 hairpin_mark
