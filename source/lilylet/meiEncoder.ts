@@ -606,6 +606,7 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0,
 // TupletEventResult - return type for tupletEventToMEI
 interface TupletEventResult {
 	xml: string;
+	firstNoteId: string | null;  // ID of first note in tuplet (for attaching pending markups)
 	slurStarts: string[];  // Note IDs that start slurs
 	slurEnds: string[];    // Note IDs that end slurs
 	dynamics: DynamRef[];
@@ -647,6 +648,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	const effectiveStaff = currentStaff ?? layerStaff;
 
 	// Collect control event info from notes inside tuplet
+	let firstNoteId: string | null = null;
 	const slurStarts: string[] = [];
 	const slurEnds: string[] = [];
 	const dynamics: DynamRef[] = [];
@@ -680,6 +682,8 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, false, undefined, keyFifths, ottavaShift);
 			xml += result.xml;
 
+			if (!firstNoteId) firstNoteId = result.elementId;
+
 			// Collect slur info
 			if (result.slurStart) slurStarts.push(result.elementId);
 			if (result.slurEnd) slurEnds.push(result.elementId);
@@ -709,7 +713,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	}
 
 	xml += `${indent}</tuplet>\n`;
-	return { xml, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios };
+	return { xml, firstNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios };
 };
 
 
@@ -971,6 +975,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	const harmonies: HarmonyRef[] = [];
 	const barlines: BarlineRef[] = [];
 	const markups: MarkupRef[] = [];
+	const pendingMarkups: { content: string; placement?: 'above' | 'below' }[] = [];
 
 	// Track current stem direction from context changes
 	let currentStemDirection: StemDirection | undefined = undefined;
@@ -980,6 +985,14 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 
 	// Track pending tie pitches (for tie="t" on next note) - initialized from previous measure
 	let pendingTiePitches: Pitch[] = [...initialTiePitches];
+
+	// Helper to flush pending markups onto a note ID
+	const flushPendingMarkups = (noteId: string) => {
+		for (const mkup of pendingMarkups) {
+			markups.push({ startid: noteId, content: mkup.content, placement: mkup.placement });
+		}
+		pendingMarkups.length = 0;
+	};
 
 	// Helper to check if pitches match for tie continuation
 	const pitchesMatch = (p1: Pitch[], p2: Pitch[]): boolean => {
@@ -1021,6 +1034,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift);
 				xml += result.xml;
 				lastNoteId = result.elementId;
+
+				// Flush any pending markups onto this note
+				flushPendingMarkups(result.elementId);
 
 				// If there's a pending ottava, start the span on this note
 				if (pendingOttava !== null && pendingOttava !== 0) {
@@ -1132,6 +1148,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen);
 				xml += tupletResult.xml;
 
+				// Flush any pending markups onto the first note of the tuplet
+				if (tupletResult.firstNoteId) {
+					flushPendingMarkups(tupletResult.firstNoteId);
+					lastNoteId = tupletResult.firstNoteId;
+				}
+
 				// Process slur ends first (to close any pending slurs from before this tuplet)
 				for (const endId of tupletResult.slurEnds) {
 					if (currentSlur) {
@@ -1224,16 +1246,20 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					harmonies.push({ startid: lastNoteId, text: (event as HarmonyEvent).text });
 				}
 				break;
-			case 'markup':
-				// Markup needs a note ID to attach to - use the last note if available
+			case 'markup': {
+				// Markup needs a note ID to attach to
+				const mkupEvent = event as MarkupEvent;
 				if (lastNoteId) {
-					const mkupEvent = event as MarkupEvent;
 					markups.push({
 						startid: lastNoteId,
 						content: mkupEvent.content,
 						placement: mkupEvent.placement,
 					});
+				} else {
+					// No note yet - save as pending, will attach to next note
+					pendingMarkups.push({ content: mkupEvent.content, placement: mkupEvent.placement });
 				}
+			}
 				break;
 		}
 
