@@ -1031,17 +1031,39 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 		return true;
 	};
 
+	let graceBeamOpen = false;  // Whether a grace note <beam> is open (independent of main beam)
+
 	for (const event of voice.events) {
 		// Check for beam start/end in this event (including inside tuplets)
 		const { beamStart, beamEnd } = getEventBeamMarks(event);
 
-		// Open beam element if beam starts
-		if (beamStart && !beamElementOpen) {
-			xml += `${baseIndent}<beam xml:id="${generateId('beam')}">\n`;
-			beamElementOpen = true;
+		// Grace notes have independent beam groups - don't interfere with main beam
+		const isGraceNote = event.type === 'note' && (event as NoteEvent).grace;
+
+		if (isGraceNote) {
+			// Grace beam: open/close independently, nested inside parent beam if open
+			const graceBaseIndent = beamElementOpen ? baseIndent + '    ' : baseIndent;
+			if (beamStart && !graceBeamOpen) {
+				xml += `${graceBaseIndent}<beam xml:id="${generateId('beam')}">\n`;
+				graceBeamOpen = true;
+			}
+		} else {
+			// Close any open grace beam before processing a non-grace event
+			if (graceBeamOpen) {
+				const graceBaseIndent = beamElementOpen ? baseIndent + '    ' : baseIndent;
+				xml += `${graceBaseIndent}</beam>\n`;
+				graceBeamOpen = false;
+			}
+
+			// Open main beam element if beam starts
+			if (beamStart && !beamElementOpen) {
+				xml += `${baseIndent}<beam xml:id="${generateId('beam')}">\n`;
+				beamElementOpen = true;
+			}
 		}
 
-		const currentIndent = beamElementOpen ? baseIndent + '    ' : baseIndent;
+		const graceIndentBase = beamElementOpen ? baseIndent + '    ' : baseIndent;
+		const currentIndent = graceBeamOpen ? graceIndentBase + '    ' : (beamElementOpen ? baseIndent + '    ' : baseIndent);
 
 		switch (event.type) {
 			case 'note': {
@@ -1292,10 +1314,24 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 		}
 
 		// Close beam element if beam ends
-		if (beamEnd && beamElementOpen) {
-			xml += `${baseIndent}</beam>\n`;
-			beamElementOpen = false;
+		if (beamEnd) {
+			if (isGraceNote && graceBeamOpen) {
+				// Close grace beam
+				const graceBaseIndent = beamElementOpen ? baseIndent + '    ' : baseIndent;
+				xml += `${graceBaseIndent}</beam>\n`;
+				graceBeamOpen = false;
+			} else if (!isGraceNote && beamElementOpen) {
+				// Close main beam
+				xml += `${baseIndent}</beam>\n`;
+				beamElementOpen = false;
+			}
 		}
+	}
+
+	// Close any unclosed grace beam
+	if (graceBeamOpen) {
+		const graceBaseIndent = beamElementOpen ? baseIndent + '    ' : baseIndent;
+		xml += `${graceBaseIndent}</beam>\n`;
 	}
 
 	// Close any unclosed beam

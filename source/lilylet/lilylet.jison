@@ -501,7 +501,7 @@ stem_cmd
 	;
 
 grace_event
-	: CMD_GRACE '{' voice_events '}'			-> ($3.filter(e => e.type === 'note' || e.type === 'rest').map(e => ({ ...e, grace: true })))
+	: CMD_GRACE '{' voice_events '}'			-> ($3.map(e => (e.type === 'note' || e.type === 'rest') ? { ...e, grace: true } : e))
 	| CMD_GRACE note_event						-> ({ ...$2, grace: true })
 	| CMD_GRACE rest_event						-> ({ ...$2, grace: true })
 	;
