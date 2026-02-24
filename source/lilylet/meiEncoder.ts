@@ -172,10 +172,12 @@ const getKeyAccidentals = (fifths: number): Record<string, string> => {
 	return result;
 };
 
-// Convert Pitch to MEI attributes, checking against key signature
+// Convert Pitch to MEI attributes, checking against key signature and in-measure accidentals
 // ottavaShift: current ottava level (1 = 8va up, -1 = 8vb down, 2 = 15ma up, etc.)
 // The written pitch should be adjusted by subtracting the ottava shift
-const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 0): { pname: string; oct: number; accid?: string; accidGes?: string } => {
+// measureAccidentals: tracks accidentals used earlier in the same measure (keyed by "pname-oct")
+//   - mutated to record new accidentals; used to add cancellation naturals
+const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>): { pname: string; oct: number; accid?: string; accidGes?: string } => {
 	// Lilylet octave: 0 = middle C octave (C4), positive = higher, negative = lower
 	// When ottava is active, the source pitch is the sounding pitch, but we need to output the written pitch
 	// For 8va up (ottavaShift=1), written pitch is one octave lower than sounding
@@ -189,18 +191,40 @@ const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 
 	let accid: string | undefined;
 	let accidGes: string | undefined;
 
+	const pitchKey = `${pitch.phonet}-${oct}`;
+
+	// Check what was previously established for this pitch in this measure
+	const prevMeasureAccid = measureAccidentals?.get(pitchKey);
+
 	if (pitch.accidental) {
 		const noteAccid = ACCIDENTALS[pitch.accidental];
-		if (noteAccid !== keyAccid) {
+		if (prevMeasureAccid !== undefined && noteAccid !== prevMeasureAccid) {
+			// Previous note in this measure had a different accidental - must re-assert
+			accid = noteAccid;
+		} else if (noteAccid !== keyAccid) {
 			// Accidental differs from key signature - display it
 			accid = noteAccid;
 		}
 		// Always set gestural accidental for MIDI generation
 		accidGes = noteAccid;
+		// Record this accidental for in-measure tracking
+		if (measureAccidentals) measureAccidentals.set(pitchKey, noteAccid);
 	} else if (keyAccid) {
 		// Note has no accidental but key implies one - output natural
-		accid = 'n';
+		if (prevMeasureAccid === 'n') {
+			// Already cancelled earlier in this measure - no need to show again
+		} else {
+			accid = 'n';
+		}
 		accidGes = 'n';
+		if (measureAccidentals) measureAccidentals.set(pitchKey, 'n');
+	} else if (measureAccidentals) {
+		// No explicit accidental, no key accidental - check if earlier note in measure had one
+		if (prevMeasureAccid && prevMeasureAccid !== 'n') {
+			// Previous note had an accidental - add cancellation natural
+			accid = 'n';
+			measureAccidentals.set(pitchKey, 'n');
+		}
 	}
 
 	return { pname: pitch.phonet, oct, accid, accidGes };
@@ -457,7 +481,8 @@ const noteEventToMEI = (
 	tieEnd?: boolean,
 	contextStemDir?: StemDirection,
 	keyFifths: number = 0,
-	ottavaShift: number = 0
+	ottavaShift: number = 0,
+	measureAccidentals?: Map<string, string>
 ): NoteEventResult => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
@@ -492,7 +517,7 @@ const noteEventToMEI = (
 
 	// Single note
 	if (event.pitches.length === 1) {
-		const pitch = encodePitch(event.pitches[0], keyFifths, ottavaShift);
+		const pitch = encodePitch(event.pitches[0], keyFifths, ottavaShift, measureAccidentals);
 		const noteId = generateId('note');
 		return {
 			xml: buildNoteElement(pitch, dur, dots, indent, false, noteOptions, noteId),
@@ -533,7 +558,7 @@ const noteEventToMEI = (
 	let result = `${indent}<chord ${chordAttrs}>\n`;
 
 	for (const p of event.pitches) {
-		const pitch = encodePitch(p, keyFifths, ottavaShift);
+		const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals);
 		result += buildNoteElement(pitch, dur, dots, indent + '    ', true);
 	}
 
@@ -578,7 +603,7 @@ const noteEventToMEI = (
 
 
 // Convert RestEvent to MEI
-const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0): string => {
+const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>): string => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	let attrs = `xml:id="${generateId('rest')}" dur="${dur}"`;
 	if (event.duration.dots > 0) attrs += ` dots="${event.duration.dots}"`;
@@ -633,7 +658,7 @@ const tupletHasInternalBeams = (event: TupletEvent): boolean => {
 };
 
 // Convert TupletEvent to MEI
-const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false): TupletEventResult => {
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false, measureAccidentals?: Map<string, string>): TupletEventResult => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
 	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
 	// MEI: num = number of notes written, numbase = normal equivalent
@@ -679,7 +704,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			const effectiveNoteEvent = effectiveStaff && layerStaff && effectiveStaff !== layerStaff
 				? { ...noteEvent, staff: effectiveStaff }
 				: noteEvent;
-			const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, false, undefined, keyFifths, ottavaShift);
+			const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, false, undefined, keyFifths, ottavaShift, measureAccidentals);
 			xml += result.xml;
 
 			if (!firstNoteId) firstNoteId = result.elementId;
@@ -703,7 +728,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			}
 		} else if (e.type === 'rest') {
 			const restIndent = beamOpen ? baseIndent + '    ' : baseIndent;
-			xml += restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift);
+			xml += restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift, measureAccidentals);
 		}
 	}
 
@@ -718,7 +743,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 
 // Convert TremoloEvent to MEI (fingered tremolo - alternating between two notes)
-const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0): string => {
+const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>): string => {
 	const ftremId = generateId('fTrem');
 
 	// For \repeat tremolo 4 { c16 d16 }:
@@ -742,7 +767,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 
 	// First note (or chord)
 	if (event.pitchA.length === 1) {
-		const pitch = encodePitch(event.pitchA[0], keyFifths, ottavaShift);
+		const pitch = encodePitch(event.pitchA[0], keyFifths, ottavaShift, measureAccidentals);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
@@ -750,7 +775,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 	} else if (event.pitchA.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
 		for (const p of event.pitchA) {
-			const pitch = encodePitch(p, keyFifths, ottavaShift);
+			const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 			if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
@@ -761,7 +786,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 
 	// Second note (or chord)
 	if (event.pitchB.length === 1) {
-		const pitch = encodePitch(event.pitchB[0], keyFifths, ottavaShift);
+		const pitch = encodePitch(event.pitchB[0], keyFifths, ottavaShift, measureAccidentals);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
@@ -769,7 +794,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 	} else if (event.pitchB.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
 		for (const p of event.pitchB) {
-			const pitch = encodePitch(p, keyFifths, ottavaShift);
+			const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 			if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
@@ -983,6 +1008,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	// Track current staff for cross-staff notation
 	let currentStaff: number = voice.staff || 1;
 
+	// Track in-measure accidentals for cancellation naturals
+	const measureAccidentals = new Map<string, string>();
+
 	// Track pending tie pitches (for tie="t" on next note) - initialized from previous measure
 	let pendingTiePitches: Pitch[] = [...initialTiePitches];
 
@@ -1031,7 +1059,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					? { ...noteEvent, staff: currentStaff }
 					: noteEvent;
 
-				const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift);
+				const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift, measureAccidentals);
 				xml += result.xml;
 				lastNoteId = result.elementId;
 
@@ -1140,12 +1168,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				break;
 			}
 			case 'rest':
-				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift);
+				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals);
 				break;
 			case 'tuplet': {
 				// Tuplet can be nested inside beam in MEI: <beam><tuplet>...</tuplet></beam>
 				// Pass beamElementOpen to tuplet so it knows not to create its own beam
-				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen);
+				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen, measureAccidentals);
 				xml += tupletResult.xml;
 
 				// Flush any pending markups onto the first note of the tuplet
@@ -1181,7 +1209,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				break;
 			}
 			case 'tremolo':
-				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths, currentOttavaShift);
+				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals);
 				break;
 			case 'context': {
 				const ctx = event as ContextChange;
