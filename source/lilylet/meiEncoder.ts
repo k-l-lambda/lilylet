@@ -603,10 +603,13 @@ const noteEventToMEI = (
 
 
 // Convert RestEvent to MEI
-const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>): string => {
+const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, crossStaff?: number): string => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	let attrs = `xml:id="${generateId('rest')}" dur="${dur}"`;
 	if (event.duration.dots > 0) attrs += ` dots="${event.duration.dots}"`;
+
+	// Cross-staff attribute
+	if (crossStaff) attrs += ` staff="${crossStaff}"`;
 
 	// Pitched rest (positioned at specific pitch)
 	if (event.pitch) {
@@ -1189,9 +1192,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				}
 				break;
 			}
-			case 'rest':
-				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals);
+			case 'rest': {
+				// For cross-staff notation: pass staff number if different from voice's home staff
+				const restCrossStaff = currentStaff !== (voice.staff || 1) ? currentStaff : undefined;
+				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals, restCrossStaff);
 				break;
+			}
 			case 'tuplet': {
 				// Tuplet can be nested inside beam in MEI: <beam><tuplet>...</tuplet></beam>
 				// Pass beamElementOpen to tuplet so it knows not to create its own beam
