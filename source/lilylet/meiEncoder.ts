@@ -1236,9 +1236,13 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 			case 'context': {
 				const ctx = event as ContextChange;
 				// Check for clef changes - emit <clef> element only if different from current
+				// and only when on the home staff (don't emit cross-staff clefs into this layer)
 				if (ctx.clef && ctx.clef !== currentClef) {
-					const clefInfo = CLEF_SHAPES[ctx.clef] || CLEF_SHAPES.treble;
-					xml += `${currentIndent}<clef xml:id="${generateId('clef')}" shape="${clefInfo.shape}" line="${clefInfo.line}" />\n`;
+					const layerStaff = voice.staff || 1;
+					if (currentStaff === layerStaff) {
+						const clefInfo = CLEF_SHAPES[ctx.clef] || CLEF_SHAPES.treble;
+						xml += `${currentIndent}<clef xml:id="${generateId('clef')}" shape="${clefInfo.shape}" line="${clefInfo.line}" />\n`;
+					}
 					currentClef = ctx.clef;
 				}
 				// Check for ottava changes
@@ -1832,16 +1836,20 @@ const analyzePartStructure = (doc: LilyletDoc): PartInfo[] => {
 		for (let pi = 0; pi < measure.parts.length; pi++) {
 			const part = measure.parts[pi];
 			for (const voice of part.voices) {
-				const localStaff = voice.staff || 1;
-				partInfos[pi].maxStaff = Math.max(partInfos[pi].maxStaff, localStaff);
+				let currentStaff = voice.staff || 1;
+				partInfos[pi].maxStaff = Math.max(partInfos[pi].maxStaff, currentStaff);
 
-				// Get FIRST clef from context changes (for initial staffDef)
+				// Scan context changes for staff switches and clefs
 				for (const event of voice.events) {
 					if (event.type === 'context') {
 						const ctx = event as ContextChange;
-						if (ctx.clef && !partInfos[pi].clefs[localStaff]) {
-							// Only set if not already set - take the FIRST clef
-							partInfos[pi].clefs[localStaff] = ctx.clef;
+						if (ctx.staff !== undefined) {
+							currentStaff = ctx.staff;
+							partInfos[pi].maxStaff = Math.max(partInfos[pi].maxStaff, currentStaff);
+						}
+						if (ctx.clef && !partInfos[pi].clefs[currentStaff]) {
+							// Only set if not already set - take the FIRST clef per staff
+							partInfos[pi].clefs[currentStaff] = ctx.clef;
 						}
 					}
 				}
