@@ -227,6 +227,7 @@ const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 
 	} else if (pitch.courtesy && prevMeasureAccid && prevMeasureAccid !== 'n') {
 		// Courtesy accidental after an in-measure accidental - force natural display
 		accid = 'n';
+		accidGes = 'n';
 		if (measureAccidentals) measureAccidentals.set(pitchKey, 'n');
 	} else if (measureAccidentals) {
 		// No explicit accidental, no key accidental - check if earlier note in measure had one
