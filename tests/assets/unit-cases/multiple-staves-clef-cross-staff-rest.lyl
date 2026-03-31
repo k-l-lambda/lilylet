@@ -1,0 +1,2 @@
+\staff "1" \clef "treble" \time 4/4 e'2 e2 \\
+\staff "2" \clef "bass" r2 \staff "1" \stemDown a2
