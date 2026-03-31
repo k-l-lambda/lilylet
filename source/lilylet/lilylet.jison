@@ -396,7 +396,9 @@ pitches
 	;
 
 pitch
-	: PITCH octave								-> parsePitch($1, $2)
+	: PITCH octave '!'							-> { ...parsePitch($1, $2), courtesy: true }
+	| PITCH '!'								-> { ...parsePitch($1, 0), courtesy: true }
+	| PITCH octave								-> parsePitch($1, $2)
 	| PITCH										-> parsePitch($1, 0)
 	;
 
@@ -564,7 +566,6 @@ articulation_mark
 	| '>'										-> articulation('accent')
 	| '.'										-> articulation('staccato')
 	| '-'										-> articulation('tenuto')
-	| '!'										-> articulation('staccatissimo')
 	| '^'										-> articulation('marcato')
 	| '_'										-> articulation('portato')
 	;

@@ -198,7 +198,10 @@ const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 
 
 	if (pitch.accidental) {
 		const noteAccid = ACCIDENTALS[pitch.accidental];
-		if (prevMeasureAccid !== undefined && noteAccid !== prevMeasureAccid) {
+		if (pitch.courtesy) {
+			// Courtesy accidental (!) - always display
+			accid = noteAccid;
+		} else if (prevMeasureAccid !== undefined && noteAccid !== prevMeasureAccid) {
 			// Previous note in this measure had a different accidental - must re-assert
 			accid = noteAccid;
 		} else if (noteAccid !== keyAccid) {
@@ -211,12 +214,19 @@ const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 
 		if (measureAccidentals) measureAccidentals.set(pitchKey, noteAccid);
 	} else if (keyAccid) {
 		// Note has no accidental but key implies one - output natural
-		if (prevMeasureAccid === 'n') {
+		if (pitch.courtesy) {
+			// Courtesy accidental (!) - always display
+			accid = 'n';
+		} else if (prevMeasureAccid === 'n') {
 			// Already cancelled earlier in this measure - no need to show again
 		} else {
 			accid = 'n';
 		}
 		accidGes = 'n';
+		if (measureAccidentals) measureAccidentals.set(pitchKey, 'n');
+	} else if (pitch.courtesy && prevMeasureAccid && prevMeasureAccid !== 'n') {
+		// Courtesy accidental after an in-measure accidental - force natural display
+		accid = 'n';
 		if (measureAccidentals) measureAccidentals.set(pitchKey, 'n');
 	} else if (measureAccidentals) {
 		// No explicit accidental, no key accidental - check if earlier note in measure had one

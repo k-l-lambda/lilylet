@@ -110,6 +110,7 @@ export interface Pitch {
 	phonet: Phonet;
 	accidental?: Accidental;
 	octave: number; // 0 = middle C octave, positive = higher, negative = lower
+	courtesy?: boolean; // force display of accidental (! in LilyPond)
 }
 
 export interface Duration {
