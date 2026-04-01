@@ -8,7 +8,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { parseCode, serializeLilyletDoc, lilypondEncoder } from "../source/lilylet/index.js";
-import type { LilyletDoc, Event } from "../source/lilylet/types.js";
+import type { LilyletDoc, Event, NoteEvent, RestEvent, TupletEvent } from "../source/lilylet/types.js";
 
 // Import the LilyPond decoder
 import { decode as decodeLilypond } from "../source/lilylet/lilypondDecoder.js";
@@ -64,19 +64,15 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 	const filterEvents = (events: Event[]) =>
 		events.filter(e => {
 			if (e.type === 'pitchReset') return false;
-			// Filter staff context events (handled at voice level, not as events)
 			if (e.type === 'context' && 'staff' in e) return false;
-			// Filter stemDirection context (depends on voice structure, which may change in roundtrip)
 			if (e.type === 'context' && 'stemDirection' in e) return false;
-			// Filter invisible/spacer rests (used for padding, not musical content)
 			if (e.type === 'rest' && (e as any).invisible) return false;
 			return true;
 		});
 
-	// Remove redundant consecutive context events (e.g., repeated stemDirection, clef, key, time/timeSig)
+	// Remove redundant consecutive context events
 	const dedupeContextEvents = (events: Event[]): Event[] => {
 		const result: Event[] = [];
-		let lastStemDirection: string | undefined;
 		let lastClef: string | undefined;
 		let lastKey: string | undefined;
 		let lastTime: string | undefined;
@@ -84,34 +80,21 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		for (const e of events) {
 			if (e.type === 'context') {
 				const ctx = e as any;
-
-				// Dedupe stemDirection
-				if ('stemDirection' in ctx) {
-					if (ctx.stemDirection === lastStemDirection) continue;
-					lastStemDirection = ctx.stemDirection;
-				}
-
-				// Dedupe clef
+				if ('stemDirection' in ctx) continue; // already filtered
 				if ('clef' in ctx) {
 					if (ctx.clef === lastClef) continue;
 					lastClef = ctx.clef;
 				}
-
-				// Dedupe key (use JSON for object comparison)
 				if ('key' in ctx) {
 					const keyStr = JSON.stringify(ctx.key);
 					if (keyStr === lastKey) continue;
 					lastKey = keyStr;
 				}
-
-				// Dedupe time (lilylet parser uses 'time' property)
 				if ('time' in ctx && ctx.time) {
 					const timeStr = `${ctx.time.numerator}/${ctx.time.denominator}`;
 					if (timeStr === lastTime) continue;
 					lastTime = timeStr;
 				}
-
-				// Dedupe timeSig (alternative name used in some contexts)
 				if ('timeSig' in ctx && ctx.timeSig) {
 					const timeSigStr = `${ctx.timeSig.numerator}/${ctx.timeSig.denominator}`;
 					if (timeSigStr === lastTime) continue;
@@ -123,8 +106,65 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		return result;
 	};
 
+	// Flatten note/rest events from potentially nested tuplets
+	const flattenNoteRests = (events: Event[]): (NoteEvent | RestEvent)[] => {
+		const result: (NoteEvent | RestEvent)[] = [];
+		for (const e of events) {
+			if (e.type === 'note' || e.type === 'rest') {
+				result.push(e as NoteEvent | RestEvent);
+			} else if (e.type === 'tuplet') {
+				result.push(...(e as TupletEvent).events);
+			}
+		}
+		return result;
+	};
+
+	// Format a note/rest event for diff display
+	const describeEvent = (e: NoteEvent | RestEvent, index: number): string => {
+		if (e.type === 'rest') {
+			const r = e as RestEvent;
+			if (r.pitch) return `[${index}] rest(${r.pitch.phonet}${r.pitch.octave}) dur=${r.duration.division}${'.'.repeat(r.duration.dots)}`;
+			return `[${index}] rest dur=${r.duration.division}${'.'.repeat(r.duration.dots)}`;
+		}
+		const n = e as NoteEvent;
+		const pitches = n.pitches.map(p => `${p.phonet}${p.accidental ? '(' + p.accidental + ')' : ''}${p.octave}`).join('+');
+		return `[${index}] note(${pitches}) dur=${n.duration.division}${'.'.repeat(n.duration.dots)}`;
+	};
+
+	// Compare two note/rest events
+	const eventsMatch = (a: NoteEvent | RestEvent, b: NoteEvent | RestEvent): boolean => {
+		if (a.type !== b.type) return false;
+
+		// Compare duration
+		if (a.duration.division !== b.duration.division) return false;
+		if (a.duration.dots !== b.duration.dots) return false;
+
+		if (a.type === 'note' && b.type === 'note') {
+			const na = a as NoteEvent;
+			const nb = b as NoteEvent;
+			if (na.pitches.length !== nb.pitches.length) return false;
+			for (let i = 0; i < na.pitches.length; i++) {
+				if (na.pitches[i].phonet !== nb.pitches[i].phonet) return false;
+				if (na.pitches[i].octave !== nb.pitches[i].octave) return false;
+				// Don't compare accidental - it may differ between parsers due to key context
+			}
+		}
+
+		if (a.type === 'rest' && b.type === 'rest') {
+			const ra = a as RestEvent;
+			const rb = b as RestEvent;
+			// Both pitched or both unpitched
+			if (!!ra.pitch !== !!rb.pitch) return false;
+			if (ra.pitch && rb.pitch) {
+				if (ra.pitch.phonet !== rb.pitch.phonet) return false;
+				if (ra.pitch.octave !== rb.pitch.octave) return false;
+			}
+		}
+
+		return true;
+	};
+
 	// Collect all events from all measures for a specific staff within a part
-	// This handles roundtrip where voice structure may change but staff content is preserved
 	const collectEventsByStaff = (measures: typeof doc1.measures, partIndex: number, staff: number) => {
 		const allEvents: Event[] = [];
 		for (const m of measures) {
@@ -138,6 +178,24 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			}
 		}
 		return dedupeContextEvents(allEvents);
+	};
+
+	// Count voices per staff across all measures
+	const getVoiceCountByStaff = (measures: typeof doc1.measures, partIndex: number): Map<number, number> => {
+		const maxVoices = new Map<number, number>();
+		for (const m of measures) {
+			const part = m.parts[partIndex];
+			if (!part) continue;
+			const staffCounts = new Map<number, number>();
+			for (const voice of part.voices) {
+				const s = voice.staff || 1;
+				staffCounts.set(s, (staffCounts.get(s) || 0) + 1);
+			}
+			for (const [s, count] of staffCounts) {
+				maxVoices.set(s, Math.max(maxVoices.get(s) || 0, count));
+			}
+		}
+		return maxVoices;
 	};
 
 	// Get all unique staves used in a part across all measures
@@ -165,9 +223,8 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		};
 	}
 
-	// Compare each part by staff (not by voice index)
+	// Compare each part
 	for (let pi = 0; pi < maxParts1; pi++) {
-		// Get all unique staves in this part
 		const staves1 = getStaves(doc1.measures, pi);
 		const staves2 = getStaves(doc2.measures, pi);
 
@@ -175,8 +232,22 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		if (staves1.length !== staves2.length) {
 			return {
 				equal: false,
-				diff: `Part ${pi + 1}: Staff count differs: ${staves1.length} vs ${staves2.length}`
+				diff: `Part ${pi + 1}: Staff count differs: ${staves1.length} (staves ${staves1.join(',')}) vs ${staves2.length} (staves ${staves2.join(',')})`
 			};
+		}
+
+		// Compare voice counts per staff
+		const voices1 = getVoiceCountByStaff(doc1.measures, pi);
+		const voices2 = getVoiceCountByStaff(doc2.measures, pi);
+		for (const staff of staves1) {
+			const v1 = voices1.get(staff) || 0;
+			const v2 = voices2.get(staff) || 0;
+			if (v1 !== v2) {
+				return {
+					equal: false,
+					diff: `Part ${pi + 1}, Staff ${staff}: Voice count differs: ${v1} vs ${v2}`
+				};
+			}
 		}
 
 		// Compare events for each staff
@@ -184,11 +255,25 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			const events1 = collectEventsByStaff(doc1.measures, pi, staff);
 			const events2 = collectEventsByStaff(doc2.measures, pi, staff);
 
-			if (events1.length !== events2.length) {
+			// Compare event count
+			const noteRests1 = flattenNoteRests(events1);
+			const noteRests2 = flattenNoteRests(events2);
+
+			if (noteRests1.length !== noteRests2.length) {
 				return {
 					equal: false,
-					diff: `Part ${pi + 1}, Staff ${staff}: Total event count differs: ${events1.length} vs ${events2.length}`
+					diff: `Part ${pi + 1}, Staff ${staff}: Note/rest count differs: ${noteRests1.length} vs ${noteRests2.length}`
 				};
+			}
+
+			// Compare each note/rest event content
+			for (let i = 0; i < noteRests1.length; i++) {
+				if (!eventsMatch(noteRests1[i], noteRests2[i])) {
+					return {
+						equal: false,
+						diff: `Part ${pi + 1}, Staff ${staff}: Event mismatch at index ${i}: ${describeEvent(noteRests1[i], i)} vs ${describeEvent(noteRests2[i], i)}`
+					};
+				}
 			}
 		}
 	}
@@ -253,7 +338,12 @@ const testFile = async (filename: string): Promise<TestResult> => {
 		// Step 4: Serialize back to lilylet
 		const roundtripLyl = serializeLilyletDoc(doc2);
 
-		// Step 5: Compare structures
+		// Step 5: Save .ly and .json for inspection
+		const baseName = path.basename(filename, ".lyl");
+		fs.writeFileSync(path.join(OUTPUT_DIR, `${baseName}.ly`), generatedLy);
+		fs.writeFileSync(path.join(OUTPUT_DIR, `${baseName}.json`), JSON.stringify(doc1, null, 2));
+
+		// Step 6: Compare structures
 		const comparison = compareDocuments(doc1, doc2);
 
 		if (comparison.equal) {
