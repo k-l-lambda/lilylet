@@ -545,11 +545,14 @@ const encodeTremoloEvent = (event: TremoloEvent, env: PitchEnv): { str: string; 
 	if (event.pitchA.length > 1) {
 		pitchA += '<';
 		const pitchStrs: string[] = [];
-		for (const pitch of event.pitchA) {
-			const { str, newEnv: ne } = encodePitch(pitch, newEnv);
+		let firstPitchEnv: PitchEnv | undefined;
+		for (let i = 0; i < event.pitchA.length; i++) {
+			const { str, newEnv: ne } = encodePitch(event.pitchA[i], newEnv);
 			pitchStrs.push(str);
 			newEnv = ne;
+			if (i === 0) firstPitchEnv = ne;
 		}
+		newEnv = firstPitchEnv!;
 		pitchA += pitchStrs.join(' ');
 		pitchA += '>';
 	} else if (event.pitchA.length === 1) {
@@ -563,11 +566,14 @@ const encodeTremoloEvent = (event: TremoloEvent, env: PitchEnv): { str: string; 
 	if (event.pitchB.length > 1) {
 		pitchB += '<';
 		const pitchStrs: string[] = [];
-		for (const pitch of event.pitchB) {
-			const { str, newEnv: ne } = encodePitch(pitch, newEnv);
+		let firstPitchEnv: PitchEnv | undefined;
+		for (let i = 0; i < event.pitchB.length; i++) {
+			const { str, newEnv: ne } = encodePitch(event.pitchB[i], newEnv);
 			pitchStrs.push(str);
 			newEnv = ne;
+			if (i === 0) firstPitchEnv = ne;
 		}
+		newEnv = firstPitchEnv!;
 		pitchB += pitchStrs.join(' ');
 		pitchB += '>';
 	} else if (event.pitchB.length === 1) {
