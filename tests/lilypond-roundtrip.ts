@@ -180,7 +180,11 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		return dedupeContextEvents(allEvents);
 	};
 
-	// Count voices per staff across all measures
+	// Check if a voice has any real musical content (notes, rests, tuplets)
+	const hasMusicalContent = (events: Event[]) =>
+		events.some(e => e.type === 'note' || e.type === 'rest' || e.type === 'tuplet' || e.type === 'tremolo');
+
+	// Count voices per staff across all measures (only voices with musical content)
 	const getVoiceCountByStaff = (measures: typeof doc1.measures, partIndex: number): Map<number, number> => {
 		const maxVoices = new Map<number, number>();
 		for (const m of measures) {
@@ -188,6 +192,7 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			if (!part) continue;
 			const staffCounts = new Map<number, number>();
 			for (const voice of part.voices) {
+				if (!hasMusicalContent(voice.events)) continue;
 				const s = voice.staff || 1;
 				staffCounts.set(s, (staffCounts.get(s) || 0) + 1);
 			}

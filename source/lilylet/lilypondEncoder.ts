@@ -673,7 +673,8 @@ const encodeVoice = (
 				break;
 			}
 			case 'pitchReset': {
-				env = { step: 0, octave: 0 };
+				// Ignore: each measure already gets its own \relative c' block,
+				// and within a measure the LilyPond reference pitch is not reset.
 				break;
 			}
 		}
