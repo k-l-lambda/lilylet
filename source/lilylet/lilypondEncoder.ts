@@ -394,11 +394,18 @@ const encodeNoteEvent = (event: NoteEvent, env: PitchEnv, lastDuration: Duration
 	if (event.pitches.length > 1) {
 		result += '<';
 		const pitchStrs: string[] = [];
-		for (const pitch of event.pitches) {
-			const { str, newEnv: ne } = encodePitch(pitch, newEnv);
+		let firstPitchEnv: PitchEnv | undefined;
+		for (let i = 0; i < event.pitches.length; i++) {
+			// In LilyPond relative mode, each pitch in a chord is relative
+			// to the previous pitch in the chord (cascading).
+			// After the chord, env becomes the first pitch.
+			const { str, newEnv: ne } = encodePitch(event.pitches[i], newEnv);
 			pitchStrs.push(str);
 			newEnv = ne;
+			if (i === 0) firstPitchEnv = ne;
 		}
+		// After chord, reference resets to first pitch
+		newEnv = firstPitchEnv!;
 		result += pitchStrs.join(' ');
 		result += '>';
 	} else if (event.pitches.length === 1) {

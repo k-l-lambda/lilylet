@@ -711,15 +711,6 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 							invisible: term.isSpacer || undefined,
 						};
 
-						// Positioned rest
-						if (!term.isSpacer && context.pitch) {
-							restEvent.pitch = convertPitch(
-								context.pitch.phonetStep,
-								0,
-								context.pitch.octave
-							);
-						}
-
 						voice.events.push(restEvent);
 					}
 				}
@@ -1145,8 +1136,8 @@ const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[], metadata?: Metadat
 		// Filter out voices that only contain spacer rests and context changes
 		const filteredVoices = pm.voices.filter(v => hasRealContent(v.events));
 
-		// Group voices by partIndex, then merge voices on the same staff
-		const partMap = new Map<number, Map<number, Event[]>>();
+		// Group voices by partIndex, then collect voice arrays per staff
+		const partMap = new Map<number, Map<number, Event[][]>>();
 		for (const v of filteredVoices) {
 			const pi = v.partIndex || 1;
 			if (!partMap.has(pi)) {
@@ -1154,24 +1145,26 @@ const parsedMeasuresToDoc = (parsedMeasures: ParsedMeasure[], metadata?: Metadat
 			}
 			const staffMap = partMap.get(pi)!;
 
-			// Merge events from voices on the same staff
+			// Preserve each voice as a separate array
 			if (!staffMap.has(v.staff)) {
 				staffMap.set(v.staff, []);
 			}
-			staffMap.get(v.staff)!.push(...v.events);
+			staffMap.get(v.staff)!.push(v.events);
 		}
 
 		// Convert to parts array (sorted by part index, then by staff)
-		// Apply deduplication to merged events
+		// Apply deduplication to each voice's events
 		const partIndices = Array.from(partMap.keys()).sort((a, b) => a - b);
 		const parts = partIndices.map(pi => {
 			const staffMap = partMap.get(pi)!;
 			const staffNums = Array.from(staffMap.keys()).sort((a, b) => a - b);
 			return {
-				voices: staffNums.map(staff => ({
-					staff,
-					events: dedupeContextEvents(staffMap.get(staff)!),
-				})),
+				voices: staffNums.flatMap(staff =>
+					staffMap.get(staff)!.map(events => ({
+						staff,
+						events: dedupeContextEvents(events),
+					}))
+				),
 			};
 		});
 
