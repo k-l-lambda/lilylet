@@ -462,13 +462,15 @@ const encodeRestEvent = (event: RestEvent, env: PitchEnv, lastDuration: Duration
 	}
 
 	// Positioned rest
+	let newEnv = env;
 	if (event.pitch && !event.fullMeasure && !event.invisible) {
-		const { str } = encodePitch(event.pitch, env);
+		const { str, newEnv: ne } = encodePitch(event.pitch, env);
 		result = str + result.slice(1);  // Replace 'r' with pitch
 		result += '\\rest';
+		newEnv = ne;
 	}
 
-	return { str: result, newEnv: env, newDuration: event.duration };
+	return { str: result, newEnv, newDuration: event.duration };
 };
 
 
@@ -519,8 +521,9 @@ const encodeTupletEvent = (event: TupletEvent, env: PitchEnv, lastDuration: Dura
 			newEnv = ne;
 			newDuration = nd;
 		} else if (subEvent.type === 'rest') {
-			const { str, newDuration: nd } = encodeRestEvent(subEvent, newEnv, newDuration);
+			const { str, newEnv: ne, newDuration: nd } = encodeRestEvent(subEvent, newEnv, newDuration);
 			result += str + ' ';
+			newEnv = ne;
 			newDuration = nd;
 		}
 	}
@@ -631,8 +634,9 @@ const encodeVoice = (
 				break;
 			}
 			case 'rest': {
-				const { str, newDuration } = encodeRestEvent(event, env, lastDuration);
+				const { str, newEnv, newDuration } = encodeRestEvent(event, env, lastDuration);
 				result += str + ' ';
+				env = newEnv;
 				lastDuration = newDuration;
 				break;
 			}
