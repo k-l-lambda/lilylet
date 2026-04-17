@@ -14,10 +14,8 @@ Steps:
 4. Wait for GitHub Actions to complete npm publish (check Actions tab or wait ~2 minutes)
 5. Update lilylet-live-editor dependencies:
    - Run `npm update @k-l-lambda/lilylet @k-l-lambda/lilylet-markdown` in /home/camus/work/lilylet-live-editor
-6. Publish lilylet-live-editor manually:
    - Bump version: `npm version patch --no-git-tag-version` in /home/camus/work/lilylet-live-editor
    - Commit: `git add package.json package-lock.json && git commit -m "chore: bump version"`
-   - Push to main branch
-   - Run `npm publish` in /home/camus/work/lilylet-live-editor
-7. Monitor github action of lilylet-live-editor, and make sure it succeed
-8. Report the new versions published
+   - Push to main branch (this triggers GitHub Pages deploy automatically)
+6. Monitor github action of lilylet-live-editor (Deploy to GitHub Pages), and make sure it succeeds
+7. Report the new versions published
