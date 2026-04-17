@@ -217,6 +217,60 @@ await (async () => {
 })();
 
 
+// ─── Test 4: carry-over immediately cancelled by \change Staff — no ghost \staff
+//
+// Real-world case: czerny-740-31.ly m68, voice (staff:1):
+//   events = [context{staff:2}, context{staff:1}, rest, ...]
+//
+// The carry-over prepends context{staff:2} but the very first event of the
+// original measure is \change Staff = "1" — switching straight back.
+// There are no notes, clef changes, or ottava shifts between the two staff
+// switches.
+//
+// Correct output:   \staff "1" r4 ...   (carry-over cancelled, only show final staff)
+// Buggy output:     \staff "2" \time 3/4 \staff "1" r4 ...
+
+console.log('\nTest 4: carry-over immediately cancelled by \\change Staff — no ghost \\staff emitted');
+
+await (async () => {
+	// Build a doc where voice.staff=1 has a carry-over to staff 2 that is
+	// immediately cancelled by context{staff:1}.
+	const { parseCode } = await import('../../source/lilylet/parser.js');
+
+	const doc: LilyletDoc = {
+		measures: [{
+			timeSig: { numerator: 3, denominator: 4 },
+			parts: [{
+				voices: [{
+					staff: 1,
+					events: [
+						{ type: 'context', staff: 2 } as any,   // carry-over
+						{ type: 'context', staff: 1 } as any,   // immediate cancel
+						{ type: 'rest', duration: { division: 4, dots: 0 } },
+						{ type: 'note', pitches: [{ phonet: 'c', octave: 1 }], duration: { division: 2, dots: 0 } },
+					]
+				}]
+			}]
+		}]
+	};
+
+	const lyl = serializeLilyletDoc(doc);
+
+	// The ghost \staff "2" must not appear — it was immediately cancelled
+	assert(!/\\staff "2"/.test(lyl),
+		`No ghost \\staff "2" when carry-over immediately cancelled — got: ${lyl.trim()}`);
+
+	// \staff "1" may or may not appear (acceptable either way), but the notes must be on staff 1
+	const docRT = parseCode(lyl);
+	const voices = docRT.measures[0]?.parts[0]?.voices ?? [];
+	const staffOnes = voices.filter(v => v.staff === 1);
+	assert(staffOnes.length > 0, `Round-trip: voice on staff 1 exists`);
+
+	const notes = staffOnes.flatMap(v => v.events.filter(e => e.type === 'note' || e.type === 'rest'));
+	assert(notes.length === 2, `Round-trip: 2 note/rest events on staff 1 (got ${notes.length})`);
+})();
+
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${'═'.repeat(40)}`);

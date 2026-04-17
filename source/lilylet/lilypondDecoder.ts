@@ -936,9 +936,25 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 				const voice = measureMap.get(mi)?.voices[vi];
 				if (!voice) continue;
 
-				// Prepend carry-over event if previous measure ended on a different staff
+				// Prepend carry-over event if previous measure ended on a different staff,
+				// but skip if the voice's first explicit staff event already resets to
+				// trackStaff — the carry-over would be immediately cancelled (no-op).
 				if (carryStaff !== trackStaff) {
-					voice.events.unshift({ type: 'context', staff: carryStaff } as any);
+					// Suppress carry-over if the first staff event resets to trackStaff
+					// AND no musical events (notes/rests/etc.) precede it — meaning the
+					// carry-over would be immediately cancelled with no effect.
+					const firstStaffCtxIdx = voice.events.findIndex(
+						e => e.type === 'context' && (e as any).staff != null
+					);
+					const musicalTypes = new Set(['note', 'rest', 'tuplet', 'tremolo']);
+					const hasMusicBeforeFirstStaff = firstStaffCtxIdx > 0 &&
+						voice.events.slice(0, firstStaffCtxIdx).some(e => musicalTypes.has(e.type));
+					const immediatelyCancelled = firstStaffCtxIdx >= 0 &&
+						(voice.events[firstStaffCtxIdx] as any).staff === trackStaff &&
+						!hasMusicBeforeFirstStaff;
+					if (!immediatelyCancelled) {
+						voice.events.unshift({ type: 'context', staff: carryStaff } as any);
+					}
 				}
 
 				// Update carryStaff from this measure's events

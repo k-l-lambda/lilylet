@@ -607,17 +607,30 @@ const serializeVoice = (
 	// Each voice starts fresh from middle C (step=0, octave=0)
 	let pitchEnv: PitchEnv = { step: 0, octave: 0 };
 
-	// Determine effective initial staff: if the first non-pitchReset event is a
-	// context { staff: N } with N ≠ voice.staff (carry-over from previous measure),
-	// emit \staff "N" instead of \staff "voice.staff" to avoid redundant sequences
-	// like \staff "1" \staff "2".
-	const firstMeaningfulEvent = voice.events.find(e => e.type !== 'pitchReset');
-	const firstStaffOverride = firstMeaningfulEvent?.type === 'context' &&
-		(firstMeaningfulEvent as ContextChange).staff != null &&
-		(firstMeaningfulEvent as ContextChange).staff !== voice.staff
-		? (firstMeaningfulEvent as ContextChange).staff!
-		: null;
-	const effectiveInitialStaff = firstStaffOverride ?? voice.staff;
+	// Scan leading context-staff events (before the first musical event or clef/ottava)
+	// to compute the effective initial staff. Multiple consecutive staff switches
+	// before any music collapse to the last one (earlier ones are no-ops).
+	// leadStaffScanEnd is the index of the first event that ends this scan —
+	// context{staff} events before this index are skipped in the main loop.
+	const MUSICAL_TYPES = new Set(['note', 'rest', 'tuplet', 'tremolo']);
+	let effectiveInitialStaff = voice.staff;
+	let leadStaffScanEnd = 0;
+	for (let i = 0; i < voice.events.length; i++) {
+		const e = voice.events[i];
+		if (e.type === 'pitchReset') { leadStaffScanEnd = i + 1; continue; }
+		if (e.type === 'context') {
+			const ctx = e as ContextChange;
+			if (ctx.staff != null) {
+				effectiveInitialStaff = ctx.staff;
+				leadStaffScanEnd = i + 1;
+				continue;
+			}
+			if (ctx.clef || ctx.ottava) break; // musical context — stop scan
+			leadStaffScanEnd = i + 1; // time/key/stemDir — continue scan
+			continue;
+		}
+		if (MUSICAL_TYPES.has(e.type)) break;
+	}
 
 	// Output staff command if voice staff differs from current parser staff,
 	// or always output if it's a grand staff score for clarity.
@@ -660,7 +673,12 @@ const serializeVoice = (
 	let activeStaff = effectiveInitialStaff;
 	let activeStemDir: StemDirection | undefined;
 
-	for (const event of voice.events) {
+	for (let eventIdx = 0; eventIdx < voice.events.length; eventIdx++) {
+		const event = voice.events[eventIdx];
+		// Skip leading context-staff events already absorbed into effectiveInitialStaff
+		if (eventIdx < leadStaffScanEnd && event.type === 'context' && (event as ContextChange).staff != null) {
+			continue;
+		}
 		if (event.type === 'context') {
 			const ctx = event as ContextChange;
 			// Cross-staff context: update activeStaff and emit \staff directive
