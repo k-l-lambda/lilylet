@@ -708,6 +708,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						const restEvent: RestEvent = {
 							type: 'rest',
 							duration: convertDuration(term.durationValue),
+							fullMeasure: (term.name === 'R') || undefined,
 							invisible: term.isSpacer || undefined,
 						};
 
