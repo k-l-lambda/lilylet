@@ -985,6 +985,7 @@ const hasRealContent = (events: Event[]): boolean => {
 		if (e.type === 'note') return true;
 		if (e.type === 'rest' && !(e as RestEvent).invisible) return true;
 		if (e.type === 'tuplet') return true;
+		if (e.type === 'times') return true;
 		if (e.type === 'tremolo') return true;
 		return false;
 	});

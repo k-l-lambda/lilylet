@@ -185,6 +185,7 @@
 "\\staff"						return 'CMD_STAFF'
 "\\grace"						return 'CMD_GRACE'
 "\\times"						return 'CMD_TIMES'
+"\\tuplet"						return 'CMD_TUPLET'
 "\\repeat"						return 'CMD_REPEAT'
 "\\ottava"						return 'CMD_OTTAVA'
 "\\stemUp"						return 'CMD_STEMUP'
@@ -516,6 +517,7 @@ grace_event
 
 tuplet_event
 	: CMD_TIMES NUMBER '/' NUMBER '{' voice_events '}'		-> timesEvent(fraction(Number($2), Number($4)), $6.filter(e => e.type === 'note' || e.type === 'rest'))
+	| CMD_TUPLET NUMBER '/' NUMBER '{' voice_events '}'		-> tupletEvent(fraction(Number($4), Number($2)), $6.filter(e => e.type === 'note' || e.type === 'rest'))
 	;
 
 tremolo_pitches

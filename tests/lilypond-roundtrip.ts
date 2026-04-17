@@ -186,7 +186,7 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 
 	// Check if a voice has any real musical content (notes, rests, tuplets)
 	const hasMusicalContent = (events: Event[]) =>
-		events.some(e => e.type === 'note' || e.type === 'rest' || e.type === 'tuplet' || e.type === 'tremolo');
+		events.some(e => e.type === 'note' || e.type === 'rest' || e.type === 'tuplet' || e.type === 'times' || e.type === 'tremolo');
 
 	// Count voices per staff across all measures (only voices with musical content)
 	const getVoiceCountByStaff = (measures: typeof doc1.measures, partIndex: number): Map<number, number> => {

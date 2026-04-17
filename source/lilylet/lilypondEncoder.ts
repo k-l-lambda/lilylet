@@ -15,6 +15,7 @@ import {
 	RestEvent,
 	ContextChange,
 	TupletEvent,
+	TimesEvent,
 	TremoloEvent,
 	BarlineEvent,
 	HarmonyEvent,
@@ -650,8 +651,9 @@ const encodeVoice = (
 				result += encodeContextChange(event) + ' ';
 				break;
 			}
-			case 'tuplet': {
-				const { str, newEnv, newDuration } = encodeTupletEvent(event, env, lastDuration);
+			case 'tuplet':
+			case 'times': {
+				const { str, newEnv, newDuration } = encodeTupletEvent(event as TupletEvent, env, lastDuration);
 				result += str + ' ';
 				env = newEnv;
 				lastDuration = newDuration;
@@ -740,7 +742,7 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 		for (const part of measure.parts) {
 			for (const voice of part.voices) {
 				for (const event of voice.events) {
-					if (event.type === 'note' || event.type === 'rest' || event.type === 'tuplet' || event.type === 'tremolo') {
+					if (event.type === 'note' || event.type === 'rest' || event.type === 'tuplet' || event.type === 'times' || event.type === 'tremolo') {
 						return true;
 					}
 				}

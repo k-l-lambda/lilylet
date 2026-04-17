@@ -15,6 +15,7 @@ import {
 	RestEvent,
 	ContextChange,
 	TupletEvent,
+	TimesEvent,
 	TremoloEvent,
 	BarlineEvent,
 	Pitch,
@@ -447,14 +448,17 @@ const serializeTempo = (tempo: Tempo): string => {
 
 // Serialize a tuplet event with pitch environment tracking
 const serializeTupletEvent = (
-	event: TupletEvent,
+	event: TupletEvent | TimesEvent,
 	env: PitchEnv
 ): { str: string; newEnv: PitchEnv } => {
 	const parts: string[] = [];
 	let currentEnv = env;
 
-	// \times numerator/denominator { ... }
-	parts.push('\\times ' + event.ratio.numerator + '/' + event.ratio.denominator + ' {');
+	// \tuplet denominator/numerator { ... } for tuplet type, \times numerator/denominator for times type
+	const keyword = event.type === 'times'
+		? '\\times ' + event.ratio.numerator + '/' + event.ratio.denominator
+		: '\\tuplet ' + event.ratio.denominator + '/' + event.ratio.numerator;
+	parts.push(keyword + ' {');
 
 	let prevDuration: Duration | undefined;
 	for (const e of event.events) {
@@ -554,7 +558,8 @@ const serializeEvent = (
 		case 'context':
 			return { str: serializeContextChange(event as ContextChange), newEnv: env };
 		case 'tuplet':
-			return serializeTupletEvent(event as TupletEvent, env);
+		case 'times':
+			return serializeTupletEvent(event as TupletEvent | TimesEvent, env);
 		case 'tremolo':
 			return serializeTremoloEvent(event as TremoloEvent, env);
 		case 'barline':
@@ -612,7 +617,7 @@ const serializeVoice = (
 	// before any music collapse to the last one (earlier ones are no-ops).
 	// leadStaffScanEnd is the index of the first event that ends this scan —
 	// context{staff} events before this index are skipped in the main loop.
-	const MUSICAL_TYPES = new Set(['note', 'rest', 'tuplet', 'tremolo']);
+	const MUSICAL_TYPES = new Set(['note', 'rest', 'tuplet', 'times', 'tremolo']);
 	let effectiveInitialStaff = voice.staff;
 	let leadStaffScanEnd = 0;
 	for (let i = 0; i < voice.events.length; i++) {
