@@ -74,6 +74,12 @@
 		events,
 	});
 
+	const timesEvent = (ratio, events) => ({
+		type: 'times',
+		ratio,
+		events,
+	});
+
 	const tremoloEvent = (pitchA, pitchB, count, division) => ({
 		type: 'tremolo',
 		pitchA,
@@ -509,7 +515,7 @@ grace_event
 	;
 
 tuplet_event
-	: CMD_TIMES NUMBER '/' NUMBER '{' voice_events '}'		-> tupletEvent(fraction(Number($2), Number($4)), $6.filter(e => e.type === 'note' || e.type === 'rest'))
+	: CMD_TIMES NUMBER '/' NUMBER '{' voice_events '}'		-> timesEvent(fraction(Number($2), Number($4)), $6.filter(e => e.type === 'note' || e.type === 'rest'))
 	;
 
 tremolo_pitches

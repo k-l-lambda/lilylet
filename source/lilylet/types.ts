@@ -250,6 +250,13 @@ export interface TupletEvent {
 	events: (NoteEvent | RestEvent)[];
 }
 
+// TimesEvent: from lilylet \times syntax (distinct from \tuplet decoded from LilyPond)
+export interface TimesEvent {
+	type: 'times';
+	ratio: Fraction;
+	events: (NoteEvent | RestEvent)[];
+}
+
 export interface PitchResetEvent {
 	type: 'pitchReset';
 }
@@ -270,7 +277,7 @@ export interface MarkupEvent {
 	placement?: Placement;  // Optional placement (above/below)
 }
 
-export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | PitchResetEvent | BarlineEvent | HarmonyEvent | MarkupEvent;
+export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | TimesEvent | PitchResetEvent | BarlineEvent | HarmonyEvent | MarkupEvent;
 
 // === Structure ===
 

@@ -8,7 +8,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { parseCode, serializeLilyletDoc, lilypondEncoder } from "../source/lilylet/index.js";
-import type { LilyletDoc, Event, NoteEvent, RestEvent, TupletEvent } from "../source/lilylet/types.js";
+import type { LilyletDoc, Event, NoteEvent, RestEvent, TupletEvent, TimesEvent } from "../source/lilylet/types.js";
 
 // Import the LilyPond decoder
 import { decode as decodeLilypond } from "../source/lilylet/lilypondDecoder.js";
@@ -106,13 +106,17 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		return result;
 	};
 
-	// Flatten note/rest events from potentially nested tuplets
+	// Collect musically-significant events (notes, rests, tuplets, times) preserving structure
+	const collectMusical = (events: Event[]): (NoteEvent | RestEvent | TupletEvent | TimesEvent)[] =>
+		events.filter(e => e.type === 'note' || e.type === 'rest' || e.type === 'tuplet' || e.type === 'times') as (NoteEvent | RestEvent | TupletEvent | TimesEvent)[];
+
+	// Flatten note/rest events from potentially nested tuplets/times (for pitch/duration checks)
 	const flattenNoteRests = (events: Event[]): (NoteEvent | RestEvent)[] => {
 		const result: (NoteEvent | RestEvent)[] = [];
 		for (const e of events) {
 			if (e.type === 'note' || e.type === 'rest') {
 				result.push(e as NoteEvent | RestEvent);
-			} else if (e.type === 'tuplet') {
+			} else if (e.type === 'tuplet' || e.type === 'times') {
 				result.push(...(e as TupletEvent).events);
 			}
 		}
@@ -277,6 +281,32 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 					return {
 						equal: false,
 						diff: `Part ${pi + 1}, Staff ${staff}: Event mismatch at index ${i}: ${describeEvent(noteRests1[i], i)} vs ${describeEvent(noteRests2[i], i)}`
+					};
+				}
+			}
+
+			// Compare tuplet/times structure: type, count, and ratios must match
+			const tuplesLike1 = collectMusical(events1).filter(e => e.type === 'tuplet' || e.type === 'times') as (TupletEvent | TimesEvent)[];
+			const tuplesLike2 = collectMusical(events2).filter(e => e.type === 'tuplet' || e.type === 'times') as (TupletEvent | TimesEvent)[];
+			if (tuplesLike1.length !== tuplesLike2.length) {
+				return {
+					equal: false,
+					diff: `Part ${pi + 1}, Staff ${staff}: Tuplet/times count differs: ${tuplesLike1.length} vs ${tuplesLike2.length}`
+				};
+			}
+			for (let i = 0; i < tuplesLike1.length; i++) {
+				const t1 = tuplesLike1[i], t2 = tuplesLike2[i];
+				if (t1.type !== t2.type) {
+					return {
+						equal: false,
+						diff: `Part ${pi + 1}, Staff ${staff}: Tuplet ${i} type differs: "${t1.type}" vs "${t2.type}"`
+					};
+				}
+				const r1 = t1.ratio, r2 = t2.ratio;
+				if (r1.numerator !== r2.numerator || r1.denominator !== r2.denominator) {
+					return {
+						equal: false,
+						diff: `Part ${pi + 1}, Staff ${staff}: Tuplet ${i} ratio differs: ${r1.numerator}/${r1.denominator} vs ${r2.numerator}/${r2.denominator}`
 					};
 				}
 			}
