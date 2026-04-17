@@ -574,10 +574,12 @@ interface MeasureContext {
 
 // Find first clef in voice events
 const findVoiceClef = (voice: Voice): Clef | undefined => {
+	let activeStaff = voice.staff;
 	for (const event of voice.events) {
 		if (event.type === 'context') {
 			const ctx = event as ContextChange;
-			if (ctx.clef) {
+			if (ctx.staff) activeStaff = ctx.staff;
+			if (ctx.clef && activeStaff === voice.staff) {
 				return ctx.clef;
 			}
 		}
@@ -652,9 +654,15 @@ const serializeVoice = (
 			if (ctx.staff && ctx.staff !== activeStaff) {
 				activeStaff = ctx.staff;
 				parts.push('\\staff "' + activeStaff + '"');
+				// Emit target staff clef if the event carries one or allStaffClefs knows it
+				const ctxClef = ctx.clef || allStaffClefs?.[activeStaff];
+				if (ctxClef && emittedClefs?.[activeStaff] !== ctxClef) {
+					parts.push('\\clef "' + CLEF_MAP[ctxClef] + '"');
+					if (emittedClefs) emittedClefs[activeStaff] = ctxClef;
+				}
 				continue;
 			}
-			if (ctx.staff) continue;  // same staff, no-op
+			if (ctx.staff) continue;  // same staff, no-op for staff field; clef handled below
 			// Skip clef-only context events if clef already established for this staff
 			if (clefOutputted && ctx.clef && !ctx.key && !ctx.time && !ctx.ottava && !ctx.stemDirection && !ctx.tempo) {
 				continue;

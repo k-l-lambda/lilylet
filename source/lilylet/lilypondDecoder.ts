@@ -756,8 +756,12 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 				else if (term instanceof lilyParser.LilyTerms.Change) {
 					const assignment = (term as any).args?.[0];
 					if (assignment?.key === 'Staff') {
+						// exp is like '"2"' — strip surrounding quotes then parse strictly
 						const exp: string = assignment?.value?.exp ?? '';
-						const staffNum = parseInt(exp.replace(/[^0-9]/g, ''), 10);
+						const raw = exp.replace(/^"|"$/g, '');
+						// Only accept pure integer staff names (e.g. "1", "2")
+						// Reject compound names like "1_2", "RH", "LH"
+						const staffNum = /^\d+$/.test(raw) ? parseInt(raw, 10) : NaN;
 						if (!isNaN(staffNum)) {
 							voice.events.push({ type: 'context', staff: staffNum } as any);
 						}
