@@ -648,10 +648,13 @@ const serializeVoice = (
 	for (const event of voice.events) {
 		if (event.type === 'context') {
 			const ctx = event as ContextChange;
-			// Skip context events that belong to a different staff (cross-staff clef/ottava)
-			if (ctx.staff && ctx.staff !== voice.staff) {
+			// Cross-staff context: update activeStaff and emit \staff directive
+			if (ctx.staff && ctx.staff !== activeStaff) {
+				activeStaff = ctx.staff;
+				parts.push('\\staff "' + activeStaff + '"');
 				continue;
 			}
+			if (ctx.staff) continue;  // same staff, no-op
 			// Skip clef-only context events if clef already established for this staff
 			if (clefOutputted && ctx.clef && !ctx.key && !ctx.time && !ctx.ottava && !ctx.stemDirection && !ctx.tempo) {
 				continue;
@@ -661,8 +664,8 @@ const serializeVoice = (
 		if (event.type === 'note') {
 			const noteEvt = event as NoteEvent;
 
-			// Cross-staff: emit \staff when note's effective staff differs from active
-			const effectiveStaff = noteEvt.staff || voice.staff;
+			// Cross-staff via explicit note.staff (lilylet native cross-staff)
+			const effectiveStaff = noteEvt.staff || activeStaff;
 			if (effectiveStaff !== activeStaff) {
 				activeStaff = effectiveStaff;
 				parts.push('\\staff "' + activeStaff + '"');
@@ -872,12 +875,16 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 		// Collect clefs from this measure's voices
 		for (const part of measure.parts) {
 			for (const voice of part.voices) {
+				let clefActiveStaff = voice.staff;
 				for (const event of voice.events) {
-					if (event.type === 'context' && (event as ContextChange).clef) {
+					if (event.type === 'context') {
 						const ctx = event as ContextChange;
-						// Use the event's staff if specified (cross-staff), otherwise the voice's staff
-						const clefStaff = ctx.staff || voice.staff;
-						staffClefs[clefStaff] = ctx.clef!;
+						if (ctx.staff) {
+							clefActiveStaff = ctx.staff;
+						}
+						if (ctx.clef) {
+							staffClefs[clefActiveStaff] = ctx.clef;
+						}
 					}
 				}
 			}
