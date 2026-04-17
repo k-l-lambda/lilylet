@@ -924,6 +924,31 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		});
 
 		context.execute(track.music);
+
+		// Post-process: carry staff state across measure boundaries for this voice.
+		// If measure N ends on staff 2 (via \change Staff), measure N+1 must begin
+		// with context { staff: 2 } so notes at the start of that measure serialize
+		// on the correct staff.
+		{
+			const measureIndices = Array.from(measureMap.keys()).sort((a, b) => a - b);
+			let carryStaff = trackStaff;
+			for (const mi of measureIndices) {
+				const voice = measureMap.get(mi)?.voices[vi];
+				if (!voice) continue;
+
+				// Prepend carry-over event if previous measure ended on a different staff
+				if (carryStaff !== trackStaff) {
+					voice.events.unshift({ type: 'context', staff: carryStaff } as any);
+				}
+
+				// Update carryStaff from this measure's events
+				for (const e of voice.events) {
+					if (e.type === 'context' && (e as any).staff) {
+						carryStaff = (e as any).staff;
+					}
+				}
+			}
+		}
 	});
 
 	// Filter out empty voices and convert to array, sorted by measure number
