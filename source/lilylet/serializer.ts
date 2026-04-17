@@ -607,10 +607,23 @@ const serializeVoice = (
 	// Each voice starts fresh from middle C (step=0, octave=0)
 	let pitchEnv: PitchEnv = { step: 0, octave: 0 };
 
+	// Determine effective initial staff: if the first non-pitchReset event is a
+	// context { staff: N } with N ≠ voice.staff (carry-over from previous measure),
+	// emit \staff "N" instead of \staff "voice.staff" to avoid redundant sequences
+	// like \staff "1" \staff "2".
+	const firstMeaningfulEvent = voice.events.find(e => e.type !== 'pitchReset');
+	const firstStaffOverride = firstMeaningfulEvent?.type === 'context' &&
+		(firstMeaningfulEvent as ContextChange).staff != null &&
+		(firstMeaningfulEvent as ContextChange).staff !== voice.staff
+		? (firstMeaningfulEvent as ContextChange).staff!
+		: null;
+	const effectiveInitialStaff = firstStaffOverride ?? voice.staff;
+
 	// Output staff command if voice staff differs from current parser staff,
-	// or always output if it's a grand staff score for clarity
-	if (isGrandStaff || voice.staff !== currentStaff) {
-		parts.push('\\staff "' + voice.staff + '"');
+	// or always output if it's a grand staff score for clarity.
+	// Use effectiveInitialStaff so carry-over replaces the default emission.
+	if (isGrandStaff || effectiveInitialStaff !== currentStaff) {
+		parts.push('\\staff "' + effectiveInitialStaff + '"');
 	}
 
 	// Output key/time signatures after \staff (for first voice only)
@@ -644,7 +657,7 @@ const serializeVoice = (
 	// Skip redundant clef context events if this staff's clef is already established
 	const clefOutputted = !!voiceClef && !!emittedClefs?.[voice.staff];
 
-	let activeStaff = voice.staff;
+	let activeStaff = effectiveInitialStaff;
 	let activeStemDir: StemDirection | undefined;
 
 	for (const event of voice.events) {

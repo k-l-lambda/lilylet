@@ -193,6 +193,30 @@ await (async () => {
 })();
 
 
+// ─── Test 3: no redundant consecutive \staff directives ──────────────────────
+// Regression: the carry-over fix prepends context { staff: 2 } to measure 2's
+// voice, but serializeVoice also emits \staff "1" (voice.staff) at the top.
+// This produces "\staff "1" \staff "2" g4" — the first directive is redundant
+// because it is immediately overridden by the carry-over.
+//
+// Expected:  \staff "2" g4 \staff "1" a b c   (or just the carry-over first)
+// Buggy:     \staff "1" \staff "2" g4 ...      (two consecutive \staff)
+
+console.log('\nTest 3: no redundant consecutive \\staff directives in serialized .lyl');
+
+await (async () => {
+	const doc = await decode(LY_CROSS_MEASURE);
+	const lyl = serializeLilyletDoc(doc);
+
+	// Check each measure line for consecutive \staff "N" \staff "M" pattern
+	for (const line of lyl.split('\n')) {
+		const consecutiveStaff = /\\staff\s+"[^"]+"\s+\\staff\s+"[^"]+"/.test(line);
+		assert(!consecutiveStaff,
+			`No consecutive \\staff directives on line: ${line.trim()}`);
+	}
+})();
+
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${'═'.repeat(40)}`);
