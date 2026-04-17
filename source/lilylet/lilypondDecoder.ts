@@ -498,15 +498,20 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 
 		// Parse staff name to extract partIndex and staff number
 		// Format: "partIndex_staffIndex" (e.g., "1_1", "1_2", "2_1")
-		// Falls back to partIndex=1 if format doesn't match
+		// Falls back to positional ordering for non-numeric names (e.g., "upper"→1, "lower"→2)
 		const parseStaffName = (name: string): { partIndex: number; staffNum: number } => {
 			const match = name.match(/^(\d+)_(\d+)$/);
 			if (match) {
 				return { partIndex: parseInt(match[1], 10), staffNum: parseInt(match[2], 10) };
 			}
-			// Fallback: single part, staff number from name or 1
 			const num = parseInt(name, 10);
-			return { partIndex: 1, staffNum: isNaN(num) ? 1 : num };
+			if (!isNaN(num)) {
+				return { partIndex: 1, staffNum: num };
+			}
+			// Non-numeric name: assign staffNum by order of first appearance in staffNames
+			appendStaff(name);
+			const idx = staffNames.indexOf(name);
+			return { partIndex: 1, staffNum: idx + 1 };
 		};
 
 		// Use track.contextDict.Staff as the authoritative staff name (from Staff definition)
