@@ -622,8 +622,13 @@ const serializeVoice = (
 			const ctx = e as ContextChange;
 			if (ctx.staff != null) {
 				effectiveInitialStaff = ctx.staff;
-				leadStaffScanEnd = i + 1;
-				continue;
+				if (!ctx.clef && !ctx.ottava) {
+					// Pure staff-only event — absorb
+					leadStaffScanEnd = i + 1;
+					continue;
+				}
+				// Compound (staff + clef/ottava) — update effectiveInitialStaff but stop scan
+				break;
 			}
 			if (ctx.clef || ctx.ottava) break; // musical context — stop scan
 			leadStaffScanEnd = i + 1; // time/key/stemDir — continue scan
@@ -693,7 +698,8 @@ const serializeVoice = (
 				}
 				continue;
 			}
-			if (ctx.staff) continue;  // same staff, no-op for staff field; clef handled below
+			if (ctx.staff && !ctx.clef && !ctx.ottava) continue;  // same staff, pure no-op
+			if (ctx.staff) { /* same staff but has clef/ottava — fall through to emit them */ }
 			// Skip clef-only context events if clef already established for this staff
 			if (clefOutputted && ctx.clef && !ctx.key && !ctx.time && !ctx.ottava && !ctx.stemDirection && !ctx.tempo) {
 				continue;

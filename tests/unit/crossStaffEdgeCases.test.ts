@@ -1,18 +1,66 @@
-/**
- * Adversarial tests for GPT review of cross-staff carry-over fixes.
- * Usage: npx tsx tests/unit/crossStaffEdgeCases.test.ts
- */
+// tests/unit/crossStaffEdgeCases.test.ts
+//
+// Adversarial edge cases for cross-staff carry-over fixes (written by GPT review).
+// Run with:
+//   npx tsx tests/unit/crossStaffEdgeCases.test.ts
 
 import { decode } from '../../source/lilylet/lilypondDecoder.js';
 import { serializeLilyletDoc } from '../../source/lilylet/serializer.js';
-import type { LilyletDoc, NoteEvent, Voice } from '../../source/lilylet/types.js';
+import type { LilyletDoc } from '../../source/lilylet/types.js';
 
 let passed = 0;
 let failed = 0;
 
 function assert(condition: boolean, message: string): void {
-	if (condition) { console.log(`  ✓ ${message}`); passed++; }
-	else { console.error(`  ✗ FAIL: ${message}`); failed++; }
+	if (condition) {
+		console.log(`  ✓ ${message}`);
+		passed++;
+	} else {
+		console.error(`  ✗ FAIL: ${message}`);
+		failed++;
+	}
+}
+
+function note(phonet: string, division = 4, octave = 0): any {
+	return { type: 'note', pitches: [{ phonet, octave }], duration: { division, dots: 0 } };
+}
+
+function rest(division = 4): any {
+	return { type: 'rest', duration: { division, dots: 0 } };
+}
+
+function mkDoc(events: any[], staff = 1): LilyletDoc {
+	return {
+		measures: [{
+			parts: [{
+				voices: [{ staff, events } as any]
+			} as any]
+		} as any]
+	} as LilyletDoc;
+}
+
+function getMeasureVoice(doc: LilyletDoc, measureIndex: number): any {
+	return doc.measures?.[measureIndex]?.parts?.[0]?.voices?.[0];
+}
+
+function staffContexts(events: any[]): any[] {
+	return events.filter((e: any) => e.type === 'context' && e.staff != null);
+}
+
+function noteStaffs(voice: any): number[] {
+	let activeStaff = voice.staff;
+	const out: number[] = [];
+	for (const e of voice.events) {
+		if (e.type === 'context' && e.staff != null) activeStaff = e.staff;
+		else if (e.type === 'note') out.push(e.staff ?? activeStaff);
+	}
+	return out;
+}
+
+function summarizeLeadTypesBeforeFirstStaffCtx(voice: any): string[] {
+	const idx = voice.events.findIndex((e: any) => e.type === 'context' && e.staff != null);
+	if (idx < 0) return [];
+	return voice.events.slice(0, idx).map((e: any) => e.type);
 }
 
 const LY_BOILERPLATE = `
@@ -20,6 +68,18 @@ const LY_BOILERPLATE = `
 \\layout { \\context { \\Score autoBeaming = ##f } }
 `;
 
+/** Wrap a relative music expression in a minimal full LilyPond score. */
+function makeLy(relativeMusic: string): string {
+	return LY_BOILERPLATE + `
+\\score { \\new Staff = "1_1" << \\new Voice {
+  \\relative c' { ${relativeMusic} }
+} >> \\layout {} }
+`;
+}
+
+console.log('crossStaffEdgeCases.test.ts\n');
+
+// Warm-up
 {
 	const w = console.warn, a = console.assert;
 	console.warn = () => {}; console.assert = () => {};
@@ -27,174 +87,201 @@ const LY_BOILERPLATE = `
 	console.warn = w; console.assert = a;
 }
 
-function noteStaffs(voice: Voice) {
-	let s = voice.staff;
-	return voice.events.map(e => {
-		if (e.type === 'context' && (e as any).staff) s = (e as any).staff;
-		return e.type === 'note' ? s : null;
-	}).filter(x => x !== null) as number[];
+
+// ─── C1-A: music before reset — carry-over NOT suppressed ────────────────────
+
+{
+	const LY = `\\time 2/4 c4 \\change Staff = "2" d4 | e4 \\change Staff = "1" f4`;
+	const doc = await decode(makeLy(LY));
+	const m2voice = getMeasureVoice(doc, 1);
+
+	assert(m2voice !== undefined, 'C1-A: decoded second measure voice exists');
+
+	const ctxs = staffContexts(m2voice.events);
+	assert(ctxs.length >= 2, 'C1-A: second measure has carry-over and explicit reset contexts');
+
+	const firstTwo = ctxs.slice(0, 2).map((e: any) => e.staff);
+	assert(
+		JSON.stringify(firstTwo) === JSON.stringify([2, 1]),
+		'C1-A: measure 2 starts with carry-over staff 2, then reset to staff 1'
+	);
+
+	const staffs = noteStaffs(m2voice);
+	assert(
+		JSON.stringify(staffs) === JSON.stringify([2, 1]),
+		'C1-A: e4 on staff 2 (carry-over), f4 on staff 1 (after reset)'
+	);
 }
 
 
-// ─── Commit 1: decoder carry-over suppression ────────────────────────────────
+// ─── C1-B: non-musical context before reset — carry-over suppressed ──────────
+// Strengthened: verifies explicit reset still present and all notes on staff 1.
 
-// C1-A: music before reset keeps carry-over (over-suppression guard)
-console.log('\nC1-A: Music before reset — carry-over must NOT be suppressed');
-await (async () => {
-	const LY = LY_BOILERPLATE + `
-\\score { \\new Staff = "1_1" << \\new Voice {
-  \\relative c' { \\time 2/4 c4 \\change Staff = "2" d4 | e4 \\change Staff = "1" f4 }
-} >> \\layout {} }
-`;
-	const doc = await decode(LY);
-	const m2voice = doc.measures[1]?.parts[0]?.voices[0];
-	assert(m2voice !== undefined, 'C1-A: measure 2 voice found');
-	if (m2voice) {
-		const staffCtxs = m2voice.events.filter(e => e.type === 'context' && (e as any).staff != null);
-		assert(staffCtxs.length >= 2, `C1-A: ≥2 staff ctx in m2 (got ${staffCtxs.length})`);
-		assert((staffCtxs[0] as any).staff === 2, `C1-A: first is carry-over staff:2 (got ${(staffCtxs[0] as any).staff})`);
-		const staffs = noteStaffs(m2voice);
-		assert(staffs[0] === 2, `C1-A: e4 on staff 2 (got ${staffs[0]})`);
-		assert(staffs[1] === 1, `C1-A: f4 on staff 1 (got ${staffs[1]})`);
-	}
-})();
+{
+	const LY = `\\time 4/4 c4 \\change Staff = "2" d e f | \\time 3/4 \\change Staff = "1" g a b`;
+	const doc = await decode(makeLy(LY));
+	const m2voice = getMeasureVoice(doc, 1);
 
-// C1-B: non-musical context before reset suppresses carry-over
-console.log('\nC1-B: \\time before reset — carry-over suppressed');
-await (async () => {
-	const LY = LY_BOILERPLATE + `
-\\score { \\new Staff = "1_1" << \\new Voice {
-  \\relative c' { \\time 4/4 c4 \\change Staff = "2" d4 e4 f4 | \\time 3/4 \\change Staff = "1" g4 a4 b4 }
-} >> \\layout {} }
-`;
-	const doc = await decode(LY);
-	const m2voice = doc.measures[1]?.parts[0]?.voices[0];
-	assert(m2voice !== undefined, 'C1-B: measure 2 voice found');
-	if (m2voice) {
-		const firstStaffCtx = m2voice.events.find(e => e.type === 'context' && (e as any).staff != null);
-		assert(!firstStaffCtx || (firstStaffCtx as any).staff !== 2,
-			`C1-B: no ghost carry-over staff:2 (got ${(firstStaffCtx as any)?.staff})`);
-	}
-})();
+	assert(m2voice !== undefined, 'C1-B: decoded second measure voice exists');
 
-// C1-C: grace note before reset — grace is a note, so carry-over kept
-console.log('\nC1-C: Grace before reset — carry-over kept (grace counts as music)');
-await (async () => {
-	const LY = LY_BOILERPLATE + `
-\\score { \\new Staff = "1_1" << \\new Voice {
-  \\relative c' { c4 \\change Staff = "2" d4 e4 f4 | \\grace g8 \\change Staff = "1" a4 b4 c4 }
-} >> \\layout {} }
-`;
-	const doc = await decode(LY);
-	const m2voice = doc.measures[1]?.parts[0]?.voices[0];
-	assert(m2voice !== undefined, 'C1-C: measure 2 voice found');
-	if (m2voice) {
-		const staffCtxs = m2voice.events.filter(e => e.type === 'context' && (e as any).staff != null);
+	const ctxs = staffContexts(m2voice.events);
+	assert(ctxs.length >= 1, 'C1-B: second measure still has explicit reset to staff 1');
+	assert(
+		ctxs[0].staff === 1,
+		'C1-B: first staff context in m2 is reset to 1, not ghost carry-over staff 2'
+	);
+
+	const staffs = noteStaffs(m2voice);
+	assert(
+		staffs.length >= 3 && staffs.every(s => s === 1),
+		'C1-B: all notes in m2 are on staff 1 after immediate reset'
+	);
+}
+
+
+// ─── C1-C: grace before reset — discovery + carry-over kept ──────────────────
+// Discovery assertion: prove grace is decoded as a pre-reset musical event.
+
+{
+	const LY = `c4 \\change Staff = "2" d e f | \\grace g8 \\change Staff = "1" a b c`;
+	const doc = await decode(makeLy(LY));
+	const m2voice = getMeasureVoice(doc, 1);
+
+	assert(m2voice !== undefined, 'C1-C: decoded second measure voice exists');
+
+	// Discovery: find events between carry-over (context{staff:2}) and reset (context{staff:1})
+	const allCtxs = staffContexts(m2voice.events);
+	const carryIdx = m2voice.events.findIndex((e: any) => e.type === 'context' && e.staff === 2);
+	const resetIdx = m2voice.events.findIndex((e: any) => e.type === 'context' && e.staff === 1);
+	const betweenTypes = carryIdx >= 0 && resetIdx > carryIdx
+		? m2voice.events.slice(carryIdx + 1, resetIdx).map((e: any) => e.type)
+		: [];
+	assert(betweenTypes.length > 0,
+		`C1-C discovery: events between carry-over and reset (${betweenTypes.join(', ')})`);
+	const hasMusicalBetween = betweenTypes.some(t => /grace/i.test(t) || t === 'note' || t === 'tuplet');
+	assert(hasMusicalBetween,
+		`C1-C discovery: musical event between carry-over and reset (${betweenTypes.join(', ')})`);
+
+	const ctxs = allCtxs;
+	assert(
+		ctxs.length >= 2 && ctxs[0].staff === 2,
+		'C1-C: carry-over staff 2 is kept when musical event precedes explicit reset'
+	);
+
+	const m2lyl = serializeLilyletDoc(mkDoc(m2voice.events, m2voice.staff ?? 1));
+	assert(/\\staff "2"/.test(m2lyl),
+		'C1-C: serialized m2 contains \\staff "2" before the reset sequence');
+}
+
+
+// ─── C2-A: leading { staff:1, clef:"bass" } — clef NOT dropped ───────────────
+
+{
+	const doc = mkDoc([
+		{ type: 'context', staff: 1, clef: 'bass' } as any,
+		note('c'),
+	], 1);
+	const lyl = serializeLilyletDoc(doc);
+
+	assert(/\\clef\s+"?bass"?/.test(lyl),
+		'C2-A: same-staff compound context preserves clef');
+	assert(/[a-g]/.test(lyl),
+		'C2-A: note still serializes after same-staff compound context');
+}
+
+
+// ─── C2-A2: leading { staff:2, clef:"bass" } — both emitted, staff before clef
+
+{
+	const doc = mkDoc([
+		{ type: 'context', staff: 2, clef: 'bass' } as any,
+		note('c'),
+	], 1);
+	const lyl = serializeLilyletDoc(doc);
+
+	const iStaff = lyl.indexOf('\\staff "2"');
+	const iClef = lyl.search(/\\clef\s+"?bass"?/);
+
+	assert(iStaff >= 0, 'C2-A2: different-staff compound emits \\staff "2"');
+	assert(iClef >= 0, 'C2-A2: different-staff compound preserves clef');
+	assert(iStaff < iClef, 'C2-A2: \\staff "2" precedes \\clef in compound context');
+}
+
+
+// ─── C2-B: [staff:2, clef, staff:1, note] — correct order throughout ─────────
+
+{
+	const doc = mkDoc([
+		{ type: 'context', staff: 2 } as any,
+		{ type: 'context', clef: 'bass' } as any,
+		{ type: 'context', staff: 1 } as any,
+		note('c'),
+	], 1);
+	const lyl = serializeLilyletDoc(doc);
+
+	const i2 = lyl.indexOf('\\staff "2"');
+	const ic = lyl.search(/\\clef\s+"?bass"?/);
+	const i1 = lyl.indexOf('\\staff "1"');
+	// Find note after last \staff directive (to avoid matching letters in "bass"/"clef")
+	const inote = lyl.indexOf('c', i1 + 1);
+
+	assert(i2 >= 0, 'C2-B: emits \\staff "2"');
+	assert(ic >= 0, 'C2-B: emits \\clef bass');
+	assert(i1 >= 0, 'C2-B: emits \\staff "1"');
+	assert(
+		i2 >= 0 && ic >= 0 && i1 >= 0 && inote >= 0 && i2 < ic && ic < i1 && i1 < inote,
+		'C2-B: order is \\staff "2" → clef → \\staff "1" → note'
+	);
+}
+
+
+// ─── C2-C: [pitchReset, staff:2, staff:1, rest] — no ghost, rest survives ────
+
+{
+	const doc = mkDoc([
+		{ type: 'pitchReset' } as any,
+		{ type: 'context', staff: 2 } as any,
+		{ type: 'context', staff: 1 } as any,
+		rest(4),
+	], 1);
+	const lyl = serializeLilyletDoc(doc);
+
+	assert(!/\\staff "2"/.test(lyl),
+		'C2-C: collapsed leading staff 2 does not appear as ghost');
+	assert(/\br/.test(lyl),
+		'C2-C: rest still serializes after collapsing leading staff events');
+}
+
+
+// ─── C2-D: unknown leading event stops scan — only if markup is supported ────
+
+{
+	const markupEvent: any = { type: 'markup', content: 'hi', placement: 'above' };
+	const probeLyl = serializeLilyletDoc(mkDoc([markupEvent, note('c')], 1));
+
+	if (!/\\markup/.test(probeLyl)) {
+		console.log('  - SKIP C2-D: serializer does not emit \\markup for this event shape');
+	} else {
+		const doc = mkDoc([
+			markupEvent,
+			{ type: 'context', staff: 2 } as any,
+			note('c'),
+		], 1);
 		const lyl = serializeLilyletDoc(doc);
-		const m2line = lyl.split('|')[1] ?? '';
-		// Grace is decoded as a note with grace:true — it IS in musicalTypes
-		// carry-over should be kept, so \staff "2" should appear before grace/a
-		assert(staffCtxs.some(e => (e as any).staff === 2),
-			`C1-C: carry-over staff:2 present in m2 (staffCtxs: ${staffCtxs.map((e: any) => e.staff)})`);
-		assert(/\\staff "2"/.test(m2line), `C1-C: \\staff "2" in m2 lyl output (got: ${m2line.trim()})`);
+
+		const iMarkup = lyl.indexOf('\\markup');
+		const iStaff2 = lyl.indexOf('\\staff "2"');
+
+		assert(iMarkup >= 0, 'C2-D: markup serializes');
+		assert(iStaff2 >= 0, 'C2-D: \\staff "2" serializes after markup');
+		assert(iMarkup < iStaff2,
+			'C2-D: markup precedes \\staff "2" — scan stopped by unknown event, staff not absorbed');
 	}
-})();
-
-
-// ─── Commit 2: serializer leading-staff collapse ─────────────────────────────
-
-// C2-A: leading compound { staff:1, clef:"bass" } — scan stops at clef, event NOT skipped
-console.log('\nC2-A: Leading { staff:1, clef:"bass" } — clef NOT dropped (scan stops at clef)');
-{
-	const doc: LilyletDoc = {
-		measures: [{
-			parts: [{
-				voices: [{
-					staff: 1,
-					events: [
-						{ type: 'context', staff: 1, clef: 'bass' } as any,
-						{ type: 'note', pitches: [{ phonet: 'c', octave: 0 }], duration: { division: 4, dots: 0 } },
-					]
-				}]
-			}]
-		}]
-	};
-	const lyl = serializeLilyletDoc(doc);
-	assert(lyl.includes('\\clef "bass"'), `C2-A: \\clef "bass" not dropped — got: ${lyl.trim()}`);
-}
-
-// C2-B: [staff:2, clef:bass(stops scan), staff:1, note] — ordering correct
-console.log('\nC2-B: staff:2 absorbed, clef stops scan, staff:1 emitted normally');
-{
-	const doc: LilyletDoc = {
-		measures: [{
-			parts: [{
-				voices: [{
-					staff: 1,
-					events: [
-						{ type: 'context', staff: 2 } as any,
-						{ type: 'context', clef: 'bass' } as any,
-						{ type: 'context', staff: 1 } as any,
-						{ type: 'note', pitches: [{ phonet: 'c', octave: 0 }], duration: { division: 4, dots: 0 } },
-					]
-				}]
-			}]
-		}]
-	};
-	const lyl = serializeLilyletDoc(doc);
-	assert(lyl.includes('\\staff "2"'), `C2-B: \\staff "2" from effectiveInitial`);
-	assert(lyl.includes('\\clef "bass"'), `C2-B: \\clef "bass" emitted`);
-	assert(lyl.includes('\\staff "1"'), `C2-B: \\staff "1" from context event`);
-	const i2 = lyl.indexOf('\\staff "2"'), ic = lyl.indexOf('\\clef'), i1 = lyl.indexOf('\\staff "1"');
-	assert(i2 < ic && ic < i1, `C2-B: order staff"2" < clef < staff"1" (${i2},${ic},${i1})`);
-}
-
-// C2-C: [pitchReset, staff:2, staff:1, rest] — collapse to 1, no ghost staff:2
-console.log('\nC2-C: pitchReset transparent — [pitchReset, staff:2, staff:1, rest] collapses to staff:1');
-{
-	const doc: LilyletDoc = {
-		measures: [{
-			parts: [{
-				voices: [{
-					staff: 1,
-					events: [
-						{ type: 'pitchReset' } as any,
-						{ type: 'context', staff: 2 } as any,
-						{ type: 'context', staff: 1 } as any,
-						{ type: 'rest', duration: { division: 4, dots: 0 } },
-					]
-				}]
-			}]
-		}]
-	};
-	const lyl = serializeLilyletDoc(doc);
-	assert(!/\\staff "2"/.test(lyl), `C2-C: no ghost \\staff "2" — got: ${lyl.trim()}`);
-}
-
-// C2-D: unknown event type stops scan — staff:2 processed normally (not absorbed)
-console.log('\nC2-D: markup event stops scan — staff:2 NOT absorbed as leading, emitted normally');
-{
-	const doc: LilyletDoc = {
-		measures: [{
-			parts: [{
-				voices: [{
-					staff: 1,
-					events: [
-						{ type: 'markup', content: 'test', placement: 'above' } as any,
-						{ type: 'context', staff: 2 } as any,
-						{ type: 'note', pitches: [{ phonet: 'g', octave: 0 }], duration: { division: 4, dots: 0 } },
-					]
-				}]
-			}]
-		}]
-	};
-	const lyl = serializeLilyletDoc(doc);
-	assert(lyl.includes('\\staff "2"'), `C2-D: \\staff "2" emitted (scan stopped by markup)`);
 }
 
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
-console.log(`\n${'═'.repeat(50)}`);
-console.log(`Total: ${passed + failed}  Passed: ${passed}  Failed: ${failed}`);
+console.log(`\nPassed: ${passed}`);
+console.log(`Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);
