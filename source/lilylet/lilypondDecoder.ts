@@ -556,7 +556,8 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 				// Update key/time from context on music events
 				if (term instanceof lilyParser.MusicEvent ||
 					term instanceof lilyParser.LilyTerms.StemDirection ||
-					term instanceof lilyParser.LilyTerms.OctaveShift) {
+					term instanceof lilyParser.LilyTerms.OctaveShift ||
+					term instanceof lilyParser.LilyTerms.Change) {
 
 					if (context.key && measure.key === null) {
 						measure.key = context.key.key;
@@ -750,10 +751,17 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						lastOttava = term.value;
 					}
 				}
-				// Handle staff change
+				// Handle staff change (\change Staff = "N")
+				// args[0] is Assignment { key: "Staff", value: { exp: '"N"' } }
 				else if (term instanceof lilyParser.LilyTerms.Change) {
-					// Ignore \change Staff commands - staff is fixed per track
-					// (Cross-staff notation is not supported in this decoder)
+					const assignment = (term as any).args?.[0];
+					if (assignment?.key === 'Staff') {
+						const exp: string = assignment?.value?.exp ?? '';
+						const staffNum = parseInt(exp.replace(/[^0-9]/g, ''), 10);
+						if (!isNaN(staffNum)) {
+							voice.events.push({ type: 'context', staff: staffNum } as any);
+						}
+					}
 				}
 				// Handle tempo
 				else if (term instanceof lilyParser.LilyTerms.Tempo) {
