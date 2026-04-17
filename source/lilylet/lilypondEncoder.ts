@@ -510,8 +510,12 @@ const encodeContextChange = (event: ContextChange): string => {
 /**
  * Encode a tuplet event
  */
-const encodeTupletEvent = (event: TupletEvent, env: PitchEnv, lastDuration: Duration | null): { str: string; newEnv: PitchEnv; newDuration: Duration | null } => {
-	let result = `\\tuplet ${event.ratio.denominator}/${event.ratio.numerator} { `;
+const encodeTupletEvent = (event: TupletEvent | TimesEvent, env: PitchEnv, lastDuration: Duration | null): { str: string; newEnv: PitchEnv; newDuration: Duration | null } => {
+	// \times preserves type:"times"; \tuplet is denominator/numerator
+	const header = event.type === 'times'
+		? `\\times ${event.ratio.numerator}/${event.ratio.denominator}`
+		: `\\tuplet ${event.ratio.denominator}/${event.ratio.numerator}`;
+	let result = `${header} { `;
 	let newEnv = env;
 	let newDuration = lastDuration;
 
@@ -653,7 +657,7 @@ const encodeVoice = (
 			}
 			case 'tuplet':
 			case 'times': {
-				const { str, newEnv, newDuration } = encodeTupletEvent(event as TupletEvent, env, lastDuration);
+				const { str, newEnv, newDuration } = encodeTupletEvent(event as TupletEvent | TimesEvent, env, lastDuration);
 				result += str + ' ';
 				env = newEnv;
 				lastDuration = newDuration;

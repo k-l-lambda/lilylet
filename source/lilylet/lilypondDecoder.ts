@@ -834,27 +834,25 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					// Handle tuplet
 					// Note: Lotus emits Chord events BEFORE the Tuplet term, so we need to
 					// remove the already-added notes and wrap them in a TupletEvent
-					else if (termAny.proto === 'Tuplet') {
-						const ratioStr = termAny.args?.[0];  // e.g., "3/2"
+					else if (termAny.proto === 'Tuplet' || termAny.proto === 'Times') {
+						const isTimes = termAny.proto === 'Times';
+						const ratioStr = termAny.args?.[0];  // "3/2" for \tuplet, "2/3" for \times
 						const body = termAny.args?.[1]?.body || [];
 
 						if (ratioStr && body.length > 0) {
-							// Parse ratio string
 							const ratioMatch = ratioStr.match(/^(\d+)\/(\d+)$/);
 							if (ratioMatch) {
 								const [, num, denom] = ratioMatch;
-								const ratio: Fraction = {
-									numerator: parseInt(denom, 10),  // Swapped: lilylet uses actual/normal
-									denominator: parseInt(num, 10),
-								};
+								// \tuplet 3/2: divider = 3/2, lilylet ratio = 2/3 → swap
+								// \times 2/3: factor = 2/3, lilylet ratio = 2/3 → no swap
+								const ratio: Fraction = isTimes
+									? { numerator: parseInt(num, 10), denominator: parseInt(denom, 10) }
+									: { numerator: parseInt(denom, 10), denominator: parseInt(num, 10) };
 
-								// Count how many note/rest events are in the tuplet body
 								const noteCount = body.filter((item: any) =>
 									item.proto === 'Chord' || item.proto === 'Rest'
 								).length;
 
-								// Remove the last noteCount note/rest events from voice.events
-								// (they were already added by the Chord/Rest handlers)
 								const tupletEvents: (NoteEvent | RestEvent)[] = [];
 								let removed = 0;
 								while (removed < noteCount && voice.events.length > 0) {
@@ -863,17 +861,15 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 										tupletEvents.unshift(voice.events.pop()! as NoteEvent | RestEvent);
 										removed++;
 									} else {
-										break;  // Stop if we hit a non-note/rest event
+										break;
 									}
 								}
 
 								if (tupletEvents.length > 0) {
-									const tupletEvent: TupletEvent = {
-										type: 'tuplet',
-										ratio,
-										events: tupletEvents,
-									};
-									voice.events.push(tupletEvent);
+									voice.events.push(isTimes
+										? { type: 'times', ratio, events: tupletEvents } as any
+										: { type: 'tuplet', ratio, events: tupletEvents } as TupletEvent
+									);
 								}
 							}
 						}
