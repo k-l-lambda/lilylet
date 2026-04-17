@@ -860,11 +860,16 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 
 								const tupletEvents: (NoteEvent | RestEvent)[] = [];
 								let removed = 0;
+								// Pop notes/rests from voice.events, skipping over context events
+								// that were emitted between notes (e.g. \tempo inside a tuplet)
 								while (removed < noteCount && voice.events.length > 0) {
 									const lastEvent = voice.events[voice.events.length - 1];
 									if (lastEvent.type === 'note' || lastEvent.type === 'rest') {
 										tupletEvents.unshift(voice.events.pop()! as NoteEvent | RestEvent);
 										removed++;
+									} else if (lastEvent.type === 'context' || lastEvent.type === 'pitchReset') {
+										// Context event between tuplet notes — move it inside tuplet too
+										tupletEvents.unshift(voice.events.pop()! as any);
 									} else {
 										break;
 									}
