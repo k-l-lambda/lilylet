@@ -516,8 +516,8 @@ grace_event
 	;
 
 tuplet_event
-	: CMD_TIMES NUMBER '/' NUMBER '{' voice_events '}'		-> timesEvent(fraction(Number($2), Number($4)), $6.filter(e => e.type === 'note' || e.type === 'rest'))
-	| CMD_TUPLET NUMBER '/' NUMBER '{' voice_events '}'		-> tupletEvent(fraction(Number($4), Number($2)), $6.filter(e => e.type === 'note' || e.type === 'rest'))
+	: CMD_TIMES NUMBER '/' NUMBER '{' voice_events '}'		-> timesEvent(fraction(Number($2), Number($4)), $6.filter(e => e.type === 'note' || e.type === 'rest' || e.type === 'context'))
+	| CMD_TUPLET NUMBER '/' NUMBER '{' voice_events '}'		-> tupletEvent(fraction(Number($4), Number($2)), $6.filter(e => e.type === 'note' || e.type === 'rest' || e.type === 'context'))
 	;
 
 tremolo_pitches

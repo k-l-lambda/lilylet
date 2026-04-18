@@ -232,6 +232,35 @@ for (let ri = 0; ri < refDoc.measures.length; ri++) {
 
 console.log(`\nReplaced: ${replacedMeasures} voices, failed: ${failedMeasures}`);
 
+// ─── post-process merged doc ──────────────────────────────────────────────────
+
+// 1. Remove voices that contain only spacer rests (invisible=true) and context events
+const isSpacerOnlyVoice = (v: Voice): boolean =>
+	v.events.every(e =>
+		e.type === 'context' || e.type === 'pitchReset' ||
+		(e.type === 'rest' && (e as RestEvent).invisible === true)
+	);
+
+for (const m of merged.measures) {
+	for (const p of m.parts) {
+		p.voices = p.voices.filter(v => !isSpacerOnlyVoice(v));
+	}
+	// Remove parts with no voices
+	m.parts = m.parts.filter(p => p.voices.length > 0);
+}
+
+// 2. Remove trailing empty measures (no note/rest content)
+while (merged.measures.length > 0) {
+	const last = merged.measures[merged.measures.length - 1];
+	const hasContent = last.parts.some(p =>
+		p.voices.some(v =>
+			v.events.some(e => e.type === 'note' || e.type === 'rest')
+		)
+	);
+	if (!hasContent) merged.measures.pop();
+	else break;
+}
+
 // ─── serialize ────────────────────────────────────────────────────────────────
 
 const output = serializeLilyletDoc(merged);
