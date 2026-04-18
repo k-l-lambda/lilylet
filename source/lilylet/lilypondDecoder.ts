@@ -963,12 +963,17 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					}
 				}
 
-				// Update carryStaff from this measure's events
-				for (const e of voice.events) {
-					if (e.type === 'context' && (e as any).staff) {
-						carryStaff = (e as any).staff;
+				// Update carryStaff from this measure's events (including inside tuplets)
+				const scanStaff = (events: any[]): void => {
+					for (const e of events) {
+						if (e.type === 'context' && (e as any).staff) {
+							carryStaff = (e as any).staff;
+						} else if ((e.type === 'tuplet' || e.type === 'times') && e.events) {
+							scanStaff(e.events);
+						}
 					}
-				}
+				};
+				scanStaff(voice.events);
 			}
 		}
 	});
