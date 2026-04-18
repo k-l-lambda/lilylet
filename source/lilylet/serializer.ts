@@ -472,6 +472,8 @@ const serializeTupletEvent = (
 			parts.push(' ' + str);
 			currentEnv = newEnv;
 			prevDuration = (e as RestEvent).duration;
+		} else if (e.type === 'context' && (e as any).staff != null) {
+			parts.push(' \\staff "' + (e as any).staff + '"');
 		}
 	}
 
