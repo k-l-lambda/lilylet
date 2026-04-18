@@ -756,6 +756,12 @@ const serializeVoice = (
 			prevDuration = (event as NoteEvent).duration;
 		} else if (event.type === 'rest') {
 			prevDuration = (event as RestEvent).duration;
+		} else if (event.type === 'tuplet' || event.type === 'times') {
+			// After a tuplet/times block the LilyPond parser's "current duration" is the
+			// last note duration inside the tuplet, not the duration before the tuplet.
+			// Reset prevDuration so the first note after the block always emits its
+			// duration explicitly, avoiding wrong inheritance from inside the tuplet.
+			prevDuration = undefined;
 		} else if (event.type === 'context' && (event as ContextChange).clef && emittedClefs) {
 			const ctx = event as ContextChange;
 			emittedClefs[ctx.staff || activeStaff] = ctx.clef!;
