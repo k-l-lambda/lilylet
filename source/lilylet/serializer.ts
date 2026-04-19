@@ -849,7 +849,7 @@ const serializeMeasure = (
 			}
 			staff = newStaff;
 		}
-		parts.push(partStrs.join(' \\\\\\\\\n'));
+		parts.push(partStrs.join(' \\\\\\\n'));
 	}
 
 	return { str: parts.join(' '), newStaff: staff };

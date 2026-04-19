@@ -489,6 +489,28 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 
 	const interpreter = lilyDocument.interpret();
 
+	// Pre-compute partIndex for each track using staff-number-sequence heuristic.
+	// When staff numbers reset (decrease), a new part starts — this handles multi-PianoStaff
+	// scores where both pianos reuse the same staff names ("1" and "2").
+	// Scores that embed partIndex in the staff name ("1_1", "1_2", "2_1") are handled
+	// by parseStaffName; this heuristic only kicks in for plain numeric names.
+	let _seqPart = 1;
+	let _seqMaxStaff = 0;
+	const _trackPartIndices: number[] = interpreter.layoutMusic.musicTracks.map((track: any) => {
+		const staffName: string | undefined = track.contextDict?.Staff;
+		if (staffName && /^\d+_\d+$/.test(staffName)) {
+			// Staff name encodes partIndex explicitly — don't apply heuristic
+			return parseInt(staffName.split('_')[0], 10);
+		}
+		const staffNum = parseInt(staffName ?? '1', 10) || 1;
+		if (_seqMaxStaff > 0 && staffNum < _seqMaxStaff) {
+			_seqPart++;
+			_seqMaxStaff = 0;
+		}
+		_seqMaxStaff = Math.max(_seqMaxStaff, staffNum);
+		return _seqPart;
+	});
+
 	interpreter.layoutMusic.musicTracks.forEach((track, vi) => {
 		const appendStaff = (staffName: string): void => {
 			if (!staffNames.includes(staffName)) {
@@ -523,7 +545,8 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		const parsedStaff = initialStaffName ? parseStaffName(initialStaffName) : { partIndex: 1, staffNum: 1 };
 		// Use these as fixed values for this track - don't update from context.staffName
 		const trackStaff = parsedStaff.staffNum;
-		const trackPartIndex = parsedStaff.partIndex;
+		// Use sequence-based partIndex (detects multi-PianoStaff via staff number reset)
+		const trackPartIndex = _trackPartIndices[vi] ?? parsedStaff.partIndex;
 
 		// Track emitted context events across measures for this voice
 		let lastKey: number | undefined = undefined;  // Track value changes (key fifths)
