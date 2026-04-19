@@ -19,7 +19,6 @@
  * Usage: npx tsx tests/unit/changeStaffBeforeTuplet.test.ts
  */
 
-import fs from 'fs';
 import { decode } from '../../source/lilylet/lilypondDecoder';
 import { serializeLilyletDoc } from '../../source/lilylet/serializer';
 import { parseCode } from '../../source/lilylet/parser';
@@ -246,73 +245,159 @@ await (async () => {
 })();
 
 
-// ─── Test 3: actual rachmaninoff-3-2.ly measure 42 ───────────────────────────
+// ─── Test 3: two-PianoStaff score, cross-staff voice in Piano I ──────────────
 //
-// PartPOneVoiceThree lives in \context Staff = "2".
-// Measure 41 has 4 triplets each with internal \change Staff alternations,
-// ending on staff=2. Measure 42 opens: \change Staff = "1" \times 2/3 {...}.
-// Expected lyl measure 42 (the 43rd, 1-indexed %43): first voice starts \staff "1".
-// Regression: after recent commits, it starts \staff "2".
+// Rachmaninoff has two PianoStaffs.  Piano I, Staff "2" has a cross-staff voice
+// that plays 4-tuplet patterns across many measures.  Adding a second PianoStaff
+// (Piano II) is the structural difference from Test 2 that triggers the regression.
 //
-// The lyl comment numbers are 1-indexed, so lyl measure N (0-indexed) = %N+1.
-// In the serialized lyl, the PartPOneVoiceThree's cross-staff pattern
-// appears as the FIRST voice line in each measure.
+// Minimal reproduction: 2 PianoStaffs, cross-staff voice in Piano I runs for 3+
+// measures ending staff=2, then one more measure should start on staff=1.
 
-const RACH_LY_PATH = '/home/camus/work/lilypond-scores/topology/rachmaninoff/rachmaninoff-3-2.ly';
+const LY_TWO_PIANOSTAFFS = LY_BOILERPLATE + `
+\\score {
+  <<
+    \\new PianoStaff \\with { instrumentName = "Piano I" } <<
+      \\context Staff = "1" { \\time 4/4 c'1 | c'1 | c'1 | c'1 | }
+      \\context Staff = "2" <<
+        \\new Voice {
+          \\change Staff = "1" \\times 2/3 { c'8 [ \\change Staff = "2" c8 \\change Staff = "1" c'8 ] }
+          \\change Staff = "2" \\times 2/3 { e8 [ \\change Staff = "1" e'8 \\change Staff = "2" e8 ] }
+          \\change Staff = "1" \\times 2/3 { g'8 [ \\change Staff = "2" g8 \\change Staff = "1" g'8 ] }
+          \\change Staff = "2" \\times 2/3 { a8 [ \\change Staff = "1" a'8 \\change Staff = "2" a8 ] } |
+          \\change Staff = "1" \\times 2/3 { c'8 [ \\change Staff = "2" c8 \\change Staff = "1" c'8 ] }
+          \\change Staff = "2" \\times 2/3 { e8 [ \\change Staff = "1" e'8 \\change Staff = "2" e8 ] }
+          \\change Staff = "1" \\times 2/3 { g'8 [ \\change Staff = "2" g8 \\change Staff = "1" g'8 ] }
+          \\change Staff = "2" \\times 2/3 { a8 [ \\change Staff = "1" a'8 \\change Staff = "2" a8 ] } |
+          \\change Staff = "1" \\times 2/3 { c'8 [ \\change Staff = "2" c8 \\change Staff = "1" c'8 ] }
+          \\change Staff = "2" \\times 2/3 { e8 [ \\change Staff = "1" e'8 \\change Staff = "2" e8 ] }
+          \\change Staff = "1" \\times 2/3 { g'8 [ \\change Staff = "2" g8 \\change Staff = "1" g'8 ] }
+          \\change Staff = "2" \\times 2/3 { a8 [ \\change Staff = "1" a'8 \\change Staff = "2" a8 ] } |
+          \\change Staff = "1" \\times 2/3 { b'8 [ \\change Staff = "2" b8 \\change Staff = "1" b'8 ] }
+          \\change Staff = "2" \\times 2/3 { d8 [ \\change Staff = "1" d'8 \\change Staff = "2" d8 ] }
+          \\change Staff = "1" \\times 2/3 { f'8 [ \\change Staff = "2" f8 \\change Staff = "1" f'8 ] }
+          \\change Staff = "2" \\times 2/3 { g8 [ \\change Staff = "1" g'8 \\change Staff = "2" g8 ] } |
+        }
+      >>
+    >>
+    \\new PianoStaff \\with { instrumentName = "Piano II" } <<
+      \\context Staff = "1" { c'1 | c'1 | c'1 | c'1 | }
+      \\context Staff = "2" { c,,1 | c,,1 | c,,1 | c,,1 | }
+    >>
+  >>
+  \\layout { }
+}
+`;
 
-console.log('\nTest 3: rachmaninoff-3-2.ly — actual file, measure 42 voice start staff');
+console.log('\nTest 3: two-PianoStaff score — cross-staff voice in Piano I');
 console.log('─'.repeat(60));
 
 await (async () => {
-	// Read the actual .ly file
-	let lyContent: string;
-	try {
-		lyContent = fs.readFileSync(RACH_LY_PATH, 'utf-8');
-	} catch {
-		console.log('  ⚠ SKIP  rachmaninoff .ly not found at ' + RACH_LY_PATH);
-		return;
-	}
-
-	const doc = await decode(lyContent);
-	assert(doc.measures.length > 42, `decoded enough measures (got ${doc.measures.length})`);
-	if (doc.measures.length <= 42) return;
+	const doc = await decode(LY_TWO_PIANOSTAFFS);
+	assert(doc.measures.length >= 4, `decoded ≥ 4 measures (got ${doc.measures.length})`);
+	if (doc.measures.length < 4) return;
 
 	const lyl = serializeLilyletDoc(doc);
 	const parsed = parseCode(lyl);
+	assert(parsed.measures.length >= 4, `parsed lyl has ≥ 4 measures (got ${parsed.measures.length})`);
+	if (parsed.measures.length < 4) return;
 
-	assert(parsed.measures.length > 42, `parsed lyl has enough measures (got ${parsed.measures.length})`);
-	if (parsed.measures.length <= 42) return;
+	// Every measure should have its cross-staff voice start on staff=1
+	// (because \change Staff = "1" precedes the first tuplet every time)
+	for (let mi = 0; mi < 4; mi++) {
+		const m = parsed.measures[mi];
+		let crossVoice: any;
+		for (const part of m.parts) {
+			for (const v of part.voices) {
+				if (v.events.some((e: any) => e.type === 'tuplet' || e.type === 'times')) {
+					crossVoice = v; break;
+				}
+			}
+			if (crossVoice) break;
+		}
+		if (!crossVoice) continue;
+		const initStaff = crossVoice.staff || 1;
+		assert(
+			initStaff === 1,
+			`measure ${mi} cross-staff voice starts staff=1 in two-PianoStaff score — got staff=${initStaff}`
+		);
+	}
+})();
 
-	// Measure 41 (0-indexed) = lyl %42 = the block that ENDS with | %42.
-	// This is PartPOneVoiceThree's 4-tuplet cross-staff measure.
-	// It should START on staff=1 because \change Staff = "1" precedes
-	// the first \times 2/3 block — but regression: serializer outputs \staff "2".
-	const m42 = parsed.measures[41];
+
+
+
+// ─── Test 4: spacer measure then bare \times (no explicit \change Staff) ─────
+//
+// Distilled from rachmaninoff-3-2.ly L217-237.  PartPOneVoiceThree:
+//
+//   measure 1: \change Staff = "2" s4  \change Staff = "1" \times 2/3 {...} s4
+//              → ends on staff=1  (carryStaff = 1 after this measure)
+//   measure 2: s1                      → spacer whole measure, no staff change
+//              → carryStaff stays 1
+//   measure 3: \times 2/3 {...}        → bare tuplet, NO leading \change Staff
+//              → should inherit carryStaff=1, output \staff "1"
+//   Bug:       outputs \staff "2"  (carryStaff mechanism broken)
+
+const LY_SPACER_THEN_BARE_TUPLET = LY_BOILERPLATE + `
+\\score {
+  \\new PianoStaff \\with { instrumentName = "Piano I" } <<
+    \\context Staff = "1" { \\time 4/4 c'1 | c'1 | c'1 | }
+    \\context Staff = "2" <<
+      \\new Voice {
+        \\change Staff = "2" s4
+        \\change Staff = "1" \\times 2/3 { c'8 [ \\change Staff = "2" c8 \\change Staff = "1" c'8 ] }
+        \\change Staff = "2" \\times 2/3 { e8 [ \\change Staff = "1" e'8 \\change Staff = "2" e8 ] }
+        \\change Staff = "1" \\times 2/3 { g'8 [ \\change Staff = "2" g8 \\change Staff = "1" g'8 ] }
+        s4 |
+        s1 |
+        \\times 2/3 { c'8 [ \\change Staff = "2" c8 \\change Staff = "1" c'8 ] }
+        \\change Staff = "2" \\times 2/3 { e8 [ \\change Staff = "1" e'8 \\change Staff = "2" e8 ] }
+        \\change Staff = "1" \\times 2/3 { g'8 [ \\change Staff = "2" g8 \\change Staff = "1" g'8 ] }
+        \\change Staff = "2" \\times 2/3 { a8 [ \\change Staff = "1" a'8 \\change Staff = "2" a8 ] } |
+      }
+    >>
+  >>
+  \\new PianoStaff \\with { instrumentName = "Piano II" } <<
+    \\context Staff = "1" { c'1 | c'1 | c'1 | }
+    \\context Staff = "2" { c,,1 | c,,1 | c,,1 | }
+  >>
+  \\layout { }
+}
+`;
+
+console.log('\nTest 4: spacer measure then bare \\times (carryStaff=1 should propagate)');
+console.log('─'.repeat(60));
+
+await (async () => {
+	const doc = await decode(LY_SPACER_THEN_BARE_TUPLET);
+	assert(doc.measures.length >= 3, `decoded ≥ 3 measures (got ${doc.measures.length})`);
+	if (doc.measures.length < 3) return;
+
+	const lyl = serializeLilyletDoc(doc);
+	const parsed = parseCode(lyl);
+	assert(parsed.measures.length >= 3, `parsed lyl has ≥ 3 measures (got ${parsed.measures.length})`);
+	if (parsed.measures.length < 3) return;
+
+	// measure 2 (0-indexed) = the bare-\times measure.
+	// carryStaff from m1 = 1 (last \change Staff = "1"), m2 = s1 (no change).
+	// Carry-over of staff=1 should be prepended → voice starts \staff "1".
+	const m2 = parsed.measures[2];
 	let crossVoice: any;
-	for (const part of m42.parts) {
+	for (const part of m2.parts) {
 		for (const v of part.voices) {
-			// The cross-staff voice alternates staff and has tuplets
-			const hasSwitch = v.events.some((e: any) =>
-				e.type === 'context' && e.staff != null
-			);
-			const hasTuplet = v.events.some((e: any) =>
-				e.type === 'tuplet' || e.type === 'times'
-			);
-			if (hasSwitch && hasTuplet) {
-				crossVoice = v;
-				break;
+			if (v.events.some((e: any) => e.type === 'tuplet' || e.type === 'times')) {
+				crossVoice = v; break;
 			}
 		}
 		if (crossVoice) break;
 	}
-
-	assert(!!crossVoice, 'measure 42 has a cross-staff voice with tuplets and staff switches');
-
+	assert(!!crossVoice, 'measure 2 has a voice with tuplet content');
 	if (crossVoice) {
 		const initStaff = crossVoice.staff || 1;
 		assert(
 			initStaff === 1,
-			`rachmaninoff m42 cross-staff voice starts on staff 1 — got staff=${initStaff}`
+			`measure 2 (bare \\times after spacer) voice starts staff=1 — got staff=${initStaff}`
 		);
 	}
 })();
