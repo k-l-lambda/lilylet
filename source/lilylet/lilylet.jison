@@ -51,22 +51,43 @@
 		mode,
 	});
 
-	const voice = (staff, events) => ({
-		staff: staff || 1,
-		events,
-	});
+	const voice = (staff, events) => {
+		// Use the first \staff "N" context event that appears before any musical event
+		// (notes/rests/tuplets) as the authoritative voice.staff.
+		// Skip pitchReset events (from NEWLINE tokens at voice-line boundaries).
+		// This ensures \staff "1" \times ... \staff "2" ... gives voice.staff=1,
+		// not 2 (the final currentStaff value), while \staff "2" c1 gives voice.staff=2.
+		let leadingStaff = null;
+		for (const e of events) {
+			if (!e) continue;
+			if (e.type === 'pitchReset') continue;
+			if (e.type === 'context' && e.staff != null) { leadingStaff = e.staff; break; }
+			break; // first non-pitchReset non-staff-context event → stop
+		}
+		return {
+			staff: leadingStaff != null ? leadingStaff : (staff || 1),
+			events,
+		};
+	};
 
 	const part = (voices, name) => ({
 		name: name || undefined,
 		voices,
 	});
 
-	const measure = (parts, key, timeSig, partial) => ({
-		key: key || undefined,
-		timeSig: timeSig || undefined,
-		parts,
-		partial: partial || undefined,
-	});
+	const MUSICAL = new Set(['note', 'rest', 'tuplet', 'times', 'tremolo', 'barline']);
+	const hasMusicalContent = (parts) =>
+		parts.some(p => p.voices.some(v => v.events.some(e => e && MUSICAL.has(e.type))));
+
+	const measure = (parts, key, timeSig, partial) => {
+		if (!hasMusicalContent(parts)) return null;
+		return {
+			key: key || undefined,
+			timeSig: timeSig || undefined,
+			parts,
+			partial: partial || undefined,
+		};
+	};
 
 	const tupletEvent = (ratio, events) => ({
 		type: 'tuplet',
@@ -320,8 +341,8 @@ header
 	;
 
 measures
-	: measure_content							{ $$ = [$1]; }
-	| measures '|' measure_content				{ $$ = $1.concat([$3]); }
+	: measure_content							{ $$ = $1 ? [$1] : []; }
+	| measures '|' measure_content				{ $$ = $3 ? $1.concat([$3]) : $1; }
 	| measures '|'								{ $$ = $1; }
 	;
 
@@ -338,9 +359,13 @@ part_start
 	: /* empty */								%{ currentStaff = 1; currentOttava = 0; %}
 	;
 
+voice_staff_mark
+	: /* empty */								{ $$ = currentStaff; }
+	;
+
 part_voices
-	: voice_events								{ $$ = [voice(currentStaff, $1)]; }
-	| part_voices VOICE_SEP voice_events		{ $$ = $1.concat([voice(currentStaff, $3)]); }
+	: voice_staff_mark voice_events							{ $$ = [voice($1, $2)]; }
+	| part_voices VOICE_SEP voice_staff_mark voice_events	{ $$ = $1.concat([voice($3, $4)]); }
 	;
 
 voice_events
