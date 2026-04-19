@@ -502,12 +502,26 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 			// Staff name encodes partIndex explicitly — don't apply heuristic
 			return parseInt(staffName.split('_')[0], 10);
 		}
-		const staffNum = parseInt(staffName ?? '1', 10) || 1;
-		if (_seqMaxStaff > 0 && staffNum < _seqMaxStaff) {
-			_seqPart++;
-			_seqMaxStaff = 0;
+		// PianoStaff is present (even as empty string "") when inside a grand-staff group;
+		// undefined means standalone instrument → different part from grand-staff tracks.
+		const hasPianoStaff = (track.contextDict?.PianoStaff !== undefined);
+		const staffNum = parseInt(staffName || '1', 10) || 1;
+
+		if (hasPianoStaff) {
+			// Grand-staff: new part if transitioning from standalone or staff resets
+			if (_seqMaxStaff > 0 && staffNum < _seqMaxStaff) {
+				_seqPart++;
+				_seqMaxStaff = 0;
+			} else if (_seqMaxStaff === -1) {
+				// Transitioning from a standalone group
+				_seqPart++;
+				_seqMaxStaff = 0;
+			}
+			_seqMaxStaff = Math.max(_seqMaxStaff, staffNum);
+		} else {
+			// Standalone: mark with -1 so next grand-staff group increments
+			_seqMaxStaff = -1;
 		}
-		_seqMaxStaff = Math.max(_seqMaxStaff, staffNum);
 		return _seqPart;
 	});
 
@@ -542,7 +556,10 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		if (initialStaffName) {
 			appendStaff(initialStaffName);
 		}
-		const parsedStaff = initialStaffName ? parseStaffName(initialStaffName) : { partIndex: 1, staffNum: 1 };
+		// Empty string staff name ("") means unnamed staff — treat as staff 1 within its part
+		const parsedStaff = (initialStaffName != null && initialStaffName !== '')
+			? parseStaffName(initialStaffName)
+			: { partIndex: 1, staffNum: 1 };
 		// Use these as fixed values for this track - don't update from context.staffName
 		const trackStaff = parsedStaff.staffNum;
 		// Use sequence-based partIndex (detects multi-PianoStaff via staff number reset)
