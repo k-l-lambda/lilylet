@@ -68,7 +68,7 @@
 			break; // first musical/structural event — stop
 		}
 		return {
-			staff: leadingStaff != null ? leadingStaff : (staff || 1),
+			staff: leadingStaff != null ? leadingStaff : 1,
 			events,
 		};
 	};
@@ -362,13 +362,9 @@ part_start
 	: /* empty */								%{ currentStaff = 1; currentOttava = 0; %}
 	;
 
-voice_staff_mark
-	: /* empty */								{ $$ = currentStaff; }
-	;
-
 part_voices
-	: voice_staff_mark voice_events							{ $$ = [voice($1, $2)]; }
-	| part_voices VOICE_SEP voice_staff_mark voice_events	{ $$ = $1.concat([voice($3, $4)]); }
+	: voice_events								{ $$ = [voice(currentStaff, $1)]; }
+	| part_voices VOICE_SEP voice_events		{ $$ = $1.concat([voice(currentStaff, $3)]); }
 	;
 
 voice_events

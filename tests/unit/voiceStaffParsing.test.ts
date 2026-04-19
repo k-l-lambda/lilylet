@@ -57,9 +57,22 @@ console.log('\nCase A2: \\key before \\staff "2" — staff must be 2');
 console.log('\nCase A3: multiple context events before \\staff "2" \\times');
 {
 	const lyl = `\\time 4/4 \\clef "treble" \\key c \\major \\staff "2" \\times 2/3 { c8 d e } r2. |`;
-	const staff = voiceStaff(lyl);
-	assert(staff === 2,
-		`context chain before \\staff "2" → voice.staff=2 (got ${staff})`);
+	const doc = parseCode(lyl);
+	const voice = doc.measures[0]?.parts[0]?.voices[0];
+	assert(!!voice, 'voice exists');
+
+	if (voice) {
+		assert(voice.staff === 2,
+			`context chain before \\staff "2" → voice.staff=2 (got ${voice.staff})`);
+
+		// Verify the event stream: leading context events (non-staff) then staff=2 context before tuplet
+		const staffCtxIdx = voice.events.findIndex((e: any) => e.type === 'context' && e.staff === 2);
+		const tupletIdx = voice.events.findIndex((e: any) => e.type === 'tuplet' || e.type === 'times');
+		assert(staffCtxIdx >= 0, `context{staff:2} event exists in events`);
+		assert(tupletIdx >= 0, `tuplet event exists in events`);
+		assert(staffCtxIdx < tupletIdx,
+			`context{staff:2} (idx=${staffCtxIdx}) appears before tuplet (idx=${tupletIdx})`);
+	}
 }
 
 
@@ -73,17 +86,22 @@ console.log('\nCase A4: \\staff "1" then \\staff "2" — leading staff is 1');
 }
 
 
-// ─── Case B1: second voice after \\ with no explicit \staff ──────────────────
+// ─── Case B1: second voice — stale currentStaff=2 must NOT leak ──────────────
+// Voice 0 ends after switching to \staff "2" (currentStaff=2 is stale).
+// Voice 1 has no explicit \staff — should default to staff=1 (part_start reset),
+// NOT inherit the stale currentStaff=2 from voice 0.
 
-console.log('\nCase B1: second voice (no leading \\staff) inherits staff=1 default');
+console.log('\nCase B1: second voice (no \\staff) must NOT inherit stale currentStaff=2');
 {
-	const lyl = `\\staff "1" c4 d e f \\\\ c4 d e f |`;
+	const lyl = `\\staff "1" c4 \\staff "2" d e f \\\\ g4 a b c |`;
 	const doc = parseCode(lyl);
 	const voices = doc.measures[0]?.parts[0]?.voices ?? [];
 	assert(voices.length === 2, `two voices parsed (got ${voices.length})`);
-	assert(voices[0].staff === 1, `voice 0 staff=1 (got ${voices[0]?.staff})`);
-	// voice 1 has no \staff → falls back to currentStaff=1 from part_start
-	assert(voices[1].staff === 1, `voice 1 (no \\ staff) defaults to staff=1 (got ${voices[1]?.staff})`);
+	assert(voices[0].staff === 1, `voice 0 leading \\staff "1" (got ${voices[0]?.staff})`);
+	// part_start resets currentStaff=1 for each part_voices attempt;
+	// if stale currentStaff=2 leaked, voice 1 would wrongly get staff=2
+	assert(voices[1].staff === 1,
+		`voice 1 no \\staff → defaults to 1, not stale 2 (got ${voices[1]?.staff})`);
 }
 
 
