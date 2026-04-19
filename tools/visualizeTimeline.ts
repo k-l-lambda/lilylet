@@ -45,14 +45,15 @@ interface Bar {
 
 function pitchLabel(ne: NoteEvent): string {
 	if (ne.pitches.length === 0) return '?';
-	if (ne.pitches.length === 1) {
-		const p = ne.pitches[0];
+	// Scientific pitch notation: middle C (lilylet octave 0) = C4
+	const sciPitch = (p: typeof ne.pitches[0]) => {
 		const acc = p.accidental === 'sharp' ? '#'
 		          : p.accidental === 'flat'  ? 'b'
 		          : p.accidental === 'natural' ? '♮' : '';
-		return `${p.phonet}${acc}${p.octave}`;
-	}
-	return `<${ne.pitches.map(p => p.phonet).join('')}>`;
+		return `${p.phonet.toUpperCase()}${acc}${p.octave + 4}`;
+	};
+	if (ne.pitches.length === 1) return sciPitch(ne.pitches[0]);
+	return `<${ne.pitches.map(p => p.phonet.toUpperCase()).join('')}>`;
 }
 
 function flattenEvents(events: Event[], initialStaff: number): Bar[] {
@@ -60,7 +61,10 @@ function flattenEvents(events: Event[], initialStaff: number): Bar[] {
 	let tick = 0;
 	let currentStaff = initialStaff;
 
-	function walk(ev: Event): void {
+	// tickMul accumulates the time-warp from enclosing tuplet/times blocks.
+	// Inner event durations from parseCode() are written values with no tuplet
+	// ratio applied, so we multiply manually when descending into a block.
+	function walk(ev: Event, tickMul: number): void {
 		switch (ev.type) {
 			case 'note': {
 				const ne = ev as NoteEvent;
@@ -68,14 +72,14 @@ function flattenEvents(events: Event[], initialStaff: number): Bar[] {
 					bars.push({ start: tick, dur: 0, label: pitchLabel(ne), kind: 'grace' });
 					return;
 				}
-				const dur = durationTicks(ne.duration);
+				const dur = Math.round(durationTicks(ne.duration) * tickMul);
 				bars.push({ start: tick, dur, label: pitchLabel(ne), kind: 'note' });
 				tick += dur;
 				break;
 			}
 			case 'rest': {
 				const re = ev as RestEvent;
-				const dur = durationTicks(re.duration);
+				const dur = Math.round(durationTicks(re.duration) * tickMul);
 				const lbl = re.fullMeasure ? 'R' : re.invisible ? 's' : 'r';
 				bars.push({ start: tick, dur, label: lbl, kind: 'rest' });
 				tick += dur;
@@ -93,7 +97,8 @@ function flattenEvents(events: Event[], initialStaff: number): Bar[] {
 			case 'tuplet':
 			case 'times': {
 				const te = ev as TupletEvent | TimesEvent;
-				for (const inner of te.events) walk(inner as Event);
+				const mul = tickMul * te.ratio.numerator / te.ratio.denominator;
+				for (const inner of te.events) walk(inner as Event, mul);
 				break;
 			}
 			case 'tremolo': {
@@ -106,7 +111,7 @@ function flattenEvents(events: Event[], initialStaff: number): Bar[] {
 		}
 	}
 
-	for (const ev of events) walk(ev);
+	for (const ev of events) walk(ev, 1);
 	return bars;
 }
 
@@ -211,9 +216,9 @@ function measureSvg(voices: { label: string; bars: Bar[] }[]): string {
 			}
 
 			if (bar.kind === 'staff-change') {
-				// Dashed vertical line + arrow label
+				// Dashed vertical line; arrow text to the LEFT so it doesn't overlap the following note
 				lines.push(`<line x1="${bx}" y1="${rowY + 1}" x2="${bx}" y2="${rowY + ROW_H - 1}" stroke="#777" stroke-width="1.2" stroke-dasharray="3,2"/>`);
-				lines.push(`<text x="${bx + 3}" y="${rowY + ROW_H / 2 + 5}" fill="#444" font-size="13" font-weight="bold">${bar.label}</text>`);
+				lines.push(`<text x="${bx - 3}" y="${rowY + ROW_H / 2 + 5}" text-anchor="end" fill="#555" font-size="13" font-weight="bold">${bar.label}</text>`);
 				continue;
 			}
 
@@ -240,72 +245,95 @@ function measureSvg(voices: { label: string; bars: Bar[] }[]): string {
 	return lines.join('\n');
 }
 
+// ─── per-file logic ───────────────────────────────────────────────────────────
+
+function processFile(inputPath: string, outputPath: string): void {
+	const src = fs.readFileSync(inputPath, 'utf-8');
+	const doc = parseCode(src);
+	const measureSources = extractMeasureSources(src);
+
+	const mdLines: string[] = [];
+	mdLines.push(`# Timeline: ${path.basename(inputPath)}\n`);
+
+	for (let mi = 0; mi < doc.measures.length; mi++) {
+		const measure = doc.measures[mi];
+
+		let timeLbl = '';
+		if (measure.timeSig) {
+			const { numerator, denominator } = measure.timeSig;
+			timeLbl = ` — ${numerator}/${denominator}`;
+		}
+
+		const voiceEntries: { label: string; bars: Bar[] }[] = [];
+		for (let pi = 0; pi < measure.parts.length; pi++) {
+			const part = measure.parts[pi];
+			for (let vi = 0; vi < part.voices.length; vi++) {
+				const voice = part.voices[vi];
+				const label = `P${pi + 1} V${vi + 1} S${voice.staff}`;
+				const bars = flattenEvents(voice.events, voice.staff);
+				voiceEntries.push({ label, bars });
+			}
+		}
+
+		const hasMusic = voiceEntries.some(v => v.bars.some(b => b.kind !== 'staff-change'));
+		if (voiceEntries.length === 0 || !hasMusic) continue;
+
+		mdLines.push(`## Measure ${mi + 1}${timeLbl}\n`);
+
+		const msrc = measureSources[mi] ?? '';
+		if (msrc) {
+			mdLines.push('```lyl');
+			mdLines.push(msrc);
+			mdLines.push('```\n');
+		}
+
+		mdLines.push(measureSvg(voiceEntries));
+		mdLines.push('');
+	}
+
+	const rendered = mdLines.filter(l => l.startsWith('## Measure')).length;
+	fs.writeFileSync(outputPath, mdLines.join('\n'), 'utf-8');
+	console.log(`Written: ${outputPath}  (${rendered} measures)`);
+}
+
+function resolveOutputPath(inputPath: string, outputArg: string | undefined): string {
+	if (!outputArg) return inputPath.replace(/\.lyl$/, '') + '-timeline.md';
+	const resolved = path.resolve(outputArg);
+	const isDir = (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory())
+	           || outputArg.endsWith('/') || outputArg.endsWith(path.sep);
+	return isDir
+		? path.join(resolved, path.basename(inputPath, '.lyl') + '-timeline.md')
+		: resolved;
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 const [,, inputArg, outputArg] = process.argv;
 if (!inputArg) {
-	console.error('Usage: npx tsx tools/lylTimeline.ts <input.lyl> [output.md|output-dir/]');
+	console.error('Usage: npx tsx tools/visualizeTimeline.ts <input.lyl|input-dir/> [output.md|output-dir/]');
 	process.exit(1);
 }
 
-const inputPath = path.resolve(inputArg);
-let outputPath: string;
-if (outputArg) {
-	const resolved = path.resolve(outputArg);
-	// If target is a directory (or ends with /), use input basename inside it
-	const isDir = (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory())
-	           || outputArg.endsWith('/') || outputArg.endsWith(path.sep);
-	outputPath = isDir
-		? path.join(resolved, path.basename(inputPath, '.lyl') + '-timeline.md')
-		: resolved;
-} else {
-	outputPath = inputPath.replace(/\.lyl$/, '') + '-timeline.md';
-}
+const inputResolved = path.resolve(inputArg);
+const inputIsDir = fs.existsSync(inputResolved) && fs.statSync(inputResolved).isDirectory();
 
-const src = fs.readFileSync(inputPath, 'utf-8');
-const doc = parseCode(src);
-const measureSources = extractMeasureSources(src);
-
-const mdLines: string[] = [];
-mdLines.push(`# Timeline: ${path.basename(inputPath)}\n`);
-
-for (let mi = 0; mi < doc.measures.length; mi++) {
-	const measure = doc.measures[mi];
-
-	let timeLbl = '';
-	if (measure.timeSig) {
-		const { numerator, denominator } = measure.timeSig;
-		timeLbl = ` — ${numerator}/${denominator}`;
-	}
-	// Collect voices
-	const voiceEntries: { label: string; bars: Bar[] }[] = [];
-	for (let pi = 0; pi < measure.parts.length; pi++) {
-		const part = measure.parts[pi];
-		for (let vi = 0; vi < part.voices.length; vi++) {
-			const voice = part.voices[vi];
-			const label = `P${pi + 1} V${vi + 1} S${voice.staff}`;
-			const bars = flattenEvents(voice.events, voice.staff);
-			voiceEntries.push({ label, bars });
+if (inputIsDir) {
+	// Batch mode: process all .lyl files in the directory
+	const outputDir = outputArg ? path.resolve(outputArg) : inputResolved;
+	fs.mkdirSync(outputDir, { recursive: true });
+	const files = fs.readdirSync(inputResolved)
+		.filter(f => f.endsWith('.lyl'))
+		.sort();
+	console.log(`Batch: ${files.length} files → ${outputDir}`);
+	for (const f of files) {
+		const fp = path.join(inputResolved, f);
+		const op = path.join(outputDir, f.replace(/\.lyl$/, '') + '-timeline.md');
+		try {
+			processFile(fp, op);
+		} catch (err) {
+			console.error(`  ERROR ${f}: ${(err as Error).message}`);
 		}
 	}
-
-	const hasMusic = voiceEntries.some(v => v.bars.some(b => b.kind !== 'staff-change'));
-	if (voiceEntries.length === 0 || !hasMusic) continue;
-
-	mdLines.push(`## Measure ${mi + 1}${timeLbl}\n`);
-
-	// Source code block
-	const msrc = measureSources[mi] ?? '';
-	if (msrc) {
-		mdLines.push('```lyl');
-		mdLines.push(msrc);
-		mdLines.push('```\n');
-	}
-
-	mdLines.push(measureSvg(voiceEntries));
-	mdLines.push('');
+} else {
+	processFile(inputResolved, resolveOutputPath(inputResolved, outputArg));
 }
-
-const rendered = mdLines.filter(l => l.startsWith('## Measure')).length;
-fs.writeFileSync(outputPath, mdLines.join('\n'), 'utf-8');
-console.log(`Written: ${outputPath}  (${rendered} measures)`);
