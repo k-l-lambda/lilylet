@@ -19,6 +19,7 @@
  * Usage: npx tsx tests/unit/changeStaffBeforeTuplet.test.ts
  */
 
+import fs from 'fs';
 import { decode } from '../../source/lilylet/lilypondDecoder';
 import { serializeLilyletDoc } from '../../source/lilylet/serializer';
 import { parseCode } from '../../source/lilylet/parser';
@@ -167,6 +168,151 @@ await (async () => {
 		assert(
 			firstTupletLine.startsWith('\\staff "1"'),
 			`tuplet line starts with \\staff "1" (got: "${firstTupletLine.slice(0, 30)}...")`
+		);
+	}
+})();
+
+
+// ─── Test 2: rachmaninoff-style — 4-tuplet measure ending on staff=2 ─────────
+//
+// Closer to the real failure: measure 1 has 4 triplets each alternating
+// \change Staff internally, ending on staff=2 (carryStaff=2=trackStaff).
+// Measure 2 opens with \change Staff = "1" \times 2/3 {...}.
+// Expected lyl measure 2 first voice: \staff "1"
+// Bug:      \staff "2"
+
+const LY_RACHMANINOFF_STYLE = LY_BOILERPLATE + `
+\\score {
+  \\new PianoStaff <<
+    \\context Staff = "1" {
+      \\time 4/4 c'1 | c'1 |
+    }
+    \\context Staff = "2" <<
+      \\new Voice {
+        \\time 4/4
+        \\change Staff = "1" \\times 2/3 { c'8 [ \\change Staff = "2" c8 \\change Staff = "1" c'8 ] }
+        \\change Staff = "2" \\times 2/3 { e8 [ \\change Staff = "1" e'8 \\change Staff = "2" e8 ] }
+        \\change Staff = "1" \\times 2/3 { g'8 [ \\change Staff = "2" g8 \\change Staff = "1" g'8 ] }
+        \\change Staff = "2" \\times 2/3 { a8 [ \\change Staff = "1" a'8 \\change Staff = "2" a8 ] } |
+        \\change Staff = "1" \\times 2/3 { b'8 [ \\change Staff = "2" b8 \\change Staff = "1" b'8 ] }
+        \\change Staff = "2" \\times 2/3 { d8 [ \\change Staff = "1" d'8 \\change Staff = "2" d8 ] }
+        \\change Staff = "1" \\times 2/3 { f'8 [ \\change Staff = "2" f8 \\change Staff = "1" f'8 ] }
+        \\change Staff = "2" \\times 2/3 { g8 [ \\change Staff = "1" g'8 \\change Staff = "2" g8 ] } |
+      }
+    >>
+  >>
+  \\layout { }
+}
+`;
+
+console.log('\nTest 2: rachmaninoff-style (4 tuplets/measure, cross-staff, ending staff=2)');
+console.log('─'.repeat(60));
+
+await (async () => {
+	const doc = await decode(LY_RACHMANINOFF_STYLE);
+
+	assert(doc.measures.length >= 2, `decoded ≥ 2 measures (got ${doc.measures.length})`);
+	if (doc.measures.length < 2) return;
+
+	const lyl = serializeLilyletDoc(doc);
+	const parsed = parseCode(lyl);
+
+	assert(parsed.measures.length >= 2, `parsed lyl has ≥ 2 measures (got ${parsed.measures.length})`);
+	if (parsed.measures.length < 2) return;
+
+	// In measure 2, the cross-staff voice (in Staff "2") should start on staff=1
+	// because \change Staff = "1" precedes the first \times tuplet.
+	const m2 = parsed.measures[1];
+	let m2CrossVoice: any;
+	for (const part of m2.parts) {
+		for (const v of part.voices) {
+			if (v.events.some((e: any) => e.type === 'tuplet' || e.type === 'times')) {
+				m2CrossVoice = v;
+				break;
+			}
+		}
+		if (m2CrossVoice) break;
+	}
+
+	assert(!!m2CrossVoice, 'measure 2 has a voice with tuplet content');
+
+	if (m2CrossVoice) {
+		const initStaff = m2CrossVoice.staff || 1;
+		assert(
+			initStaff === 1,
+			`measure 2 voice starts on staff 1 after 4-tuplet measure ending staff=2 — got staff=${initStaff}`
+		);
+	}
+})();
+
+
+// ─── Test 3: actual rachmaninoff-3-2.ly measure 42 ───────────────────────────
+//
+// PartPOneVoiceThree lives in \context Staff = "2".
+// Measure 41 has 4 triplets each with internal \change Staff alternations,
+// ending on staff=2. Measure 42 opens: \change Staff = "1" \times 2/3 {...}.
+// Expected lyl measure 42 (the 43rd, 1-indexed %43): first voice starts \staff "1".
+// Regression: after recent commits, it starts \staff "2".
+//
+// The lyl comment numbers are 1-indexed, so lyl measure N (0-indexed) = %N+1.
+// In the serialized lyl, the PartPOneVoiceThree's cross-staff pattern
+// appears as the FIRST voice line in each measure.
+
+const RACH_LY_PATH = '/home/camus/work/lilypond-scores/topology/rachmaninoff/rachmaninoff-3-2.ly';
+
+console.log('\nTest 3: rachmaninoff-3-2.ly — actual file, measure 42 voice start staff');
+console.log('─'.repeat(60));
+
+await (async () => {
+	// Read the actual .ly file
+	let lyContent: string;
+	try {
+		lyContent = fs.readFileSync(RACH_LY_PATH, 'utf-8');
+	} catch {
+		console.log('  ⚠ SKIP  rachmaninoff .ly not found at ' + RACH_LY_PATH);
+		return;
+	}
+
+	const doc = await decode(lyContent);
+	assert(doc.measures.length > 42, `decoded enough measures (got ${doc.measures.length})`);
+	if (doc.measures.length <= 42) return;
+
+	const lyl = serializeLilyletDoc(doc);
+	const parsed = parseCode(lyl);
+
+	assert(parsed.measures.length > 42, `parsed lyl has enough measures (got ${parsed.measures.length})`);
+	if (parsed.measures.length <= 42) return;
+
+	// Measure 41 (0-indexed) = lyl %42 = the block that ENDS with | %42.
+	// This is PartPOneVoiceThree's 4-tuplet cross-staff measure.
+	// It should START on staff=1 because \change Staff = "1" precedes
+	// the first \times 2/3 block — but regression: serializer outputs \staff "2".
+	const m42 = parsed.measures[41];
+	let crossVoice: any;
+	for (const part of m42.parts) {
+		for (const v of part.voices) {
+			// The cross-staff voice alternates staff and has tuplets
+			const hasSwitch = v.events.some((e: any) =>
+				e.type === 'context' && e.staff != null
+			);
+			const hasTuplet = v.events.some((e: any) =>
+				e.type === 'tuplet' || e.type === 'times'
+			);
+			if (hasSwitch && hasTuplet) {
+				crossVoice = v;
+				break;
+			}
+		}
+		if (crossVoice) break;
+	}
+
+	assert(!!crossVoice, 'measure 42 has a cross-staff voice with tuplets and staff switches');
+
+	if (crossVoice) {
+		const initStaff = crossVoice.staff || 1;
+		assert(
+			initStaff === 1,
+			`rachmaninoff m42 cross-staff voice starts on staff 1 — got staff=${initStaff}`
 		);
 	}
 })();
