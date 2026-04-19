@@ -61,8 +61,11 @@
 		for (const e of events) {
 			if (!e) continue;
 			if (e.type === 'pitchReset') continue;
-			if (e.type === 'context' && e.staff != null) { leadingStaff = e.staff; break; }
-			break; // first non-pitchReset non-staff-context event → stop
+			if (e.type === 'context') {
+				if (e.staff != null) { leadingStaff = e.staff; break; }
+				continue; // skip non-staff context events (key, clef, time, etc.)
+			}
+			break; // first musical/structural event — stop
 		}
 		return {
 			staff: leadingStaff != null ? leadingStaff : (staff || 1),
@@ -75,7 +78,7 @@
 		voices,
 	});
 
-	const MUSICAL = new Set(['note', 'rest', 'tuplet', 'times', 'tremolo', 'barline']);
+	const MUSICAL = new Set(['note', 'rest', 'tuplet', 'times', 'tremolo']);
 	const hasMusicalContent = (parts) =>
 		parts.some(p => p.voices.some(v => v.events.some(e => e && MUSICAL.has(e.type))));
 
