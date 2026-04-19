@@ -992,7 +992,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					const firstStaffCtxIdx = voice.events.findIndex(
 						e => e.type === 'context' && (e as any).staff != null
 					);
-					const musicalTypes = new Set(['note', 'rest', 'tuplet', 'tremolo']);
+					const musicalTypes = new Set(['note', 'rest', 'tuplet', 'times', 'tremolo']);
 					const hasMusicBeforeFirstStaff = firstStaffCtxIdx > 0 &&
 						voice.events.slice(0, firstStaffCtxIdx).some(e => musicalTypes.has(e.type));
 					const immediatelyCancelled = firstStaffCtxIdx >= 0 &&
