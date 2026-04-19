@@ -1201,9 +1201,9 @@ const convertMeasure = (
 					// Calculate total duration of tuplet for voiceTracker
 					let totalDuration = 0;
 					for (const evt of tupletEvent.events) {
-						if (evt.duration) {
+						if ((evt as NoteEvent | RestEvent).duration) {
 							// Convert division to duration units (quarter = 1)
-							totalDuration += (4 / evt.duration.division) * voiceTracker.getDivisions();
+							totalDuration += (4 / (evt as NoteEvent | RestEvent).duration.division) * voiceTracker.getDivisions();
 						}
 					}
 					// Apply tuplet ratio to get actual duration

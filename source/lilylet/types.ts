@@ -247,14 +247,14 @@ export interface TremoloEvent {
 export interface TupletEvent {
 	type: 'tuplet';
 	ratio: Fraction;				// e.g., {numerator: 2, denominator: 3} for triplet
-	events: (NoteEvent | RestEvent)[];
+	events: (NoteEvent | RestEvent | ContextChange)[];
 }
 
 // TimesEvent: from lilylet \times syntax (distinct from \tuplet decoded from LilyPond)
 export interface TimesEvent {
 	type: 'times';
 	ratio: Fraction;
-	events: (NoteEvent | RestEvent)[];
+	events: (NoteEvent | RestEvent | ContextChange)[];
 }
 
 export interface PitchResetEvent {

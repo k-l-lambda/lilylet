@@ -754,7 +754,7 @@ const encodeMeasure = (
 				}
 
 				case 'tuplet': {
-					const tupletEvents = event.events;
+					const tupletEvents = event.events.filter(e => e.type === 'note' || e.type === 'rest') as (NoteEvent | RestEvent)[];
 					for (let ti = 0; ti < tupletEvents.length; ti++) {
 						const subEvent = tupletEvents[ti];
 						// Set tuplet ratio on duration so encodeDuration emits <time-modification>

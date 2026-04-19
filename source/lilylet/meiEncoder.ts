@@ -7,6 +7,7 @@ import {
 	RestEvent,
 	ContextChange,
 	TupletEvent,
+	TimesEvent,
 	TremoloEvent,
 	BarlineEvent,
 	HarmonyEvent,
@@ -943,7 +944,7 @@ interface LayerResult {
 
 
 // Helper: check if an event (or any note inside a tuplet) has beam start/end
-const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TremoloEvent | ContextChange | BarlineEvent | HarmonyEvent | MarkupEvent | { type: 'pitchReset' }): { beamStart: boolean; beamEnd: boolean } => {
+const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TimesEvent | TremoloEvent | ContextChange | BarlineEvent | HarmonyEvent | MarkupEvent | { type: 'pitchReset' }): { beamStart: boolean; beamEnd: boolean } => {
 	if (event.type === 'note') {
 		const markOptions = extractMarkOptions((event as NoteEvent).marks);
 		return { beamStart: markOptions.beamStart, beamEnd: markOptions.beamEnd };
