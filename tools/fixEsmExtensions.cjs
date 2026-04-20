@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const libDir = path.join(__dirname, '../lib');
+const libDir = process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, '../lib');
 
 // Recursively get all .js files in lib/
 const getJsFiles = (dir) => {

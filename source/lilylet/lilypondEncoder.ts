@@ -165,6 +165,53 @@ const getSpacerRest = (timeSig?: { numerator: number; denominator: number }): st
 };
 
 
+// === Partial Measure Helpers ===
+
+const TPQN = 480;
+
+const voiceDurationTicks = (voice: Voice): number => {
+	let ticks = 0;
+	const addEvent = (e: Event, factor = 1): void => {
+		if (e.type === 'note' || e.type === 'rest') {
+			const ev = e as NoteEvent | RestEvent;
+			if ((ev as NoteEvent).grace) return;
+			let t = (TPQN * 4) / ev.duration.division;
+			let dot = t / 2;
+			for (let i = 0; i < ev.duration.dots; i++) { t += dot; dot /= 2; }
+			ticks += Math.round(t * factor);
+		} else if (e.type === 'tuplet' || e.type === 'times') {
+			const te = e as TupletEvent;
+			const f = factor * te.ratio.numerator / te.ratio.denominator;
+			for (const inner of te.events) addEvent(inner as Event, f);
+		}
+	};
+	for (const e of voice.events) addEvent(e);
+	return ticks;
+};
+
+const ticksToLyDuration = (ticks: number): string => {
+	const whole = TPQN * 4;
+	for (const div of [1, 2, 4, 8, 16, 32, 64]) {
+		const t = whole / div;
+		if (Math.abs(ticks - t) < 1) return String(div);
+		if (Math.abs(ticks - Math.round(t * 1.5)) < 1) return `${div}.`;
+		if (Math.abs(ticks - Math.round(t * 1.75)) < 1) return `${div}..`;
+	}
+	return '4';
+};
+
+// Return a spacer-rest suffix to pad a voice to the full measure duration.
+// Uses s16*N to avoid complexity with dotted/compound values.
+const padVoiceToMeasure = (voiceTicks: number, measureTicks: number): string => {
+	const remaining = Math.round(measureTicks - voiceTicks);
+	if (remaining <= 0) return '';
+	const sixteenth = Math.round(TPQN / 4); // 120 ticks
+	const numSixteenths = Math.round(remaining / sixteenth);
+	if (numSixteenths <= 0) return '';
+	return numSixteenths === 1 ? ' s16' : ` s16*${numSixteenths}`;
+};
+
+
 // === Pitch Environment for Relative Mode ===
 
 interface PitchEnv {
@@ -775,6 +822,8 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 
 	// Track time signature for each measure (for spacer rests)
 	const measureTimeSigs: Array<{ numerator: number; denominator: number } | undefined> = [];
+	// Track partial (pickup) measure durations as LY duration strings (e.g. "8" for \partial 8)
+	const measurePartialDurs: Array<string | undefined> = [];
 
 	let currentKey: KeySignature | undefined;
 	let currentTimeSig: { numerator: number; denominator: number } | undefined;
@@ -788,6 +837,29 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 
 		// Store time signature for this measure
 		measureTimeSigs[mi] = currentTimeSig;
+
+		// Detect partial (pickup) measures and compute their duration.
+		// Only the first measure (mi===0) can be an implicit partial;
+		// subsequent incomplete measures are NOT treated as partial.
+		const isExplicitPartial = measure.partial === true;
+		if (isExplicitPartial || (mi === 0 && currentTimeSig)) {
+			let maxVoiceTicks = 0;
+			for (const part of measure.parts) {
+				for (const v of part.voices) {
+					maxVoiceTicks = Math.max(maxVoiceTicks, voiceDurationTicks(v));
+				}
+			}
+			const expectedTicks = currentTimeSig
+				? Math.round(TPQN * 4 * currentTimeSig.numerator / currentTimeSig.denominator)
+				: TPQN * 4;
+			if (maxVoiceTicks > 0 && maxVoiceTicks < expectedTicks) {
+				measurePartialDurs[mi] = ticksToLyDuration(maxVoiceTicks);
+			} else {
+				measurePartialDurs[mi] = undefined;
+			}
+		} else {
+			measurePartialDurs[mi] = undefined;
+		}
 
 		// Process each part
 		for (let pi = 0; pi < measure.parts.length; pi++) {
@@ -809,11 +881,20 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 				}
 
 				// Encode voice content
-				const voiceContent = encodeVoice(voice, {
+				let voiceContent = encodeVoice(voice, {
 					key: currentKey,
 					timeSig: currentTimeSig,
 					isFirst: mi === 0
 				}, vi);
+
+				// For non-partial measures, pad incomplete voices to fill the full
+				// measure duration. lotus doesn't auto-advance on barlines, so
+				// under-full voices cause measure boundary miscounting.
+				if (!measurePartialDurs[mi] && currentTimeSig) {
+					const expectedTicks = Math.round(TPQN * 4 * currentTimeSig.numerator / currentTimeSig.denominator);
+					const voiceTicks = voiceDurationTicks(voice);
+					voiceContent += padVoiceToMeasure(voiceTicks, expectedTicks);
+				}
 
 				staffMeasures[mi].push(voiceContent);
 			}
@@ -829,10 +910,28 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 		// Build voice lines
 		const voiceLines: string[] = [];
 		for (let vi = 0; vi < maxVoices; vi++) {
+			let prevTimeSigStr: string | undefined;
 			const measureContents = measures.map((m, mi) => {
-				// Use correct spacer rest based on time signature
-				const spacer = getSpacerRest(measureTimeSigs[mi]);
-				const content = m[vi] || spacer;
+				// For partial (pickup) measures, use a partial-duration spacer
+				const partialDur = measurePartialDurs[mi];
+				const spacer = partialDur ? `s${partialDur}` : getSpacerRest(measureTimeSigs[mi]);
+				let content = m[vi] || spacer;
+				// Inject \time if the content lacks it and the time sig changed.
+				// lotus processes each voice independently — without \time it
+				// defaults to 4/4, miscounting measure boundaries for other meters.
+				const ts = measureTimeSigs[mi];
+				if (ts) {
+					const tsStr = `${ts.numerator}/${ts.denominator}`;
+					if (tsStr !== prevTimeSigStr && !content.includes('\\time')) {
+						content = `${encodeTimeSig(ts)} ${content}`;
+					}
+					prevTimeSigStr = tsStr;
+				}
+				// For partial measures, prepend \partial DUR before all other commands
+				// so the lotus interpreter correctly tracks the pickup measure boundary.
+				if (partialDur && !content.includes('\\partial')) {
+					content = `\\partial ${partialDur} ${content}`;
+				}
 				// Wrap each measure in its own \relative c' to reset pitch context
 				return `${indent}    \\relative c' { ${content} } |  % ${mi + 1}`;
 			});
