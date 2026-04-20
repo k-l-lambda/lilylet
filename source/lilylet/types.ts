@@ -229,6 +229,7 @@ export interface ContextChange {
 	type: 'context';
 	key?: KeySignature;
 	time?: Fraction;
+	partial?: Duration;				// Pickup measure duration (check-only, warns if mismatch)
 	clef?: Clef;
 	ottava?: number;				// -1, 0, 1
 	stemDirection?: StemDirection;

@@ -401,6 +401,11 @@ const serializeContextChange = (event: ContextChange): string => {
 		parts.push('\\time ' + event.time.numerator + '/' + event.time.denominator);
 	}
 
+	// Partial (pickup measure duration check)
+	if (event.partial) {
+		parts.push('\\partial ' + event.partial.division + '.'.repeat(event.partial.dots || 0));
+	}
+
 	// Ottava
 	if (event.ottava !== undefined) {
 		if (event.ottava === 0) {

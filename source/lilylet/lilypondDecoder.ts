@@ -571,6 +571,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		let lastClef: Clef | undefined = undefined;  // Track value changes
 		let lastOttava: number | undefined = undefined;  // Track value changes
 		let lastStemDirection: string | undefined = undefined;  // Track value changes
+		let partialEmitted = false;  // Emit \partial context once per track
 
 		const context = new lilyParser.TrackContext(undefined, {
 			listener: (term: lilyParser.BaseTerm, context: lilyParser.TrackContext) => {
@@ -598,11 +599,12 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 				}
 				const voice = measure.voices[vi];
 
-				// Update key/time from context on music events
+				// Update key/time/partial from context on music events
 				if (term instanceof lilyParser.MusicEvent ||
 					term instanceof lilyParser.LilyTerms.StemDirection ||
 					term instanceof lilyParser.LilyTerms.OctaveShift ||
-					term instanceof lilyParser.LilyTerms.Change) {
+					term instanceof lilyParser.LilyTerms.Change ||
+					term instanceof lilyParser.LilyTerms.Partial) {
 
 					if (context.key && measure.key === null) {
 						measure.key = context.key.key;
@@ -616,6 +618,21 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					if (context.partialDuration) {
 						measure.partial = true;
 					}
+				}
+
+				// Emit \partial context event when the Partial term fires (before partialDuration is cleared)
+				if (term instanceof lilyParser.LilyTerms.Partial && context.partialDuration && !partialEmitted) {
+					const mag = (context.partialDuration as any).magnitude;
+					const WHOLE = 1920;
+					let division = 1, dots = 0;
+					for (const div of [1, 2, 4, 8, 16, 32, 64]) {
+						const base = WHOLE / div;
+						if (Math.abs(mag - base) < 1) { division = div; dots = 0; break; }
+						if (Math.abs(mag - Math.round(base * 1.5)) < 1) { division = div; dots = 1; break; }
+						if (Math.abs(mag - Math.round(base * 1.75)) < 1) { division = div; dots = 2; break; }
+					}
+					voice.events.push({ type: 'context', partial: { division, dots } });
+					partialEmitted = true;
 				}
 
 				// Handle music events
