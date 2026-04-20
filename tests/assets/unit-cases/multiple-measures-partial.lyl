@@ -1,6 +1,4 @@
+\time 2/4 c8 |
 
-\staff "1" \time 3/4 d2. \\
-\staff "2" b2. \\
-\staff "2" g2. |
-
-\staff "2" c2. |
+\time 2/4 c2 \\
+s4 c |
