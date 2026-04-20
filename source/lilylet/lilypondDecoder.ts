@@ -751,14 +751,18 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					}
 					// Process Rest
 					else if (term instanceof lilyParser.LilyTerms.Rest) {
-						const restEvent: RestEvent = {
-							type: 'rest',
-							duration: convertDuration(term.durationValue),
-							fullMeasure: (term.name === 'R') || undefined,
-							invisible: term.isSpacer || undefined,
-						};
+						// Ignore spacer rests inside grace contexts (e.g. \acciaccatura s8,
+						// \grace s4 — these are notation-only placeholders with no musical content)
+						if (!(term.isSpacer && context.inGrace)) {
+							const restEvent: RestEvent = {
+								type: 'rest',
+								duration: convertDuration(term.durationValue),
+								fullMeasure: (term.name === 'R') || undefined,
+								invisible: term.isSpacer || undefined,
+							};
 
-						voice.events.push(restEvent);
+							voice.events.push(restEvent);
+						}
 					}
 				}
 				// Handle standalone stem direction (emit when value changes)
