@@ -1,0 +1,4 @@
+% \partial with dotted duration — 4. = 3 quarter beats
+\staff "1" \time 3/4 \partial 4. c4 c8 | %1
+
+\staff "1" \time 3/4 c4 c c | %2

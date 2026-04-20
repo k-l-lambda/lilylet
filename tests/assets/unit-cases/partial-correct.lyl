@@ -1,0 +1,4 @@
+% \partial with matching measure duration — no warning expected
+\staff "1" \time 2/4 \partial 8 b8\p | %1
+
+\staff "1" \time 2/4 e8[ ds16 e] fs4 | %2

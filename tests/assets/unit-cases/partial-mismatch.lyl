@@ -1,0 +1,4 @@
+% \partial declares 8 (1 eighth) but measure has a quarter note — warning expected
+\staff "1" \time 2/4 \partial 8 c4 | %1
+
+\staff "1" \time 2/4 c4 c | %2

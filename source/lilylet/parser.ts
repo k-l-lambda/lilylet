@@ -157,6 +157,14 @@ const resolveDocumentPitches = (doc: LilyletDoc): void => {
 };
 
 
+export interface ParseWarning {
+	type: 'partial-mismatch';
+	message: string;
+	declared: number;  // ticks
+	actual: number;    // ticks
+}
+
+
 const parseCode = (code: string): LilyletDoc => {
 	// Reset parser state before each parse to avoid contamination
 	if (parser && (parser as any).resetState) {
@@ -172,7 +180,19 @@ const parseCode = (code: string): LilyletDoc => {
 };
 
 
+/**
+ * Return warnings emitted during the most recent parseCode() call.
+ * Currently reports \partial duration mismatches.
+ */
+const getParseWarnings = (): ParseWarning[] => {
+	if (parser && (parser as any).getWarnings) {
+		return (parser as any).getWarnings() as ParseWarning[];
+	}
+	return [];
+};
+
 
 export {
 	parseCode,
+	getParseWarnings,
 };

@@ -30,6 +30,7 @@
     "test": "tsx ./tests/parser.ts",
     "test:mei": "tsx ./tests/mei.ts",
     "test:unit": "tsx ./tests/unit/encodePitch.test.ts",
+    "test:partial": "tsx ./tests/unit/partialWarning.test.ts",
     "test:decoder": "tsx ./tests/lilypondDecoder.ts",
     "test:abc": "tsx ./tests/abc-decoder.ts",
     "test:roundtrip": "tsx ./tests/lilypond-roundtrip.ts",

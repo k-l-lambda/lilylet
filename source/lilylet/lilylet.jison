@@ -161,6 +161,9 @@
 	let numericTimeSignature = false; // When true, 4/4 and 2/2 use numeric display instead of C/C|
 	let currentOttava = 0; // Current ottava level, resets on newline
 
+	// \partial warnings accumulated during parse; reset before each parse
+	let parseWarnings = [];
+
 	// Reset parser state - call before each parse
 	const resetParserState = () => {
 		currentStaff = 1;
@@ -169,10 +172,40 @@
 		currentDuration = { division: 4, dots: 0 };
 		numericTimeSignature = false;
 		currentOttava = 0;
+		parseWarnings = [];
 	};
 
-	// Export reset function
+	// Export reset function and warning accessors
 	parser.resetState = resetParserState;
+	parser.getWarnings = () => parseWarnings;
+
+	// Duration ticks helper for \partial validation (TPQN=480)
+	const durationTicks = (dur) => {
+		let t = 1920 / dur.division; // 1920 = whole note ticks
+		let dot = t / 2;
+		for (let i = 0; i < (dur.dots || 0); i++) { t += dot; dot /= 2; }
+		return Math.round(t);
+	};
+
+	// Sum ticks for an event list (notes/rests only, skip graces)
+	const voiceEventTicks = (events) => {
+		let total = 0;
+		for (const e of events) {
+			if (!e) continue;
+			if (e.type === 'note' || e.type === 'rest') {
+				if (e.grace) continue;
+				total += durationTicks(e.duration);
+			} else if (e.type === 'tuplet' || e.type === 'times') {
+				const factor = e.ratio.numerator / e.ratio.denominator;
+				for (const inner of e.events || []) {
+					if (inner && (inner.type === 'note' || inner.type === 'rest') && !inner.grace) {
+						total += Math.round(durationTicks(inner.duration) * factor);
+					}
+				}
+			}
+		}
+		return total;
+	};
 %}
 
 
@@ -203,6 +236,7 @@
 "\\clef"						return 'CMD_CLEF'
 "\\key"							return 'CMD_KEY'
 "\\time"						return 'CMD_TIME'
+"\\partial"						return 'CMD_PARTIAL'
 "\\numericTimeSignature"		return 'CMD_NUMERIC_TIME_SIG'
 "\\defaultTimeSignature"		return 'CMD_DEFAULT_TIME_SIG'
 "\\tempo"						return 'CMD_TEMPO'
@@ -350,7 +384,35 @@ measures
 	;
 
 measure_content
-	: parts										-> measure($1, currentKey, currentTimeSig)
+	: parts										%{
+		// Check \partial declarations: warn if declared duration ≠ actual voice ticks
+		let partialDur = null;
+		outer: for (const p of $1) {
+			for (const v of p.voices) {
+				for (const e of v.events) {
+					if (e && e.type === 'context' && e.partial) {
+						partialDur = e.partial;
+						break outer;
+					}
+				}
+			}
+		}
+		if (partialDur) {
+			const declared = durationTicks(partialDur);
+			for (const p of $1) {
+				for (const v of p.voices) {
+					const actual = voiceEventTicks(v.events);
+					if (actual > 0 && actual !== declared) {
+						const durStr = partialDur.division + '.'.repeat(partialDur.dots || 0);
+						const msg = `\\partial ${durStr}: declared ${declared} ticks but voice has ${actual} ticks`;
+						console.warn('[lilylet] ' + msg);
+						parseWarnings.push({ type: 'partial-mismatch', message: msg, declared, actual });
+					}
+				}
+			}
+		}
+		$$ = measure($1, currentKey, currentTimeSig, partialDur ? true : undefined);
+	%}
 	;
 
 parts
@@ -460,6 +522,7 @@ context_event
 	: clef_cmd									-> contextChange({ clef: $1 })
 	| key_cmd									-> contextChange({ key: $1 })
 	| time_cmd									-> contextChange({ time: $1 })
+	| partial_cmd								-> contextChange({ partial: $1 })
 	| tempo_cmd									-> contextChange({ tempo: $1 })
 	| staff_cmd									-> contextChange({ staff: $1 })
 	| ottava_cmd								-> contextChange({ ottava: $1 })
@@ -509,6 +572,10 @@ numeric_time_sig_cmd
 
 default_time_sig_cmd
 	: CMD_DEFAULT_TIME_SIG						%{ numericTimeSignature = false; $$ = null; %}
+	;
+
+partial_cmd
+	: CMD_PARTIAL duration						-> $2
 	;
 
 tempo_cmd
