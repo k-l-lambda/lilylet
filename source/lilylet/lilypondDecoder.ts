@@ -882,7 +882,10 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 					else if (termAny.proto === 'Tuplet' || termAny.proto === 'Times') {
 						const isTimes = termAny.proto === 'Times';
 						const ratioStr = termAny.args?.[0];  // "3/2" for \tuplet, "2/3" for \times
-						const body = termAny.args?.[1]?.body || [];
+						// \tuplet supports an optional base-duration arg: \tuplet 3/2 4 { notes }
+						// making args = [ratio, baseDur?, body]. Use the last arg (= music block),
+						// matching what lotus Tuplet.music getter does: this.args[this.args.length-1]
+						const body = termAny.args?.[termAny.args.length - 1]?.body || [];
 
 						if (ratioStr && body.length > 0) {
 							const ratioMatch = ratioStr.match(/^(\d+)\/(\d+)$/);
