@@ -184,11 +184,7 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		return dedupeContextEvents(allEvents);
 	};
 
-	// Check if a voice has any real musical content (notes, rests, tuplets)
-	const hasMusicalContent = (events: Event[]) =>
-		events.some(e => e.type === 'note' || e.type === 'rest' || e.type === 'tuplet' || e.type === 'times' || e.type === 'tremolo');
-
-	// Count voices per staff across all measures (only voices with musical content)
+	// Count voices per staff across all measures (only voices with non-spacer musical content)
 	const getVoiceCountByStaff = (measures: typeof doc1.measures, partIndex: number): Map<number, number> => {
 		const maxVoices = new Map<number, number>();
 		for (const m of measures) {
@@ -196,7 +192,7 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			if (!part) continue;
 			const staffCounts = new Map<number, number>();
 			for (const voice of part.voices) {
-				if (!hasMusicalContent(voice.events)) continue;
+				if (!hasNonSpacerContent(voice.events)) continue;
 				const s = voice.staff || 1;
 				staffCounts.set(s, (staffCounts.get(s) || 0) + 1);
 			}
@@ -207,18 +203,38 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		return maxVoices;
 	};
 
-	// Get all unique staves used in a part across all measures
+	// Check if a voice has any non-spacer musical content
+	const hasNonSpacerContent = (events: Event[]) =>
+		events.some(e => {
+			if (e.type === 'note') return true;
+			if (e.type === 'rest' && !(e as RestEvent).invisible) return true;
+			if (e.type === 'tuplet' || e.type === 'times' || e.type === 'tremolo') return true;
+			return false;
+		});
+
+	// Get all unique staves used in a part that have at least some real (non-spacer) content.
+	// Spacer-only staves are filtered because the LilyPond encoder/decoder drops them.
 	const getStaves = (measures: typeof doc1.measures, partIndex: number): number[] => {
-		const staves = new Set<number>();
+		// Collect staff → whether any measure has non-spacer content
+		const staffHasContent = new Map<number, boolean>();
 		for (const m of measures) {
 			const part = m.parts[partIndex];
 			if (part) {
 				for (const voice of part.voices) {
-					staves.add(voice.staff || 1);
+					const s = voice.staff || 1;
+					if (!staffHasContent.get(s) && hasNonSpacerContent(voice.events)) {
+						staffHasContent.set(s, true);
+					} else if (!staffHasContent.has(s)) {
+						staffHasContent.set(s, false);
+					}
 				}
 			}
 		}
-		return Array.from(staves).sort((a, b) => a - b);
+		// Only return staves that have real content in at least one measure
+		return Array.from(staffHasContent.entries())
+			.filter(([, hasContent]) => hasContent)
+			.map(([s]) => s)
+			.sort((a, b) => a - b);
 	};
 
 	// Get max parts count
