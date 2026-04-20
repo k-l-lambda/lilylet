@@ -472,8 +472,15 @@ const serializeTupletEvent = (
 			parts.push(' ' + str);
 			currentEnv = newEnv;
 			prevDuration = (e as RestEvent).duration;
-		} else if (e.type === 'context' && (e as any).staff != null) {
-			parts.push(' \\staff "' + (e as any).staff + '"');
+		} else if (e.type === 'context') {
+			const ctx = e as ContextChange;
+			if (ctx.staff != null) {
+				parts.push(' \\staff "' + ctx.staff + '"');
+			} else if (ctx.stemDirection != null) {
+				if (ctx.stemDirection === StemDirection.up) parts.push(' \\stemUp');
+				else if (ctx.stemDirection === StemDirection.down) parts.push(' \\stemDown');
+				else if (ctx.stemDirection === StemDirection.auto) parts.push(' \\stemNeutral');
+			}
 		}
 	}
 
