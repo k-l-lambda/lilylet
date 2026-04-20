@@ -1,6 +1,6 @@
 
-\staff "1" s1 \\
-\staff "1" s1 \\
-\staff "2" s1 |
+\staff "1" \time 3/4 d2. \\
+\staff "2" b2. \\
+\staff "2" g2. | %25
 
-\staff "2" c1 |
+\staff "2" c2. | %26
