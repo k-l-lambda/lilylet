@@ -287,6 +287,20 @@ function processFile(inputPath: string, outputPath: string): void {
 			mdLines.push('```\n');
 		}
 
+		// Tick JSON: start tick of each in-voice event per voice
+		const tickJson: Record<string, number[]> = {};
+		for (const { label, bars } of voiceEntries) {
+			tickJson[label] = bars
+				.filter(b => b.kind !== 'staff-change')
+				.map(b => b.start);
+		}
+		const tickLines = Object.entries(tickJson)
+			.map(([k, v]) => `  "${k}": ${JSON.stringify(v)}`)
+			.join(',\n');
+		mdLines.push('```json');
+		mdLines.push(`{\n${tickLines}\n}`);
+		mdLines.push('```\n');
+
 		mdLines.push(measureSvg(voiceEntries));
 		mdLines.push('');
 	}
