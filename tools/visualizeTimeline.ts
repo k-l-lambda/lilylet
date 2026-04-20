@@ -278,7 +278,27 @@ function processFile(inputPath: string, outputPath: string): void {
 		const hasMusic = voiceEntries.some(v => v.bars.some(b => b.kind !== 'staff-change'));
 		if (voiceEntries.length === 0 || !hasMusic) continue;
 
-		mdLines.push(`## Measure ${mi + 1}${timeLbl}\n`);
+		// Duration consistency check
+		const measureCapacity = measure.timeSig
+			? Math.round(TPQN * 4 * measure.timeSig.numerator / measure.timeSig.denominator)
+			: TPQN * 4;
+		const warnings: string[] = [];
+		for (const { label, bars } of voiceEntries) {
+			const voiceDur = bars
+				.filter(b => b.kind !== 'staff-change' && b.kind !== 'grace')
+				.reduce((sum, b) => sum + b.dur, 0);
+			if (voiceDur > measureCapacity) {
+				warnings.push(`⚠️ **${label}**: duration ${voiceDur} ticks > capacity ${measureCapacity} ticks (${measure.timeSig ? `${measure.timeSig.numerator}/${measure.timeSig.denominator}` : '4/4'})`);
+			}
+		}
+
+		const warnStr = warnings.length > 0 ? ' ⚠️' : '';
+		mdLines.push(`## Measure ${mi + 1}${timeLbl}${warnStr}\n`);
+
+		if (warnings.length > 0) {
+			for (const w of warnings) mdLines.push(w);
+			mdLines.push('');
+		}
 
 		const msrc = measureSources[mi] ?? '';
 		if (msrc) {
