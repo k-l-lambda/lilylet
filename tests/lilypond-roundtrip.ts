@@ -168,17 +168,23 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 		return true;
 	};
 
-	// Collect all events from all measures for a specific staff within a part
-	const collectEventsByStaff = (measures: typeof doc1.measures, partIndex: number, staff: number) => {
+	// Collect events for a specific voice (by 0-based index within a staff) across all measures.
+	// Per-voice comparison is robust to measure-boundary drift caused by overfull source measures:
+	// if voice A's last note overflows into the next measure in the decoder, the comparison
+	// still sees voice A's events as a unit rather than interleaved with voice B's events.
+	const collectEventsByVoiceIndex = (measures: typeof doc1.measures, partIndex: number, staff: number, voiceIndex: number) => {
 		const allEvents: Event[] = [];
 		for (const m of measures) {
 			const part = m.parts[partIndex];
-			if (part) {
-				for (const voice of part.voices) {
-					if (voice.staff === staff) {
-						allEvents.push(...filterEvents(voice.events));
-					}
+			if (!part) continue;
+			let idx = 0;
+			for (const voice of part.voices) {
+				if (voice.staff !== staff) continue;
+				if (idx === voiceIndex) {
+					allEvents.push(...filterEvents(voice.events));
+					break;
 				}
+				idx++;
 			}
 		}
 		return dedupeContextEvents(allEvents);
@@ -275,10 +281,12 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			}
 		}
 
-		// Compare events for each staff
+		// Compare events for each staff, voice by voice
 		for (const staff of staves1) {
-			const events1 = collectEventsByStaff(doc1.measures, pi, staff);
-			const events2 = collectEventsByStaff(doc2.measures, pi, staff);
+			const numVoices = voices1.get(staff) || 0;
+			for (let vi = 0; vi < numVoices; vi++) {
+			const events1 = collectEventsByVoiceIndex(doc1.measures, pi, staff, vi);
+			const events2 = collectEventsByVoiceIndex(doc2.measures, pi, staff, vi);
 
 			// Compare event count
 			const noteRests1 = flattenNoteRests(events1);
@@ -287,7 +295,7 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			if (noteRests1.length !== noteRests2.length) {
 				return {
 					equal: false,
-					diff: `Part ${pi + 1}, Staff ${staff}: Note/rest count differs: ${noteRests1.length} vs ${noteRests2.length}`
+					diff: `Part ${pi + 1}, Staff ${staff}, Voice ${vi + 1}: Note/rest count differs: ${noteRests1.length} vs ${noteRests2.length}`
 				};
 			}
 
@@ -296,7 +304,7 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 				if (!eventsMatch(noteRests1[i], noteRests2[i])) {
 					return {
 						equal: false,
-						diff: `Part ${pi + 1}, Staff ${staff}: Event mismatch at index ${i}: ${describeEvent(noteRests1[i], i)} vs ${describeEvent(noteRests2[i], i)}`
+						diff: `Part ${pi + 1}, Staff ${staff}, Voice ${vi + 1}: Event mismatch at index ${i}: ${describeEvent(noteRests1[i], i)} vs ${describeEvent(noteRests2[i], i)}`
 					};
 				}
 			}
@@ -307,7 +315,7 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			if (tuplesLike1.length !== tuplesLike2.length) {
 				return {
 					equal: false,
-					diff: `Part ${pi + 1}, Staff ${staff}: Tuplet/times count differs: ${tuplesLike1.length} vs ${tuplesLike2.length}`
+					diff: `Part ${pi + 1}, Staff ${staff}, Voice ${vi + 1}: Tuplet/times count differs: ${tuplesLike1.length} vs ${tuplesLike2.length}`
 				};
 			}
 			for (let i = 0; i < tuplesLike1.length; i++) {
@@ -315,17 +323,18 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 				if (t1.type !== t2.type) {
 					return {
 						equal: false,
-						diff: `Part ${pi + 1}, Staff ${staff}: Tuplet ${i} type differs: "${t1.type}" vs "${t2.type}"`
+						diff: `Part ${pi + 1}, Staff ${staff}, Voice ${vi + 1}: Tuplet ${i} type differs: "${t1.type}" vs "${t2.type}"`
 					};
 				}
 				const r1 = t1.ratio, r2 = t2.ratio;
 				if (r1.numerator !== r2.numerator || r1.denominator !== r2.denominator) {
 					return {
 						equal: false,
-						diff: `Part ${pi + 1}, Staff ${staff}: Tuplet ${i} ratio differs: ${r1.numerator}/${r1.denominator} vs ${r2.numerator}/${r2.denominator}`
+						diff: `Part ${pi + 1}, Staff ${staff}, Voice ${vi + 1}: Tuplet ${i} ratio differs: ${r1.numerator}/${r1.denominator} vs ${r2.numerator}/${r2.denominator}`
 					};
 				}
 			}
+			} // end voice loop
 		}
 	}
 
