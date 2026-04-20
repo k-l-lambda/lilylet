@@ -897,19 +897,40 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 									? { numerator: parseInt(num, 10), denominator: parseInt(denom, 10) }
 									: { numerator: parseInt(denom, 10), denominator: parseInt(num, 10) };
 
-								const noteCount = body.filter((item: any) =>
-									item.proto === 'Chord' || item.proto === 'Rest'
-								).length;
+								// Count sounding (non-grace) notes/rests in the tuplet body,
+								// recursing into AfterGrace.body (main note) but not AfterGrace.grace.
+								// Grace / Acciaccatura / Appoggiatura blocks count as 0.
+								const countSounding = (items: any[]): number => {
+									let n = 0;
+									for (const item of items) {
+										if (!item) continue;
+										switch (item.proto) {
+											case 'Chord': case 'Rest': n++; break;
+											case 'AfterGrace': {
+												// args[0] = main note, args[1] = after-grace notes (0-dur, skip)
+												const main = item.args?.[0];
+												if (main?.proto === 'Chord' || main?.proto === 'Rest') n++;
+												else if (main?.body) n += countSounding(main.body);
+												break;
+											}
+											case 'Grace': case 'Acciaccatura': case 'Appoggiatura': break;
+											default: if (item.body) n += countSounding(item.body); break;
+										}
+									}
+									return n;
+								};
+								const noteCount = countSounding(body);
 
 								const tupletEvents: (NoteEvent | RestEvent)[] = [];
 								let removed = 0;
-								// Pop notes/rests from voice.events, skipping over context events
-								// that were emitted between notes (e.g. \tempo inside a tuplet)
+								// Pop notes/rests from voice.events, skipping context events.
+								// Grace notes are moved inside the tuplet but do NOT consume a
+								// sounding-note slot (they have 0 duration in the time signature).
 								while (removed < noteCount && voice.events.length > 0) {
 									const lastEvent = voice.events[voice.events.length - 1];
 									if (lastEvent.type === 'note' || lastEvent.type === 'rest') {
 										tupletEvents.unshift(voice.events.pop()! as NoteEvent | RestEvent);
-										removed++;
+										if (!(lastEvent as NoteEvent).grace) removed++;
 									} else if (lastEvent.type === 'context' || lastEvent.type === 'pitchReset') {
 										// Context event between tuplet notes — move it inside tuplet too
 										tupletEvents.unshift(voice.events.pop()! as any);
