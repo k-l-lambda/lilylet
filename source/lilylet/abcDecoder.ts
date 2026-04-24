@@ -758,13 +758,13 @@ const convertEventTerm = (
 	const firstPitch = chord.pitches[0];
 
 	// Check if rest
-	if (firstPitch.phonet === "z" || firstPitch.phonet === "Z" || firstPitch.phonet === "x") {
+	if (firstPitch.phonet === "z" || firstPitch.phonet === "Z" || firstPitch.phonet === "x" || firstPitch.phonet === "y") {
 		const duration = convertDuration(eventData.duration, unitLength);
 		const rest: RestEvent = {
 			type: "rest",
 			duration,
 		};
-		if (firstPitch.phonet === "x") {
+		if (firstPitch.phonet === "x" || firstPitch.phonet === "y") {
 			rest.invisible = true;
 		}
 		if (firstPitch.phonet === "Z") {
@@ -779,7 +779,7 @@ const convertEventTerm = (
 
 	// Note or chord
 	const pitches = chord.pitches.filter(p =>
-		p.phonet !== "z" && p.phonet !== "Z" && p.phonet !== "x"
+		p.phonet !== "z" && p.phonet !== "Z" && p.phonet !== "x" && p.phonet !== "y"
 	).map(convertPitch);
 
 	if (pitches.length === 0) return undefined;

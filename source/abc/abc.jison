@@ -151,6 +151,21 @@
 
 
 	const octaveShift = shift => ({octaveShift: shift});
+
+
+	const parseMode = (name) => {
+		const n = name.toLowerCase();
+		if (n.startsWith("ma")) return "major";
+		if (n === "m" || n.startsWith("mi")) return "minor";
+		if (n.startsWith("dor")) return "dorian";
+		if (n.startsWith("phr")) return "phrygian";
+		if (n.startsWith("lyd")) return "lydian";
+		if (n.startsWith("mix")) return "mixolydian";
+		if (n.startsWith("aeo")) return "aeolian";
+		if (n.startsWith("loc")) return "locrian";
+		if (n === "hp") return "highland";
+		return n;
+	};
 %}
 
 
@@ -160,24 +175,27 @@
 
 %x string
 %x comment
+%x spec_comment_name
 %x spec_comment
+%x spec_comment_skip
 %x title_string
 %x key_signature
 %x exclamation_exp
 
 
 H									\b[A-Z](?=\:[^|])
-A									\b[A-G](?=[\W\d\sA-Ga-g_zHJLMOPRSTuv]*\b)
+A									\b[A-G](?=[\W\d\sA-Ga-g_yzHJLMOPRSTuv]*\b)
 Am									\b[A-G](?=[m][a][j]|[m][i][n]\b)
-a									\b[a-g](?=[\W\d\sA-Ga-g_zHJLMOPRSTuv]*\b)
+a									\b[a-g](?=[\W\d\sA-Ga-g_yzHJLMOPRSTuv]*\b)
 z									\b[z]
 Z									\b[Z]
 x									\b[x](?=[\W\d\s])
+y									\b[y]
 N									[0-9]
 P									\b[HJLMOPRSTuv](?=[A-Ga-g][A-Ga-g0-9]*\b)
 PP									\b[HJLMOPRSTuv](?=[xz!\[^_=\s"])
 
-SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~]
+SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 
 
 %%
@@ -196,26 +214,43 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~]
 <key_signature>"treble"				return 'TREBLE';
 <key_signature>"bass"				return 'BASS';
 <key_signature>"tenor"				return 'TENOR';
+<key_signature>"none"				return 'NAME';
+<key_signature>"Dor"				return 'NAME';
+<key_signature>"Phr"				return 'NAME';
+<key_signature>"Lyd"				return 'NAME';
+<key_signature>"Mix"				return 'NAME';
+<key_signature>"Aeo"				return 'NAME';
+<key_signature>"Loc"				return 'NAME';
+<key_signature>"HP"					return 'NAME';
+<key_signature>"Hp"					return 'NAME';
 <key_signature>[A-G]				return 'A';
+<key_signature>[A-Z][a-z]+			return 'NAME';
 <key_signature>[b]					return 'FLAT';
 <key_signature>[#]					return 'SHARP';
 <key_signature>[m][a-z]*			return 'NAME';
 <key_signature>[a-z]+				return 'NAME';
 <key_signature>[ \t]+				{}
+<key_signature>[=]					return '=';
 <key_signature>[+\-]				return yytext;
 <key_signature>[0-9]				return 'N';
 <key_signature>\n					{ this.popState(); }
 <key_signature>\]					{ this.popState(); return ']'; }
 
 ^[%]								{ this.pushState('comment'); }
-<comment>[%]						{ this.pushState('spec_comment'); }
+<comment>[%]						{ this.pushState('spec_comment_name'); }
 <comment>[^\n]+						{ return 'COMMENT'; }
-<spec_comment>\n					{ this.popState(); this.popState(); }
 <comment>\n							{ this.popState(); }
-<spec_comment>\s					{}
-<spec_comment>"score"				return 'SCORE'
-<spec_comment>[\w]+					return 'NN'
+<spec_comment_name>[ \t]+			{}
+<spec_comment_name>"score"			{ this.popState(); this.pushState('spec_comment'); return 'SCORE'; }
+<spec_comment_name>"staves"			{ this.popState(); this.pushState('spec_comment'); return 'SCORE'; }
+<spec_comment_name>[\w]+			{ this.popState(); this.pushState('spec_comment_skip'); }
+<spec_comment_name>\n				{ this.popState(); this.popState(); }
+<spec_comment>[ \t]+				{}
 <spec_comment>[(){}\[\]|]			return yytext
+<spec_comment>[\w]+					return 'NN'
+<spec_comment>\n					{ this.popState(); this.popState(); return 'LAYOUT_END'; }
+<spec_comment_skip>[^\n]+			{}
+<spec_comment_skip>\n				{ this.popState(); this.popState(); }
 
 [!]									{ this.pushState('exclamation_exp'); return '!'; }
 <exclamation_exp>[!]				{ this.popState(); return '!'; }
@@ -250,6 +285,7 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~]
 "staff"								return 'STAFF'
 "maj"								return 'MAJ'
 "min"								return 'MIN'
+{y}									return 'y'
 [a-zA-Z][\w-]*						return 'NAME'
 
 <<EOF>>								return 'EOF'
@@ -284,6 +320,7 @@ head_lines
 	| head_lines head_line				-> [...$1, $2]
 	| head_lines comment				-> [...$1, $2]
 	| head_lines staff_layout_statement	-> [...$1, $2]
+	| head_lines 'LAYOUT_END'			-> $1
 	| head_lines ']'					-> $1
 	| head_lines '}'					-> $1
 	| head_lines ')'					-> $1
@@ -294,7 +331,7 @@ comment
 	;
 
 staff_layout_statement
-	: 'SCORE' staff_layout				-> $2
+	: 'SCORE' staff_layout 'LAYOUT_END'	-> $2
 	;
 
 staff_layout
@@ -328,6 +365,7 @@ header_value
 	| number
 	| frac
 	| numeric_tempo
+	| string frac '=' number			-> ({text: $1, note: $2, bpm: $4})
 	| upper_phonet
 	| voice_exp
 	| staff_shift
@@ -342,6 +380,13 @@ staff_shift
 	;
 
 key_signature
+	: key_root							-> $1
+	| key_root assigns					-> $1
+	| NAME								-> key(null, $1)
+	| NAME assigns						-> key(null, $1)
+	;
+
+key_root
 	: A									-> key($1, null)
 	| A sharp_or_flat					-> key($1 + $2, null)
 	| A key_mode						-> key($1, $2)
@@ -362,7 +407,7 @@ sharp_or_flat
 key_mode
 	: MAJ								-> 'major'
 	| MIN								-> 'minor'
-	| NAME								-> $1.startsWith("ma") ? "major" : "minor"
+	| NAME								-> parseMode($1)
 	;
 
 plus_minus_number
@@ -437,6 +482,9 @@ patches
 	| patches tailless_patch			-> [...$1, $2]
 	| patches ']'						-> $1
 	| patches '}'						-> $1
+	| patches head_line					-> $1
+	| patches 'LAYOUT_END'				-> $1
+	| patches '&' patch					-> $1
 	;
 
 patch
@@ -459,10 +507,11 @@ bar
 	| ':' '|' ']'						-> ':|]'
 	| '|' N								-> '|' + $2
 	| ':' '|' N							-> ':|' + $2
+	| '&'								-> '&'
 	;
 
 music
-	: %empty
+	: %empty							-> []
 	| music expressive_mark				-> $1 ? [...$1, $2] : [$2]
 	| music text						-> $1 ? [...$1, $2] : [$2]
 	| music event						-> $1 ? [...$1, $2] : [$2]
@@ -474,6 +523,7 @@ music
 	| music NAME						-> $1
 	| music '^' NAME					-> $1
 	| music '^'							-> $1
+	| music '[' N						-> $1
 	;
 
 control
@@ -510,6 +560,7 @@ articulation
 articulation_content
 	: scope_articulation				-> articulation($1)
 	| scope_articulation parenthese		-> articulation($1, $2)
+	| scope_articulation '=' assign_value	-> articulation($1 + '=' + String($3))
 	| DYNAMIC							-> articulation($1)
 	| a									-> articulation($1)
 	| "^"								-> articulation($1)
@@ -613,6 +664,8 @@ accidentals
 	| '^' '^'							-> 2
 	| '_' '_'							-> -2
 	| '=' '='							-> 0
+	| '^' '/'							-> 0.5
+	| '_' '/'							-> -0.5
 	;
 
 pitch
@@ -637,6 +690,7 @@ rest_phonet
 	: z
 	| Z
 	| x
+	| y
 	;
 
 event
