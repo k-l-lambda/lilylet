@@ -229,6 +229,7 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <key_signature>"Loc"				return 'NAME';
 <key_signature>"HP"					return 'NAME';
 <key_signature>"Hp"					return 'NAME';
+<key_signature>[a-z]+[ \t]*=[^\n\]]*	{}
 <key_signature>[A-G]				return 'A';
 <key_signature>[A-Z][a-z]+			return 'NAME';
 <key_signature>[b]					return 'FLAT';
@@ -236,7 +237,6 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <key_signature>[m][a-z]*			return 'NAME';
 <key_signature>[a-z]+				return 'NAME';
 <key_signature>[ \t]+				{}
-<key_signature>[=]					return '=';
 <key_signature>[+\-]				return yytext;
 <key_signature>[0-9]				return 'N';
 <key_signature>\n					{ this.popState(); }
@@ -387,9 +387,7 @@ staff_shift
 
 key_signature
 	: key_root							-> $1
-	| key_root assigns					-> $1
 	| NAME								-> key(null, $1)
-	| NAME assigns						-> key(null, $1)
 	;
 
 key_root
