@@ -1,0 +1,8 @@
+X:1
+L:1/8
+M:4/4
+%%score (S A) B
+K:C
+[V:S]!invertedfermata!EF !invertedfermata!G2 | !invertedfermata!ef !invertedfermata!g2 |!fermata!EF !fermata!G2 | !fermata!ef !fermata!g2 ||
+[V:A]!invertedfermata!A,B, !invertedfermata!C2 | !invertedfermata!cd !invertedfermata!e2 |!fermata!A,B, !fermata!C2 | !fermata!cd !fermata!e2 ||
+[V:B]!invertedfermata!A,B, !invertedfermata!C2 | !invertedfermata!cd !invertedfermata!e2 |!fermata!A,B, !fermata!C2 | !fermata!cd !fermata!e2 ||

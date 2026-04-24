@@ -1,0 +1,11 @@
+X:1
+%%staffwidth 200
+%%staves (T1 B1)
+M:C
+K:E
+[V:T1] [GB]8-|
+[V:B1] [ce]8-|
+[V:T1] [GB]8-|
+[GB]8||
+[V:B1] [ce]8-|
+[ce]8||

@@ -1,0 +1,18 @@
+X:1
+%%stretchlast 1
+L:1/8
+M:4/4
+K:D
+%%score (S A) (T B)
+V:S clef=treble middle=B stem=up
+V:A clef=treble middle=B stem=down
+V:T clef=bass,, stem=up
+V:B clef=bass,, stem=down
+[V:S]
+F2|F2 EF G2 E2|C6||
+[V:A]
+D2|D2 C=C B,2 B,2|A,6||
+[V:T]
+A,2|A,2(G,A,)G,2G,2|G,6||
+[V:B]
+D,2|D,2A,,A,,G,,2G,,2|A,,6||

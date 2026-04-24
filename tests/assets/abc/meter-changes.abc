@@ -1,0 +1,10 @@
+K:Gm
+G8|
+%%keywarn 0
+K:F
+F8|
+%%keywarn 1
+K:G
+G8| [K:F]F8|
+%%keywarn 0
+F8| [K:A]A8|
