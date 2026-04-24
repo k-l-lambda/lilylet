@@ -453,6 +453,10 @@ voice_exp
 	| number NAME assigns				-> voice($1, $2, $3)
 	| NAME								-> voice(1, $1)
 	| NAME assigns						-> voice(1, $1, $2)
+	| upper_phonet number				-> voice(1, $1 + String($2))
+	| upper_phonet number assigns		-> voice(1, $1 + String($2), $3)
+	| upper_phonet number NAME			-> voice(1, $1 + String($2))
+	| upper_phonet number NAME assigns	-> voice(1, $1 + String($2), $4)
 	;
 
 assigns
