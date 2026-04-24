@@ -186,8 +186,8 @@
 %x spec_comment_skip
 %x title_string
 %x key_signature
+%x voice_header
 %x exclamation_exp
-
 
 H									\b[A-Z](?=\:[^|])
 A									\b[A-G](?=[\W\d\sA-Ga-g_yzHJLMOPRSTuv]*\b)
@@ -217,6 +217,15 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <title_string>[^\n]+				return 'STR_CONTENT'
 
 ^[K][:][\s]*						{ this.pushState('key_signature'); return 'K:'; }
+^[V][:][ \t]*						{ this.pushState('voice_header'); return 'V:'; }
+<voice_header>\"					{ this.pushState('string'); return 'STR_START'; }
+<voice_header>[a-zA-Z][a-zA-Z0-9,]*	return 'NAME';
+<voice_header>[0-9]+				return 'N';
+<voice_header>[=]					return '=';
+<voice_header>[+\-]					return yytext;
+<voice_header>[ \t]+				{}
+<voice_header>\n					{ this.popState(); }
+<voice_header>\]					{ this.popState(); return ']'; }
 <key_signature>"treble"				return 'TREBLE';
 <key_signature>"bass"				return 'BASS';
 <key_signature>"tenor"				return 'TENOR';
@@ -272,6 +281,7 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <exclamation_exp>{N}				return 'N'
 <exclamation_exp>[a-zA-Z][\w-]*		return 'NAME'
 
+\\\n								{}
 \s+									{}
 
 {SPECIAL}							return yytext
@@ -363,6 +373,7 @@ head_line
 	: 'T:' string_content				-> header('T', $2)
 	| 'C:' string_content				-> header('C', $2)
 	| 'K:' key_signature				-> header('K', $2)
+	| 'V:' header_value					-> header('V', $2)
 	| H ':' header_value				-> header($1, $3)
 	;
 
@@ -471,6 +482,7 @@ assign_value
 	| number
 	| plus_minus_number
 	| NAME
+	| upper_phonet
 	;
 
 upper_phonet
@@ -537,6 +549,7 @@ music
 control
 	: '[' H ':' header_value ']'		-> ({control: header($2, $4)})
 	| '[' 'K:' header_value ']'			-> ({control: header("K", $3)})
+	| '[' 'V:' header_value ']'			-> ({control: header("V", $3)})
 	| '[' NAME ':' header_value ']'		-> ({control: header($2, $4)})
 	;
 

@@ -865,8 +865,17 @@ const decodeTune = (tune: ABC.Tune): LilyletDoc => {
 	let timeSig: TimeSig | undefined;
 	let keySig: KeySignature | undefined;
 	let tempo: Tempo | undefined;
-	const voiceConfigs = new Map<number, VoiceConfig>();
-	const voiceClefs = new Map<number, Clef>();
+	const voiceConfigs = new Map<number | string, VoiceConfig>();
+	const voiceClefs = new Map<number | string, Clef>();
+
+	// Pre-scan for unit length (needed for bare Q: tempo)
+	for (const h of headers) {
+		const hdr = h as { name: string; value: any };
+		if (hdr.name === "L" && hdr.value?.numerator && hdr.value?.denominator) {
+			unitLength = hdr.value;
+			break;
+		}
+	}
 
 	for (const h of headers) {
 		if ((h as any).comment) continue;
@@ -905,24 +914,43 @@ const decodeTune = (tune: ABC.Tune): LilyletDoc => {
 					const beatDuration = convertDuration(header.value.note, { numerator: 1, denominator: 1 });
 					tempo = { beat: beatDuration, bpm: header.value.bpm };
 				} else if (typeof header.value === "number") {
-					tempo = { bpm: header.value };
+					const beat = convertDuration({ numerator: 1, denominator: 1 }, unitLength);
+					tempo = { beat, bpm: header.value };
 				}
 				break;
 			case "V": {
 				const voiceValue = header.value;
 				if (voiceValue) {
-					const voiceNum = typeof voiceValue === "number" ? voiceValue :
-						(voiceValue.name || 1);
-					const clefStr = typeof voiceValue === "string" ? voiceValue :
-						(voiceValue.clef || undefined);
-					voiceConfigs.set(voiceNum, {
-						name: voiceNum,
+					let voiceId: number | string;
+					let clefStr: string | undefined;
+
+					if (typeof voiceValue === "number") {
+						voiceId = voiceValue;
+					} else if (typeof voiceValue === "string") {
+						voiceId = voiceValue;
+					} else {
+						const rawClef = (voiceValue.clef || "").replace(/,+$/, "").trim();
+						const isKnownClef = !!convertClef(rawClef);
+						if (isKnownClef) {
+							// V:1 treble  → voiceId=number, clef=treble
+							voiceId = voiceValue.name || 1;
+							clefStr = rawClef;
+						} else {
+							// V:S clef=treble  → voiceId=voiceName, clef from properties
+							voiceId = rawClef || voiceValue.name || 1;
+							const propClef = (voiceValue.properties?.clef || "").replace(/,+$/, "").trim();
+							clefStr = propClef || undefined;
+						}
+					}
+
+					voiceConfigs.set(voiceId, {
+						name: typeof voiceId === "number" ? voiceId : 1,
 						clef: clefStr,
-						properties: voiceValue.properties,
+						properties: voiceValue?.properties,
 					});
 					if (clefStr) {
 						const clef = convertClef(clefStr);
-						if (clef) voiceClefs.set(voiceNum, clef);
+						if (clef) voiceClefs.set(voiceId, clef);
 					}
 				}
 				break;
