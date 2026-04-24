@@ -82,18 +82,24 @@
 		const {patches} = body;
 		const measures = [];
 		let measure = null;
-		let lastVoice = 1;
+		const seenVoices = new Set();
+
 		patches.forEach(patch => {
 			const voice = patch.control.V || 1;
-			if (voice <= lastVoice) {
+			if (seenVoices.has(voice)) {
 				if (measure)
 					measures.push(measure);
 				measure = {voices: []};
+				seenVoices.clear();
 			}
+			if (!measure)
+				measure = {voices: []};
+			seenVoices.add(voice);
 			measure.voices.push(patch);
 		});
 
-		measures.push(measure);
+		if (measure)
+			measures.push(measure);
 
 		measures.forEach((measure, index) => measure.index = index + 1);
 
