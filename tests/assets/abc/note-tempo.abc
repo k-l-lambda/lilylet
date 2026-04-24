@@ -1,0 +1,13 @@
+X:1
+T:Tempo Forms
+Q:120
+M:4/4
+L:1/4
+K:C
+CDEF | GABC |
+Q:"Allegro"
+CDEF | GABC |
+Q:"Andante" 1/4=80
+CDEF | GABC |
+Q:1/4=120
+CDEF | GABC |
