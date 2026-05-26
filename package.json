@@ -34,6 +34,7 @@
     "test:decoder": "tsx ./tests/lilypondDecoder.ts",
     "test:abc": "tsx ./tests/abc-decoder.ts",
     "test:roundtrip": "tsx ./tests/lilypond-roundtrip.ts",
+    "test:abc-svg": "tsx ./tests/abc-abcjs-svg.ts",
     "build:tests": "tsc -p tsconfig.tests.json; cp source/lilylet/grammar.jison.js lib-tests/source/lilylet/ && cp source/abc/grammar.jison.js lib-tests/source/abc/ && node tools/fixEsmExtensions.cjs lib-tests && ln -sfn ../../tests/assets lib-tests/tests/assets",
     "test:roundtrip:compiled": "node lib-tests/tests/lilypond-roundtrip.js",
     "ts": "tsx"
@@ -54,6 +55,7 @@
     "abcjs": "^6.6.2",
     "formidable": "^3.5.4",
     "jison": "^0.4.18",
+    "jsdom": "^29.0.2",
     "sha1": "^1.1.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
