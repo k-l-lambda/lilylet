@@ -29,6 +29,7 @@
     "prepublishOnly": "npm run build:grammar && npm run build",
     "test": "tsx ./tests/parser.ts",
     "test:mei": "tsx ./tests/mei.ts",
+    "test:mei-hashes": "tsx ./tests/computeMeiHashes.ts",
     "test:unit": "tsx ./tests/unit/encodePitch.test.ts",
     "test:partial": "tsx ./tests/unit/partialWarning.test.ts",
     "test:decoder": "tsx ./tests/lilypondDecoder.ts",
