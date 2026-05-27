@@ -30,6 +30,34 @@ const initVerovio = async (): Promise<IVerovioToolkit> => {
 };
 
 
+// Count notes/rests in the source AST, recursing through tuplet/times wrappers.
+const countSourceNotes = (doc: any): number => {
+	let count = 0;
+	const walk = (events: any[]) => {
+		for (const e of events) {
+			if (!e) continue;
+			if (e.type === "note" || e.type === "rest") count++;
+			else if (e.type === "tuplet" || e.type === "times") walk(e.events || []);
+			else if (e.type === "tremolo") count += 2;
+		}
+	};
+	for (const m of doc.measures || []) {
+		for (const part of m.parts || []) {
+			for (const voice of part.voices || []) walk(voice.events || []);
+		}
+	}
+	return count;
+};
+
+
+// Count <note>/<rest>/<chord>/<mRest>/<mSpace> elements in MEI output (rough but
+// sufficient for detecting silently-dropped event types that produce empty sections).
+const countMeiNotes = (mei: string): number => {
+	const matches = mei.match(/<(note|rest|chord|mRest|mSpace)\b/g);
+	return matches ? matches.length : 0;
+};
+
+
 const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<TestResult> => {
 	const file = filePath.split("/").pop()!;
 
@@ -40,6 +68,19 @@ const testFile = async (vrvToolkit: IVerovioToolkit, filePath: string): Promise<
 
 		// Step 2: Encode to MEI
 		const mei = lilylet.meiEncoder.encode(doc);
+
+		// Step 2.5: Sanity check — count source notes/rests vs MEI output.
+		// Catches silent drops where an event type is unhandled and MEI ends up empty.
+		const expected = countSourceNotes(doc);
+		const actual = countMeiNotes(mei);
+		if (expected > 0 && actual === 0) {
+			return {
+				file,
+				success: false,
+				error: `MEI output has 0 notes/rests but source has ${expected} (likely an event type is silently dropped)`,
+				mei,
+			};
+		}
 
 		// Step 3: Calculate pageHeight based on measure count and staff count
 		const measureCount = doc.measures?.length || 1;

@@ -655,6 +655,7 @@ interface TupletEventResult {
 	mordents: MordentRef[];
 	turns: TurnRef[];
 	arpeggios: ArpegRef[];
+	endingClef?: string;  // Updated clef name if changed inside the tuplet
 }
 
 // Check if a tuplet has balanced internal beam groups (both [ and ] inside the same tuplet)
@@ -673,7 +674,7 @@ const tupletHasInternalBeams = (event: TupletEvent): boolean => {
 };
 
 // Convert TupletEvent to MEI
-const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false, measureAccidentals?: Map<string, string>): TupletEventResult => {
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false, measureAccidentals?: Map<string, string>, currentClef?: string): TupletEventResult => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
 	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
 	// MEI: num = number of notes written, numbase = normal equivalent
@@ -701,6 +702,8 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	// Handle internal beam groups: if notes have manual beam marks, respect them
 	const hasInternalBeams = !inParentBeam && tupletHasInternalBeams(event);
 	let beamOpen = false;
+	let activeClef = currentClef;
+	let endingClef: string | undefined;
 
 	for (const e of event.events) {
 		if (e.type === 'note') {
@@ -744,6 +747,19 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 		} else if (e.type === 'rest') {
 			const restIndent = beamOpen ? baseIndent + '    ' : baseIndent;
 			xml += restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift, measureAccidentals);
+		} else if (e.type === 'context') {
+			const ctx = e as ContextChange;
+			if (ctx.clef && ctx.clef !== activeClef) {
+				const layerStaffNum = layerStaff || 1;
+				const effectiveStaffNum = effectiveStaff ?? layerStaffNum;
+				if (effectiveStaffNum === layerStaffNum) {
+					const clefIndent = beamOpen ? baseIndent + '    ' : baseIndent;
+					const clefInfo = CLEF_SHAPES[ctx.clef] || CLEF_SHAPES.treble;
+					xml += `${clefIndent}<clef xml:id="${generateId('clef')}" shape="${clefInfo.shape}" line="${clefInfo.line}" />\n`;
+				}
+				activeClef = ctx.clef;
+				endingClef = ctx.clef;
+			}
 		}
 	}
 
@@ -753,7 +769,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	}
 
 	xml += `${indent}</tuplet>\n`;
-	return { xml, firstNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios };
+	return { xml, firstNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios, endingClef };
 };
 
 
@@ -949,7 +965,7 @@ const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TimesEve
 		const markOptions = extractMarkOptions((event as NoteEvent).marks);
 		return { beamStart: markOptions.beamStart, beamEnd: markOptions.beamEnd };
 	}
-	if (event.type === 'tuplet') {
+	if (event.type === 'tuplet' || event.type === 'times') {
 		const tuplet = event as TupletEvent;
 		// If the tuplet has internal beam groups, don't report beam marks to the parent
 		// so the parent won't wrap the tuplet in an external <beam>
@@ -1210,11 +1226,17 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals, restCrossStaff);
 				break;
 			}
-			case 'tuplet': {
+			case 'tuplet':
+			case 'times': {
 				// Tuplet can be nested inside beam in MEI: <beam><tuplet>...</tuplet></beam>
 				// Pass beamElementOpen to tuplet so it knows not to create its own beam
-				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen, measureAccidentals);
+				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen, measureAccidentals, currentClef);
 				xml += tupletResult.xml;
+
+				// Propagate clef change from inside the tuplet to the parent tracker
+				if (tupletResult.endingClef) {
+					currentClef = tupletResult.endingClef as Clef;
+				}
 
 				// Flush any pending markups onto the first note of the tuplet
 				if (tupletResult.firstNoteId) {
@@ -1944,7 +1966,7 @@ const docHasBeamMarks = (doc: LilyletDoc): boolean => {
 								if (m.markType === 'beam') return true;
 							}
 						}
-					} else if (event.type === 'tuplet') {
+					} else if (event.type === 'tuplet' || event.type === 'times') {
 						const tuplet = event as TupletEvent;
 						for (const e of tuplet.events) {
 							if (e.type === 'note') {
@@ -2119,7 +2141,7 @@ const applyAutoBeamToVoice = (events: Event[], beamGroups: number[]): void => {
 			// Rests break beam groups
 			flushRun();
 			position += dur;
-		} else if (event.type === 'tuplet') {
+		} else if (event.type === 'tuplet' || event.type === 'times') {
 			const tuplet = event as TupletEvent;
 			const ratio = tuplet.ratio; // LilyPond ratio: num/den
 
@@ -2321,7 +2343,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 				for (const event of voice.events) {
 					// Check for actual musical content (not just context changes or pitch resets)
 					if (event.type === 'note' || event.type === 'rest' ||
-						event.type === 'tuplet' || event.type === 'tremolo') {
+						event.type === 'tuplet' || event.type === 'times' || event.type === 'tremolo') {
 						return true;
 					}
 				}

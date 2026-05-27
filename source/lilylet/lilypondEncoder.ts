@@ -577,6 +577,8 @@ const encodeTupletEvent = (event: TupletEvent | TimesEvent, env: PitchEnv, lastD
 			result += str + ' ';
 			newEnv = ne;
 			newDuration = nd;
+		} else if (subEvent.type === 'context') {
+			result += encodeContextChange(subEvent) + ' ';
 		}
 	}
 

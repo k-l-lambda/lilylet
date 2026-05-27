@@ -117,7 +117,7 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 			if (e.type === 'note' || e.type === 'rest') {
 				result.push(e as NoteEvent | RestEvent);
 			} else if (e.type === 'tuplet' || e.type === 'times') {
-				result.push(...(e as TupletEvent).events);
+				result.push(...flattenNoteRests((e as TupletEvent).events));
 			}
 		}
 		return result;

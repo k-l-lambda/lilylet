@@ -1,0 +1,1 @@
+\clef "bass"  \tuplet 4/3 { bf,,8(-5[ bf'-1 f'-3 af-2 d-1 bf-5  \clef "treble" f'-3 af)-2] } \stemDown d2.
