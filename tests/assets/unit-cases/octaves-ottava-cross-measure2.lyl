@@ -1,0 +1,3 @@
+\ottava #1 \stemDown <cf'' cf'>2.\f <bf bf'>\fermata \stemUp \grace { cf'16[ bf c a] cf[ bf\< c a] cf[ bf c a] cf[ bf c a] cf[ bf c a] cf[ bf c a] cf[ bf c a] cf[ bf c a\!] }  | %33
+
+\stemUp \grace { cf'''16[ bf c af] cf[ bf c af] cf[ bf c af] cf[ bf\> c af\!] cf[ bf d c] bf[ a af g] f[ d ef c] } \ottava #0 \grace { bf8[ af c, d] }  | %34

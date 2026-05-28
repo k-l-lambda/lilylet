@@ -927,6 +927,10 @@ interface PendingOctave {
 	disPlace: 'above' | 'below';
 	startId: string;
 	shift: number;  // The ottava value (1, -1, 2, -2)
+	continued?: boolean;
+	emitted?: boolean;
+	endToken?: string;
+	endFallbackId?: string;
 }
 type OttavaState = Record<string, PendingOctave | null>;  // voice key -> pending octave span
 
@@ -956,6 +960,7 @@ interface LayerResult {
 	endingClef?: Clef;  // For cross-measure clef tracking
 	lastNoteId: string | null;  // For cross-measure ottava span end tracking
 	currentOttavaShift: number;  // Current ottava shift for pitch encoding
+	octaveEndReplacements: Record<string, string>;
 }
 
 
@@ -1006,8 +1011,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 
 	// Track octave spans - initialize from previous measure if continuing
 	const octaves: OctaveSpan[] = [];
-	let currentOctave: { dis: 8 | 15; disPlace: 'above' | 'below'; startId: string } | null =
-		initialOctave ? { dis: initialOctave.dis, disPlace: initialOctave.disPlace, startId: initialOctave.startId } : null;
+	const octaveEndReplacements: Record<string, string> = {};
+	let currentOctave: { dis: 8 | 15; disPlace: 'above' | 'below'; startId: string; continued?: boolean; emitted?: boolean; endToken?: string; endFallbackId?: string } | null =
+		initialOctave ? { dis: initialOctave.dis, disPlace: initialOctave.disPlace, startId: initialOctave.startId, continued: initialOctave.continued, emitted: initialOctave.emitted, endToken: initialOctave.endToken, endFallbackId: initialOctave.endFallbackId } : null;
 	let pendingOttava: number | null = null;  // Track ottava to apply to next note
 	let currentOttavaShift: number = initialOctave?.shift || 0;  // Track current ottava shift for pitch encoding
 	let lastNoteId: string | null = null;  // Track last note id for ending ottava spans
@@ -1115,6 +1121,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift, measureAccidentals);
 				xml += result.xml;
 				lastNoteId = result.elementId;
+				if (currentOctave?.endToken) {
+					octaveEndReplacements[currentOctave.endToken] = result.elementId;
+				}
 
 				// Flush any pending markups onto this note
 				flushPendingMarkups(result.elementId);
@@ -1125,9 +1134,14 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					const disPlace: 'above' | 'below' = pendingOttava > 0 ? 'above' : 'below';
 					// Close existing span first if it has a different value
 					if (currentOctave && (currentOctave.dis !== dis || currentOctave.disPlace !== disPlace)) {
-						// Different value - close the old span
-						// Use the lastNoteId from before this note (which we saved before processing)
-						// Note: The span from previous measure will be closed by encodeMeasure
+						if (lastNoteId) {
+							octaves.push({
+								dis: currentOctave.dis,
+								disPlace: currentOctave.disPlace,
+								startId: currentOctave.startId,
+								endId: lastNoteId,
+							});
+						}
 						currentOctave = null;
 					}
 					// Start new span if we don't already have one with the same value
@@ -1135,6 +1149,11 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 						currentOctave = { dis, disPlace, startId: result.elementId };
 					}
 					pendingOttava = null;
+				} else if (currentOctave?.continued) {
+					if (!currentOctave.endToken) {
+						currentOctave.startId = result.elementId;
+					}
+					currentOctave.continued = false;
 				}
 
 				// Update pending tie pitches
@@ -1290,12 +1309,14 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					if (ctx.ottava === 0) {
 						// End current ottava span
 						if (currentOctave && lastNoteId) {
-							octaves.push({
-								dis: currentOctave.dis,
-								disPlace: currentOctave.disPlace,
-								startId: currentOctave.startId,
-								endId: lastNoteId,
-							});
+							if (!currentOctave.emitted) {
+								octaves.push({
+									dis: currentOctave.dis,
+									disPlace: currentOctave.disPlace,
+									startId: currentOctave.startId,
+									endId: lastNoteId,
+								});
+							}
 							currentOctave = null;
 							ottavaExplicitlyClosed = true;  // Mark that we explicitly closed the span
 						}
@@ -1307,7 +1328,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 						const dis: 8 | 15 = Math.abs(ctx.ottava) === 2 ? 15 : 8;
 						const disPlace: 'above' | 'below' = ctx.ottava > 0 ? 'above' : 'below';
 						if (currentOctave && currentOctave.dis === dis && currentOctave.disPlace === disPlace) {
-							// Continuation - restore the shift but don't change the span
+							// Continuation - restore the shift and let the existing 8va line reach this measure's first note
 							currentOttavaShift = ctx.ottava;
 						} else {
 							// Different value - start new ottava span (will be applied to next note)
@@ -1383,14 +1404,25 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 		xml += `${baseIndent}</beam>\n`;
 	}
 
-	// Don't close ottava span at measure end - it may continue in the next measure
-	// Build pending octave state to return
+	// Emit one visible octave span for a continuing ottava; a repeated same-value command can extend it to the next measure.
+	if (currentOctave && lastNoteId && !currentOctave.emitted) {
+		const endToken = `__OTTAVA_END_${generateId('octaveEnd')}__`;
+		octaves.push({
+			dis: currentOctave.dis,
+			disPlace: currentOctave.disPlace,
+			startId: currentOctave.startId,
+			endId: endToken,
+		});
+		currentOctave.emitted = true;
+		currentOctave.endToken = endToken;
+		currentOctave.endFallbackId = lastNoteId;
+	}
 	const pendingOctave: PendingOctave | null = currentOctave
-		? { dis: currentOctave.dis, disPlace: currentOctave.disPlace, startId: currentOctave.startId, shift: currentOttavaShift }
+		? { dis: currentOctave.dis, disPlace: currentOctave.disPlace, startId: currentOctave.startId, shift: currentOttavaShift, continued: true, emitted: currentOctave.emitted, endToken: currentOctave.endToken, endFallbackId: currentOctave.endFallbackId }
 		: null;
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin: currentHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin: currentHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift, octaveEndReplacements };
 };
 
 // Staff result type
@@ -1417,6 +1449,7 @@ interface StaffResult {
 	pendingOctaves: OttavaState;  // For cross-measure ottava span tracking
 	ottavaExplicitlyClosed: Record<string, boolean>;  // Track which layers had ottava explicitly closed
 	lastNoteIds: Record<string, string | null>;  // For cross-measure ottava span end tracking
+	octaveEndReplacements: Record<string, string>;
 	endingClef?: Clef;  // For cross-measure clef tracking
 }
 
@@ -1445,6 +1478,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const pendingOctaves: OttavaState = {};
 	const ottavaExplicitlyClosed: Record<string, boolean> = {};
 	const lastNoteIds: Record<string, string | null> = {};
+	const octaveEndReplacements: Record<string, string> = {};
 	let endingClef: Clef | undefined = initialClef;
 
 	if (voices.length === 0) {
@@ -1474,6 +1508,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			allHarmonies.push(...result.harmonies);
 			allBarlines.push(...result.barlines);
 			allMarkups.push(...result.markups);
+			Object.assign(octaveEndReplacements, result.octaveEndReplacements);
 			// Track pending ties for this layer
 			if (result.pendingTiePitches.length > 0) {
 				pendingTies[tieKey] = result.pendingTiePitches;
@@ -1527,6 +1562,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		pendingOctaves,
 		ottavaExplicitlyClosed,
 		lastNoteIds,
+		octaveEndReplacements,
 		endingClef,
 	};
 };
@@ -1614,7 +1650,7 @@ const BARLINE_TO_MEI: Record<string, string> = {
 
 // Encode a measure
 // encodeMeasure accepts mutable tieState, slurState, hairpinState, ottavaState and clefState that persist across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}): string => {
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}): string => {
 	const measureId = generateId("measure");
 	let staffContent = '';  // Build staff content first, then add measure tag with barline
 	const allHairpins: HairpinSpan[] = [];
@@ -1690,38 +1726,22 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		allHarmonies.push(...result.harmonies);
 		allBarlines.push(...result.barlines);
 		allMarkups.push(...result.markups);
+		Object.assign(octaveEndReplacements, result.octaveEndReplacements);
 		// Update tie state with pending ties from this staff
 		Object.assign(tieState, result.pendingTies);
 		// Update slur state with pending slurs from this staff
 		Object.assign(slurState, result.pendingSlurs);
 		// Update hairpin state with pending hairpins from this staff
 		Object.assign(hairpinState, result.pendingHairpins);
-		// Update ottava state with pending octaves from this staff
-		// Also handle closing spans when ottava ends
+		// Update ottava state with pending octaves from this staff.
+		// encodeLayer already emits measure-local octave spans, so keep the next measure's start independent.
 		const currentStaffPrefix = `${si}-`;
 		for (const [key, pending] of Object.entries(result.pendingOctaves)) {
 			if (pending) {
-				// Check if this is a continuation or a new span
-				const prevPending = ottavaState[key];
-				if (prevPending && prevPending.shift === pending.shift) {
-					// Same ottava value continues - keep the original startId
-					ottavaState[key] = { ...pending, startId: prevPending.startId };
-				} else {
-					// Different ottava value - close the old span first if exists
-					if (prevPending) {
-						const lastNoteId = result.lastNoteIds[key];
-						if (lastNoteId) {
-							allOctaves.push({
-								dis: prevPending.dis,
-								disPlace: prevPending.disPlace,
-								startId: prevPending.startId,
-								endId: lastNoteId,
-							});
-						}
-					}
-					// Start new span
-					ottavaState[key] = pending;
+				if (pending.endToken && pending.endFallbackId && !octaveEndReplacements[pending.endToken]) {
+					octaveEndReplacements[pending.endToken] = pending.endFallbackId;
 				}
+				ottavaState[key] = pending;
 			}
 		}
 		// For layers in this staff that had pending octaves but didn't in this measure, close the spans
@@ -2325,6 +2345,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 
 	// Track ottava state across measures for cross-measure ottava spans
 	const ottavaState: OttavaState = {};
+	const octaveEndReplacements: Record<string, string> = {};
 
 	// Initialize clef state from partInfos (convert local staff to global staff)
 	const clefState: ClefState = {};
@@ -2384,7 +2405,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 				mei += `${indent}${indent}${indent}${indent}${indent}${indent}<scoreDef xml:id="${generateId('scoredef')}"${meterSymAttr} meter.count="${currentTimeNum}" meter.unit="${currentTimeDen}" />\n`;
 			}
 		}
-		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState);
+		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements);
 	});
 
 	mei += `${indent}${indent}${indent}${indent}${indent}</section>\n`;
@@ -2393,6 +2414,10 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += `${indent}${indent}</body>\n`;
 	mei += `${indent}</music>\n`;
 	mei += '</mei>\n';
+
+	for (const [token, endId] of Object.entries(octaveEndReplacements)) {
+		mei = mei.replaceAll(token, endId);
+	}
 
 	return mei;
 };
