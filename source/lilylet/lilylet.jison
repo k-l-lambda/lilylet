@@ -460,16 +460,7 @@ markup_event
 	;
 
 pitch_reset_event
-	: NEWLINE							%{
-		// On newline, reset ottava to 0 if it's non-zero (like pitch base resets)
-		if (currentOttava !== 0) {
-			const ottavaReset = contextChange({ ottava: 0 });
-			currentOttava = 0;
-			$$ = [ottavaReset, { type: 'pitchReset' }];
-		} else {
-			$$ = { type: 'pitchReset' };
-		}
-	%}
+	: NEWLINE								-> { type: 'pitchReset' }
 	;
 
 note_event
