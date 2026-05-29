@@ -23,7 +23,7 @@ const loadExisting = (file: string): Map<string, string> => {
 };
 
 const previous = loadExisting(OUTPUT_FILE);
-const files = fs.readdirSync(UNIT_CASES_DIR).filter(f => f.endsWith(".lyl")).sort();
+const files = fs.readdirSync(UNIT_CASES_DIR).filter(f => f.endsWith(".lyl") && !f.endsWith(".local.lyl")).sort();
 
 const lines: string[] = [
 	"# MD5 hashes of MEI output for each .lyl unit case.",

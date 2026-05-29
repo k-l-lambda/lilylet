@@ -269,7 +269,7 @@ const main = async (): Promise<void> => {
 	console.log("Verovio initialized.\n");
 
 	// Get all .lyl files
-	const files = fs.readdirSync(lylDir).filter(f => f.endsWith(".lyl"));
+	const files = fs.readdirSync(lylDir).filter(f => f.endsWith(".lyl") && !f.endsWith(".local.lyl"));
 
 	let passed = 0;
 	let failed = 0;

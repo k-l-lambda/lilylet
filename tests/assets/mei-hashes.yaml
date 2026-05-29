@@ -64,8 +64,8 @@ cross-staves-simple-notes.lyl: 19f46ec626ffdc4ad5ab8192104aa67e
 cross-staves-tuplet-mix.lyl: 4f5e23057a948188387d88f657650ef9
 demo-BWV114.lyl: eada4560485dbba721b45b62c9181286
 demo-BWV610.lyl: 3df60b66823417a2b6a00cb9b06ad913
-demo-chopin-10-3.lyl: 35f135f52395bb8b02a80c3280ff1f76
-demo-chopin48-1.lyl: 94dbe62402baf2ea1ae48d44dc77f847
+demo-chopin-10-3.lyl: 8c563c369c7b8a1649e5dcc9ab5f0509
+demo-chopin48-1.lyl: 24b94495786dbee197b39f165192b47a
 dots-double-dot.lyl: aa040772f2976039ef287924440b16bc
 dots-single-dot.lyl: 87fa13ee6932358e03df35e70e6f25e2
 durations-16th-note.lyl: f8add798b8ddfc51747fba43ecd12208
@@ -114,7 +114,7 @@ multiple-measures-multistaves.lyl: ea2a7c937d69ed3b90acdb2c501edb30
 multiple-measures-partial.lyl: 3f2ee50c1304c1346e17335b35c132e3
 multiple-measures-single-staff.lyl: 21013f3dc744ae9b6b601571e180ff08
 multiple-measures-voice-enters-late.lyl: 1708b6a4f535d56ad9ec0438ca462450
-multiple-parts-double-piano.lyl: 36423bd7b22a5cbc89537754cb12ede1
+multiple-parts-double-piano.lyl: 1076a7f72dac4c1babe8d4110215b4e2
 multiple-parts-quartet.lyl: 1273d7003bb11ced2f32b5f0de70c056
 multiple-staves-3voices.lyl: e4e48dbf26f094c8f6fa2fe8ecbaa8b8
 multiple-staves-clef-cross-staff-rest.lyl: bdc4c9580a32c2322216c049000932a8
@@ -129,10 +129,10 @@ navigation-coda.lyl: 00dd764db147f4a738206c6f73a27167
 navigation-segno.lyl: 085e72cf3a15e3978bf7be2e148d6f33
 octaves-higher-octave.lyl: cb20beb8b5d63823f480f3093625c1e1
 octaves-lower-octave.lyl: 07edfd96621b1b1b7a5aa0fed55e6a75
-octaves-ottava-cross-measure.lyl: 565163b80c2cdeff4192da85fe72105d
-octaves-ottava-cross-measure2.lyl: 971afaec3da0e2f2fe67434d9d73fcaa
-octaves-ottava-down.lyl: 632f58a74fc5122a415f99c4f05fb1ec
-octaves-ottava-up.lyl: f10c63748edbd0483976f1982d545c08
+octaves-ottava-cross-measure.lyl: 4bf4a16393f45a8caae68e91587c8408
+octaves-ottava-cross-measure2.lyl: 6ff94eb79fe80d74901f5184bbfcb106
+octaves-ottava-down.lyl: 2d5ae5107edfb3ceeeb22d4abca3a471
+octaves-ottava-up.lyl: 7fbb6515d846ca6ec794afc995ae1643
 partial-correct.lyl: 591e36dc8dcdd78cc67c93786cb4339f
 partial-dotted.lyl: 52622b1edc1a3af7226717688dbbdde3
 partial-mismatch.lyl: e4a5d5f257c4a08c88a9c854c9350255
