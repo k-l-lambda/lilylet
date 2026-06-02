@@ -6,7 +6,8 @@
 	},
 	"include": [
 		"source/**/*",
-		"tests/**/*"
+		"tests/**/*",
+		"tools/trainBpeTokenizer.ts"
 	],
 	"exclude": [
 		"node_modules"
