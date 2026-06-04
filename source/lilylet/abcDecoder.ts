@@ -39,6 +39,34 @@ import {
 
 // ============ Constants ============
 
+// NotaGen catalog tags appear as leading single-% comments in ABC files,
+// in the order: period, composer, instrumentation. They are mapped to
+// Lilylet metadata: period -> genre, instrumentation -> instrument.
+const NOTAGEN_PERIOD_SET = new Set([
+	"Baroque", "Classical", "Romantic",
+]);
+const NOTAGEN_INSTRUMENTATION_SET = new Set([
+	"Art Song", "Chamber", "Choral", "Keyboard", "Orchestral", "Vocal-Orchestral",
+]);
+const NOTAGEN_COMPOSER_SET = new Set([
+	"Bach, Johann Sebastian", "Bartok, Bela", "Beethoven, Ludwig van", "Berlioz, Hector",
+	"Bizet, Georges", "Boulanger, Lili", "Boulton, Harold", "Brahms, Johannes",
+	"Burgmuller, Friedrich", "Butterworth, George", "Chaminade, Cecile", "Chausson, Ernest",
+	"Chopin, Frederic", "Corelli, Arcangelo", "Cornelius, Peter", "Debussy, Claude",
+	"Dvorak, Antonin", "Faisst, Clara", "Faure, Gabriel", "Franz, Robert",
+	"Gonzaga, Chiquinha", "Grandval, Clemence de", "Grieg, Edvard", "Handel, George Frideric",
+	"Haydn, Joseph", "Hensel, Fanny", "Holmes, Augusta Mary Anne", "Jaell, Marie",
+	"Kinkel, Johanna", "Kralik, Mathilde", "Lang, Josephine", "Lehmann, Liza",
+	"Liszt, Franz", "Mayer, Emilie", "Medtner, Nikolay", "Mendelssohn, Felix",
+	"Mozart, Wolfgang Amadeus", "Munktell, Helena", "Paradis, Maria Theresia von",
+	"Parratt, Walter", "Prokofiev, Sergey", "Rachmaninoff, Sergei", "Ravel, Maurice",
+	"Reichardt, Louise", "Saint-Georges, Joseph Bologne", "Saint-Saens, Camille",
+	"Satie, Erik", "Scarlatti, Domenico", "Schroter, Corona", "Schubert, Franz",
+	"Schumann, Clara", "Schumann, Robert", "Scriabin, Aleksandr", "Shostakovich, Dmitry",
+	"Sibelius, Jean", "Smetana, Bedrich", "Tchaikovsky, Pyotr", "Viardot, Pauline",
+	"Vivaldi, Antonio", "Warlock, Peter", "Wolf, Hugo", "Zumsteeg, Emilie",
+]);
+
 const ABC_PHONET_MAP: Record<string, Phonet> = {
 	"C": Phonet.c, "D": Phonet.d, "E": Phonet.e, "F": Phonet.f, "G": Phonet.g, "A": Phonet.a, "B": Phonet.b,
 	"c": Phonet.c, "d": Phonet.d, "e": Phonet.e, "f": Phonet.f, "g": Phonet.g, "a": Phonet.a, "b": Phonet.b,
@@ -878,7 +906,14 @@ const decodeTune = (tune: ABC.Tune): LilyletDoc => {
 	}
 
 	for (const h of headers) {
-		if ((h as any).comment) continue;
+		const comment = (h as any).comment;
+		if (typeof comment === "string") {
+			const value = comment.trim();
+			if (!metadata.genre && NOTAGEN_PERIOD_SET.has(value)) metadata.genre = value;
+			else if (!metadata.instrument && NOTAGEN_INSTRUMENTATION_SET.has(value)) metadata.instrument = value;
+			else if (!metadata.composer && NOTAGEN_COMPOSER_SET.has(value)) metadata.composer = value;
+			continue;
+		}
 		if ((h as any).staffLayout) continue;
 
 		const header = h as { name: string; value: any };

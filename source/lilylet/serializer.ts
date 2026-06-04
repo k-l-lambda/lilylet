@@ -892,6 +892,12 @@ const serializeMetadata = (metadata: Metadata): string => {
 	if (metadata.lyricist) {
 		lines.push('[lyricist "' + escapeString(metadata.lyricist) + '"]');
 	}
+	if (metadata.genre) {
+		lines.push('[genre "' + escapeString(metadata.genre) + '"]');
+	}
+	if (metadata.instrument) {
+		lines.push('[instrument "' + escapeString(metadata.instrument) + '"]');
+	}
 	if (metadata.autoBeam) {
 		lines.push('[auto-beam "' + escapeString(metadata.autoBeam) + '"]');
 	}

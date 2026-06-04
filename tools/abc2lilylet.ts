@@ -9,6 +9,7 @@ interface CliOptions {
 	inputDir: string;
 	outputDir: string;
 	excludeSpaceVoices: boolean;
+	transcribeMeta: boolean;
 }
 
 interface ConversionError {
@@ -25,6 +26,8 @@ Options:
   --output, -o             Output directory for generated .lyl files
   --keep-space-voices      Keep voices that contain only invisible rests/spaces
   --include-space-voices   Alias for --keep-space-voices
+  --meta                   Transcribe leading %period/%composer/%instrumentation comments
+                           into [composer]/[genre]/[instrument] metadata
   --help, -h               Show this help
 `;
 
@@ -32,6 +35,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 	let inputDir = "";
 	let outputDir = "";
 	let excludeSpaceVoices = true;
+	let transcribeMeta = false;
 	const positional: string[] = [];
 
 	for (let i = 0; i < argv.length; i++) {
@@ -51,6 +55,8 @@ const parseArgs = (argv: string[]): CliOptions => {
 			excludeSpaceVoices = false;
 		} else if (arg === "--exclude-space-voices") {
 			excludeSpaceVoices = true;
+		} else if (arg === "--meta") {
+			transcribeMeta = true;
 		} else if (arg.startsWith("-")) {
 			throw new Error(`Unknown option: ${arg}`);
 		} else {
@@ -69,6 +75,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 		inputDir: path.resolve(inputDir),
 		outputDir: path.resolve(outputDir),
 		excludeSpaceVoices,
+		transcribeMeta,
 	};
 };
 
@@ -83,6 +90,47 @@ const findAbcFiles = (dir: string): string[] => {
 		}
 	}
 	return results.sort();
+};
+
+const stripCatalogMeta = (doc: LilyletDoc): void => {
+	if (!doc.metadata) return;
+	delete doc.metadata.genre;
+	delete doc.metadata.instrument;
+	if (Object.keys(doc.metadata).length === 0) delete doc.metadata;
+};
+
+// NotaGen catalog enums (period_composer_instrumentation), used as a filename
+// fallback when the ABC content lacks the leading %-comment tags.
+const PERIOD_SET = new Set(["Baroque", "Classical", "Romantic"]);
+const INSTRUMENTATION_SET = new Set(["Art Song", "Chamber", "Choral", "Keyboard", "Orchestral", "Vocal-Orchestral"]);
+const COMPOSER_SET = new Set([
+	"Bach, Johann Sebastian", "Bartok, Bela", "Beethoven, Ludwig van", "Berlioz, Hector",
+	"Bizet, Georges", "Boulanger, Lili", "Boulton, Harold", "Brahms, Johannes",
+	"Burgmuller, Friedrich", "Butterworth, George", "Chaminade, Cecile", "Chausson, Ernest",
+	"Chopin, Frederic", "Corelli, Arcangelo", "Cornelius, Peter", "Debussy, Claude",
+	"Dvorak, Antonin", "Faisst, Clara", "Faure, Gabriel", "Franz, Robert",
+	"Gonzaga, Chiquinha", "Grandval, Clemence de", "Grieg, Edvard", "Handel, George Frideric",
+	"Haydn, Joseph", "Hensel, Fanny", "Holmes, Augusta Mary Anne", "Jaell, Marie",
+	"Kinkel, Johanna", "Kralik, Mathilde", "Lang, Josephine", "Lehmann, Liza",
+	"Liszt, Franz", "Mayer, Emilie", "Medtner, Nikolay", "Mendelssohn, Felix",
+	"Mozart, Wolfgang Amadeus", "Munktell, Helena", "Paradis, Maria Theresia von",
+	"Parratt, Walter", "Prokofiev, Sergey", "Rachmaninoff, Sergei", "Ravel, Maurice",
+	"Reichardt, Louise", "Saint-Georges, Joseph Bologne", "Saint-Saens, Camille",
+	"Satie, Erik", "Scarlatti, Domenico", "Schroter, Corona", "Schubert, Franz",
+	"Schumann, Clara", "Schumann, Robert", "Scriabin, Aleksandr", "Shostakovich, Dmitry",
+	"Sibelius, Jean", "Smetana, Bedrich", "Tchaikovsky, Pyotr", "Viardot, Pauline",
+	"Vivaldi, Antonio", "Warlock, Peter", "Wolf, Hugo", "Zumsteeg, Emilie",
+]);
+
+const fillCatalogMetaFromFilename = (doc: LilyletDoc, filePath: string): void => {
+	const base = path.parse(filePath).name;
+	const tokens = base.split("_");
+	for (const token of tokens) {
+		const value = token.trim();
+		if (PERIOD_SET.has(value)) doc.metadata = { ...doc.metadata, genre: doc.metadata?.genre ?? value };
+		else if (INSTRUMENTATION_SET.has(value)) doc.metadata = { ...doc.metadata, instrument: doc.metadata?.instrument ?? value };
+		else if (COMPOSER_SET.has(value)) doc.metadata = { ...doc.metadata, composer: doc.metadata?.composer ?? value };
+	}
 };
 
 const eventHasSoundingContent = (event: Event): boolean => {
@@ -148,6 +196,8 @@ const main = () => {
 				if (!doc.measures || doc.measures.length === 0) throw new Error("No measures produced");
 
 				if (options.excludeSpaceVoices) removePureSpaceVoices(doc);
+				if (options.transcribeMeta) fillCatalogMetaFromFilename(doc, file);
+				else stripCatalogMeta(doc);
 
 				const lylContent = serializeLilyletDoc(doc);
 				const reparsed = parseCode(lylContent);
