@@ -10,6 +10,7 @@ interface CliOptions {
 	outputDir: string;
 	excludeSpaceVoices: boolean;
 	transcribeMeta: boolean;
+	skipExisting: boolean;
 }
 
 interface ConversionError {
@@ -28,6 +29,7 @@ Options:
   --include-space-voices   Alias for --keep-space-voices
   --meta                   Transcribe leading %period/%composer/%instrumentation comments
                            into [composer]/[genre]/[instrument] metadata
+  --skip-existing          Skip files whose output .lyl already exists (resume a run)
   --help, -h               Show this help
 `;
 
@@ -36,6 +38,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 	let outputDir = "";
 	let excludeSpaceVoices = true;
 	let transcribeMeta = false;
+	let skipExisting = false;
 	const positional: string[] = [];
 
 	for (let i = 0; i < argv.length; i++) {
@@ -57,6 +60,8 @@ const parseArgs = (argv: string[]): CliOptions => {
 			excludeSpaceVoices = true;
 		} else if (arg === "--meta") {
 			transcribeMeta = true;
+		} else if (arg === "--skip-existing") {
+			skipExisting = true;
 		} else if (arg.startsWith("-")) {
 			throw new Error(`Unknown option: ${arg}`);
 		} else {
@@ -76,6 +81,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 		outputDir: path.resolve(outputDir),
 		excludeSpaceVoices,
 		transcribeMeta,
+		skipExisting,
 	};
 };
 
@@ -187,9 +193,15 @@ const main = () => {
 		fs.mkdirSync(options.outputDir, { recursive: true });
 
 		let written = 0;
+		let skipped = 0;
 		const errors: ConversionError[] = [];
 
 		for (const file of files) {
+			const outputFile = outputPathFor(file, options.inputDir, options.outputDir);
+			if (options.skipExisting && fs.existsSync(outputFile)) {
+				skipped++;
+				continue;
+			}
 			try {
 				const content = fs.readFileSync(file, "utf-8");
 				const doc = abcDecoder.decode(content);
@@ -201,7 +213,6 @@ const main = () => {
 
 				const lylContent = serializeLilyletDoc(doc);
 				const reparsed = parseCode(lylContent);
-				const outputFile = outputPathFor(file, options.inputDir, options.outputDir);
 
 				fs.mkdirSync(path.dirname(outputFile), { recursive: true });
 				fs.writeFileSync(outputFile, lylContent, "utf-8");
@@ -217,7 +228,7 @@ const main = () => {
 			}
 		}
 
-		console.log(`\nTotal: ${files.length}, Written: ${written}, Failed: ${errors.length}`);
+		console.log(`\nTotal: ${files.length}, Written: ${written}, Skipped: ${skipped}, Failed: ${errors.length}`);
 		console.log(`Output: ${options.outputDir}`);
 		console.log(`Pure-space voices: ${options.excludeSpaceVoices ? "excluded" : "kept"}`);
 
