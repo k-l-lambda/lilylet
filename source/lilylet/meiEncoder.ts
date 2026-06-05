@@ -79,6 +79,41 @@ const CLEF_SHAPES: Record<string, { shape: string; line: number }> = {
 };
 
 
+// Resolve a clef string into MEI shape/line plus optional octave displacement.
+// Octave transposition follows the LilyPond convention: a "_8"/"_15" suffix lowers
+// the sounding pitch by one/two octaves (the small 8/15 is drawn below the clef),
+// and "^8"/"^15" raises it (drawn above). MEI encodes this as dis ("8" | "15")
+// and dis.place ("below" | "above").
+const resolveClef = (clefStr: string): { shape: string; line: number; dis?: "8" | "15"; disPlace?: "above" | "below" } => {
+	const match = clefStr.match(/^(.*?)([_^])(8|15)$/);
+	const base = match ? match[1] : clefStr;
+	const clefInfo = CLEF_SHAPES[base] || CLEF_SHAPES.treble;
+	if (!match) return { shape: clefInfo.shape, line: clefInfo.line };
+	return {
+		shape: clefInfo.shape,
+		line: clefInfo.line,
+		dis: match[3] as "8" | "15",
+		disPlace: match[2] === "^" ? "above" : "below",
+	};
+};
+
+// Attributes for a standalone <clef> element (mid-measure clef change).
+const clefElementAttrs = (clefStr: string): string => {
+	const c = resolveClef(clefStr);
+	let attrs = `shape="${c.shape}" line="${c.line}"`;
+	if (c.dis) attrs += ` dis="${c.dis}" dis.place="${c.disPlace}"`;
+	return attrs;
+};
+
+// Attributes for a <staffDef> clef (clef.* namespace).
+const staffDefClefAttrs = (clefStr: string): string => {
+	const c = resolveClef(clefStr);
+	let attrs = `clef.shape="${c.shape}" clef.line="${c.line}"`;
+	if (c.dis) attrs += ` clef.dis="${c.dis}" clef.dis.place="${c.disPlace}"`;
+	return attrs;
+};
+
+
 // Lilylet duration division to MEI dur
 // division: 1=whole, 2=half, 4=quarter, 8=eighth, etc.
 const DURATIONS: Record<number, string> = {
@@ -757,8 +792,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 				const effectiveStaffNum = effectiveStaff ?? layerStaffNum;
 				if (effectiveStaffNum === layerStaffNum) {
 					const clefIndent = beamOpen ? baseIndent + '    ' : baseIndent;
-					const clefInfo = CLEF_SHAPES[ctx.clef] || CLEF_SHAPES.treble;
-					xml += `${clefIndent}<clef xml:id="${generateId('clef')}" shape="${clefInfo.shape}" line="${clefInfo.line}" />\n`;
+					xml += `${clefIndent}<clef xml:id="${generateId('clef')}" ${clefElementAttrs(ctx.clef)} />\n`;
 				}
 				activeClef = ctx.clef;
 				endingClef = ctx.clef;
@@ -1306,8 +1340,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				if (ctx.clef && ctx.clef !== currentClef) {
 					const layerStaff = voice.staff || 1;
 					if (currentStaff === layerStaff) {
-						const clefInfo = CLEF_SHAPES[ctx.clef] || CLEF_SHAPES.treble;
-						xml += `${currentIndent}<clef xml:id="${generateId('clef')}" shape="${clefInfo.shape}" line="${clefInfo.line}" />\n`;
+						xml += `${currentIndent}<clef xml:id="${generateId('clef')}" ${clefElementAttrs(ctx.clef)} />\n`;
 					}
 					currentClef = ctx.clef;
 				}
@@ -1959,16 +1992,14 @@ const encodeScoreDef = (
 			for (let ls = 1; ls <= info.maxStaff; ls++) {
 				const globalStaff = info.staffOffset + ls;
 				const clef = info.clefs[ls] || Clef.treble;
-				const clefInfo = CLEF_SHAPES[clef] || CLEF_SHAPES.treble;
-				xml += `${indent}            <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" clef.shape="${clefInfo.shape}" clef.line="${clefInfo.line}" />\n`;
+				xml += `${indent}            <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)} />\n`;
 			}
 			xml += `${indent}        </staffGrp>\n`;
 		} else {
 			// Single staff part
 			const globalStaff = info.staffOffset + 1;
 			const clef = info.clefs[1] || Clef.treble;
-			const clefInfo = CLEF_SHAPES[clef] || CLEF_SHAPES.treble;
-			xml += `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" clef.shape="${clefInfo.shape}" clef.line="${clefInfo.line}" />\n`;
+			xml += `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)} />\n`;
 		}
 	}
 

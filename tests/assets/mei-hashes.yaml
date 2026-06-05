@@ -58,6 +58,7 @@ clefs-alto-clef-cc.lyl: e4bacdfec40e91f13f964c948fafabf4
 clefs-bass-clef-cf.lyl: 42a2d45d119ae5e4025b592c00bb8723
 clefs-change-in-voice.lyl: 811cc0e83f8cc86bec29d8b798e74c2a
 clefs-inside-tuplet.lyl: a033120d88b7a7cbf892498dad57f1fc
+clefs-octave-shift.lyl: 459fa5cd927b3b124466ec727fbaea53
 comments.lyl: 0f39d889545cafef523e8846fe84d886
 cross-staves-rapid-switches.lyl: 9316a798df0f6c8ce169ce713d48412f
 cross-staves-simple-notes.lyl: 19f46ec626ffdc4ad5ab8192104aa67e

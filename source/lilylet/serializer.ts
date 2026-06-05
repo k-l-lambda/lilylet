@@ -383,7 +383,7 @@ const serializeContextChange = (event: ContextChange): string => {
 
 	// Clef
 	if (event.clef) {
-		parts.push('\\clef "' + CLEF_MAP[event.clef] + '"');
+		parts.push('\\clef "' + (CLEF_MAP[event.clef] ?? event.clef) + '"');
 	}
 
 	// Key signature
@@ -688,7 +688,7 @@ const serializeVoice = (
 	const voiceClef = allStaffClefs?.[voice.staff] || findVoiceClef(voice);
 	const clefAlreadyEmitted = voiceClef && emittedClefs?.[voice.staff] === voiceClef;
 	if (voiceClef && !clefAlreadyEmitted) {
-		parts.push('\\clef "' + CLEF_MAP[voiceClef] + '"');
+		parts.push('\\clef "' + (CLEF_MAP[voiceClef] ?? voiceClef) + '"');
 		if (emittedClefs) emittedClefs[voice.staff] = voiceClef;
 	}
 	// Skip redundant clef context events if this staff's clef is already established
@@ -712,7 +712,7 @@ const serializeVoice = (
 				// Emit target staff clef if the event carries one or allStaffClefs knows it
 				const ctxClef = ctx.clef || allStaffClefs?.[activeStaff];
 				if (ctxClef && emittedClefs?.[activeStaff] !== ctxClef) {
-					parts.push('\\clef "' + CLEF_MAP[ctxClef] + '"');
+					parts.push('\\clef "' + (CLEF_MAP[ctxClef] ?? ctxClef) + '"');
 					if (emittedClefs) emittedClefs[activeStaff] = ctxClef;
 				}
 				continue;
@@ -736,7 +736,7 @@ const serializeVoice = (
 				// Emit the target staff's clef if it differs from what was last emitted for this staff
 				const targetClef = allStaffClefs?.[activeStaff];
 				if (targetClef && emittedClefs?.[activeStaff] !== targetClef) {
-					parts.push('\\clef "' + CLEF_MAP[targetClef] + '"');
+					parts.push('\\clef "' + (CLEF_MAP[targetClef] ?? targetClef) + '"');
 					if (emittedClefs) emittedClefs[activeStaff] = targetClef;
 				}
 			}
