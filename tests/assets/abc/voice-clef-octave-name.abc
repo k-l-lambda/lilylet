@@ -1,0 +1,15 @@
+X:1
+%Romantic
+%Schumann, Robert
+%Choral
+%%score [ 1 2 3 4 ]
+L:1/8
+Q:1/4=60
+M:3/4
+K:Bb
+V:1 treble nm="S"
+V:2 treble nm="A"
+V:3 treble-8 nm="T"
+V:4 bass nm="B"
+[V:1]"^Andante sostenuto"!p! F|[V:2]!p! D|[V:3]!p! F|[V:4]!p! B,,|
+[V:1]B3/2 B/ A2 z F|[V:2]^C3/2 C/ D2 z D|[V:3]=E3/2 E/ F2 z B|[V:4]B,,3/2 B,,/ B,,2 z B,,|

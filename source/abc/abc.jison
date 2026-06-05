@@ -229,6 +229,7 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <key_signature>"treble"				return 'TREBLE';
 <key_signature>"bass"				return 'BASS';
 <key_signature>"tenor"				return 'TENOR';
+<key_signature>"alto"				return 'ALTO';
 <key_signature>"none"				return 'NAME';
 <key_signature>"Dor"				return 'NAME';
 <key_signature>"Phr"				return 'NAME';
@@ -256,14 +257,16 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <comment>[^\n]+						{ return 'COMMENT'; }
 <comment>\n							{ this.popState(); }
 <spec_comment_name>[ \t]+			{}
-<spec_comment_name>"score"			{ this.popState(); this.pushState('spec_comment'); return 'SCORE'; }
-<spec_comment_name>"staves"			{ this.popState(); this.pushState('spec_comment'); return 'SCORE'; }
+<spec_comment_name>"score"			{ this.popState(); this.pushState('spec_comment'); this._scoreDepth = 0; return 'SCORE'; }
+<spec_comment_name>"staves"			{ this.popState(); this.pushState('spec_comment'); this._scoreDepth = 0; return 'SCORE'; }
 <spec_comment_name>[\w]+			{ this.popState(); this.pushState('spec_comment_skip'); }
 <spec_comment_name>\n				{ this.popState(); this.popState(); }
 <spec_comment>[ \t]+				{}
-<spec_comment>[(){}\[\]|]			return yytext
+<spec_comment>[([{]				{ this._scoreDepth = (this._scoreDepth || 0) + 1; return yytext; }
+<spec_comment>[)\]}]				{ this._scoreDepth = (this._scoreDepth || 0) - 1; return yytext; }
+<spec_comment>[|]					return yytext
 <spec_comment>[\w]+					return 'NN'
-<spec_comment>\n					{ this.popState(); this.popState(); return 'LAYOUT_END'; }
+<spec_comment>\n					{ if (this._scoreDepth > 0) { /* layout continues on next line */ } else { this.popState(); this.popState(); return 'LAYOUT_END'; } }
 <spec_comment_skip>[^\n]+			{}
 <spec_comment_skip>\n				{ this.popState(); this.popState(); }
 
@@ -399,6 +402,7 @@ staff_shift
 key_signature
 	: key_root							-> $1
 	| NAME								-> key(null, $1)
+	| clef								-> $1
 	;
 
 key_root
@@ -412,6 +416,11 @@ clef
 	: TREBLE							-> clef($1)
 	| BASS								-> clef($1)
 	| TENOR								-> clef($1)
+	| ALTO								-> clef($1)
+	| TREBLE plus_minus_number			-> clef($1)
+	| BASS plus_minus_number			-> clef($1)
+	| TENOR plus_minus_number			-> clef($1)
+	| ALTO plus_minus_number			-> clef($1)
 	;
 
 sharp_or_flat
@@ -460,8 +469,11 @@ voice_exp
 	: number							-> voice($1)
 	| number NAME						-> voice($1, $2)
 	| number NAME assigns				-> voice($1, $2, $3)
+	| number NAME plus_minus_number		-> voice($1, $2)
+	| number NAME plus_minus_number assigns	-> voice($1, $2, $4)
 	| NAME								-> voice(1, $1)
 	| NAME assigns						-> voice(1, $1, $2)
+	| NAME plus_minus_number assigns	-> voice(1, $1, $3)
 	| upper_phonet number				-> voice(1, $1 + String($2))
 	| upper_phonet number assigns		-> voice(1, $1 + String($2), $3)
 	| upper_phonet number NAME			-> voice(1, $1 + String($2))
@@ -524,6 +536,7 @@ bar
 	| ':' '|' '|' ':'					-> ':|:'
 	| '|' '|'							-> '||'
 	| '|' ']'							-> '|]'
+	| '|' ']' ':'						-> '|]'
 	| ':' '|' ']'						-> ':|]'
 	| '|' N								-> '|' + $2
 	| ':' '|' N							-> ':|' + $2
@@ -586,6 +599,8 @@ articulation_content
 	| a									-> articulation($1)
 	| "^"								-> articulation($1)
 	| fingering_numbers					-> ({fingering: Number($1)})
+	| '(' fingering_numbers ')'			-> ({fingering: Number($2)})
+	| '(' fingering_numbers				-> ({fingering: Number($2)})
 	| tremolo							-> ({tremolo: $1})
 	| tremolo '-'						-> ({tremolo: $1})	// unknown meaning of '-'?
 	;

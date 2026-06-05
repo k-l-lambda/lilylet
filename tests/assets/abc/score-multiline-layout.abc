@@ -1,0 +1,30 @@
+X:1
+%Romantic
+%Orchestral
+%%score [ ( 1 2 ) | ( 3 4 ) | ( 5 6 ) | ( 7 8 ) ] [ ( 9 10 ) | ( 11 12 ) ] 13 [ [ ( 14 15 ) | ( 16 17 ) | ( 18 19 ) | 20 ]
+]
+L:1/8
+Q:1/4=76
+M:4/4
+K:C
+V:1 treble nm="Flauti" snm="Fl."
+V:2 treble
+V:3 treble nm="Oboi" snm="Ob."
+V:4 treble
+V:5 treble transpose=-3 nm="Clarinetti in A" snm="Cl."
+V:6 treble transpose=-3
+V:7 bass nm="Fagotti" snm="Fag."
+V:8 bass
+V:9 treble transpose=-8 nm="Corni in E" snm="Cor."
+V:10 treble transpose=-8
+V:11 treble transpose=2 nm="Trombe in D" snm="Tr."
+V:12 treble transpose=2
+V:13 bass nm="Timpani" snm="Timp."
+V:14 treble nm="Violino I"
+V:15 treble
+V:16 treble nm="Violino II"
+V:17 treble
+V:18 alto nm="Viola"
+V:19 alto
+V:20 bass nm="Violoncello e Basso"
+[V:1] c4 c4|[V:14] e4 e4|[V:20] C4 C4|

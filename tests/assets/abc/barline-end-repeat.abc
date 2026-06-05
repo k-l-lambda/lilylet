@@ -1,0 +1,17 @@
+X:1
+%Baroque
+%Corelli, Arcangelo
+%Orchestral
+%%score 1 [ 2 3 4 5 ]
+L:1/8
+Q:1/4=60
+M:4/4
+K:Bb
+V:1 treble nm="Violino solo" snm="Vln. solo"
+V:2 treble nm="Violino 1" snm="Vln. 1"
+V:3 treble nm="Violino 2" snm="Vln. 2"
+V:4 alto nm="Viola" snm="Vla."
+V:5 bass nm="Basso Continuo" snm="B.C."
+[V:1]"^Andante" d3 d g3 (a/b/)|[V:2]z2 d2 z2 c2|[V:3]z2 B2 z2 G2|[V:4]z2 G2 z2 E2|[V:5]z2 G,2 z2 E,2|
+[V:1]!fermata!g8|]:[V:2]!fermata!G8|]:[V:3]!fermata!G8|]:[V:4]!fermata!B,8|]:[V:5]!fermata!G,,8|]:
+[V:1][M:4/4][Q:1/4=90]"^Allegro" gdga ^fd z a|[V:2][M:4/4] z4 dAd^f|[V:3][M:4/4] z8|[V:4][M:4/4] z8|[V:5][M:4/4] G,A,B,G, D,=E,^F,D,|
