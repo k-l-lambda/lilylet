@@ -878,7 +878,14 @@ const convertGraceEvents = (
 /**
  * Decode an ABC tune into a LilyletDoc
  */
-const decodeTune = (tune: ABC.Tune): LilyletDoc => {
+export interface DecodeOptions {
+	// Extract NotaGen catalog metadata from the leading
+	// %period/%composer/%instrumentation comments. These are NotaGen's own
+	// convention, not standard ABC, so this is off by default.
+	catalogComments?: boolean;
+}
+
+const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => {
 	const headers = tune.header;
 	const body = tune.body;
 
@@ -903,10 +910,12 @@ const decodeTune = (tune: ABC.Tune): LilyletDoc => {
 	for (const h of headers) {
 		const comment = (h as any).comment;
 		if (typeof comment === "string") {
-			const value = comment.trim();
-			if (!metadata.genre && NOTAGEN_PERIOD_SET.has(value)) metadata.genre = value;
-			else if (!metadata.instrument && NOTAGEN_INSTRUMENTATION_SET.has(value)) metadata.instrument = value;
-			else if (!metadata.composer && NOTAGEN_COMPOSER_SET.has(value)) metadata.composer = value;
+			if (options.catalogComments) {
+				const value = comment.trim();
+				if (!metadata.genre && NOTAGEN_PERIOD_SET.has(value)) metadata.genre = value;
+				else if (!metadata.instrument && NOTAGEN_INSTRUMENTATION_SET.has(value)) metadata.instrument = value;
+				else if (!metadata.composer && NOTAGEN_COMPOSER_SET.has(value)) metadata.composer = value;
+			}
 			continue;
 		}
 		if ((h as any).staffLayout) continue;
@@ -1144,32 +1153,32 @@ const decodeTune = (tune: ABC.Tune): LilyletDoc => {
  * Decode ABC notation string to LilyletDoc.
  * If the ABC contains multiple tunes, only the first is decoded.
  */
-export const decode = (abcString: string): LilyletDoc => {
+export const decode = (abcString: string, options: DecodeOptions = {}): LilyletDoc => {
 	const tunes = parse(abcString);
 	if (!tunes || tunes.length === 0) {
 		throw new Error("No tunes found in ABC notation");
 	}
-	return decodeTune(tunes[0]);
+	return decodeTune(tunes[0], options);
 };
 
 /**
  * Decode ABC notation string to multiple LilyletDocs (one per tune).
  */
-export const decodeAll = (abcString: string): LilyletDoc[] => {
+export const decodeAll = (abcString: string, options: DecodeOptions = {}): LilyletDoc[] => {
 	const tunes = parse(abcString);
 	if (!tunes || tunes.length === 0) {
 		throw new Error("No tunes found in ABC notation");
 	}
-	return tunes.map(decodeTune);
+	return tunes.map(t => decodeTune(t, options));
 };
 
 /**
  * Decode an ABC file to LilyletDoc
  */
-export const decodeFile = async (filePath: string): Promise<LilyletDoc> => {
+export const decodeFile = async (filePath: string, options: DecodeOptions = {}): Promise<LilyletDoc> => {
 	const fs = await import("fs/promises");
 	const content = await fs.readFile(filePath, "utf-8");
-	return decode(content);
+	return decode(content, options);
 };
 
 export default {

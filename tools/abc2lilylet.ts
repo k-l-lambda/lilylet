@@ -27,8 +27,10 @@ Options:
   --output, -o             Output directory for generated .lyl files
   --keep-space-voices      Keep voices that contain only invisible rests/spaces
   --include-space-voices   Alias for --keep-space-voices
-  --meta                   Transcribe leading %period/%composer/%instrumentation comments
-                           into [composer]/[genre]/[instrument] metadata
+  --meta                   Extract NotaGen catalog metadata (non-standard ABC):
+                           leading %period/%composer/%instrumentation comments,
+                           with a filename fallback, into [genre]/[composer]/[instrument].
+                           Off by default — only standard ABC info fields (C:, T:, ...) are kept.
   --skip-existing          Skip files whose output .lyl already exists (resume a run)
   --help, -h               Show this help
 `;
@@ -96,13 +98,6 @@ const findAbcFiles = (dir: string): string[] => {
 		}
 	}
 	return results.sort();
-};
-
-const stripCatalogMeta = (doc: LilyletDoc): void => {
-	if (!doc.metadata) return;
-	delete doc.metadata.genre;
-	delete doc.metadata.instrument;
-	if (Object.keys(doc.metadata).length === 0) delete doc.metadata;
 };
 
 // NotaGen catalog enums (period_composer_instrumentation), used as a filename
@@ -204,12 +199,11 @@ const main = () => {
 			}
 			try {
 				const content = fs.readFileSync(file, "utf-8");
-				const doc = abcDecoder.decode(content);
+				const doc = abcDecoder.decode(content, { catalogComments: options.transcribeMeta });
 				if (!doc.measures || doc.measures.length === 0) throw new Error("No measures produced");
 
 				if (options.excludeSpaceVoices) removePureSpaceVoices(doc);
 				if (options.transcribeMeta) fillCatalogMetaFromFilename(doc, file);
-				else stripCatalogMeta(doc);
 
 				const lylContent = serializeLilyletDoc(doc);
 				const reparsed = parseCode(lylContent);
