@@ -351,9 +351,60 @@ interface StaffAssignment {
 
 /**
  * Parse %%score layout to determine voice→(part, staff) mapping.
- * {(...) | (...)} = one part with two staves
- * (...) = voices sharing one staff
+ *
+ * Grouping semantics (recursive, any nesting depth):
+ *   [ ... ]  square: each child becomes a separate part        -> serialized with \\\
+ *   ( ... )  arc:    all voices share one staff in one part     -> voices joined with \\
+ *   { ... }  curly:  one part, each child is a separate staff   -> grand staff
+ *   leaf     a bare voice number "1" (often wrapped as {items:["1"]}) -> one part, one staff
+ *
+ * The AST wraps each leaf voice one level deep, e.g. ( 1 2 ) becomes
+ *   {bound:'arc', items:[{items:['1']},{items:['2']}]}
+ * so leaves must be collected recursively rather than assuming a fixed depth.
  */
+
+type ScoreNode = ABC.StaffGroup | string;
+
+// All voice numbers under a node, flattened.
+const collectScoreVoices = (node: ScoreNode): number[] => {
+	if (typeof node === "string") {
+		const v = parseInt(node, 10);
+		return isNaN(v) ? [] : [v];
+	}
+	const voices: number[] = [];
+	for (const item of node.items || []) {
+		voices.push(...collectScoreVoices(item));
+	}
+	return voices;
+};
+
+// Expand a node into a list of parts; each part is a list of staves; each staff is a list of voices.
+const scoreNodeToParts = (node: ScoreNode): number[][][] => {
+	if (typeof node === "string") {
+		const v = parseInt(node, 10);
+		return isNaN(v) ? [] : [[[v]]];
+	}
+
+	if (node.bound === "square") {
+		// each child is its own part
+		const parts: number[][][] = [];
+		for (const child of node.items || []) {
+			parts.push(...scoreNodeToParts(child));
+		}
+		return parts;
+	}
+
+	if (node.bound === "curly") {
+		// one part, each child is a separate staff (grand staff)
+		const staves = (node.items || []).map(child => collectScoreVoices(child)).filter(s => s.length > 0);
+		return staves.length > 0 ? [staves] : [];
+	}
+
+	// arc or no bound: one part, all voices on a single staff
+	const voices = collectScoreVoices(node);
+	return voices.length > 0 ? [[voices]] : [];
+};
+
 const parseScoreLayout = (
 	headers: any[]
 ): Map<number, StaffAssignment> | null => {
@@ -364,78 +415,14 @@ const parseScoreLayout = (
 	const voiceMap = new Map<number, StaffAssignment>();
 
 	let partIndex = 0;
-
-	for (const group of layout) {
-		if (group.bound === "curly") {
-			// Curly braces = one instrument/part with multiple staves
-			let staffInPart = 1;
-			for (const item of group.items) {
-				if (typeof item === "string") {
-					voiceMap.set(parseInt(item), { partIndex, staffInPart });
-				} else if ((item as ABC.StaffGroup).items) {
-					const sg = item as ABC.StaffGroup;
-					for (const subItem of sg.items) {
-						if (typeof subItem === "string") {
-							voiceMap.set(parseInt(subItem), { partIndex, staffInPart });
-						} else if ((subItem as ABC.StaffGroup).items) {
-							for (const leaf of (subItem as ABC.StaffGroup).items) {
-								if (typeof leaf === "string") {
-									voiceMap.set(parseInt(leaf), { partIndex, staffInPart });
-								}
-							}
-						}
-					}
-					staffInPart++;
+	for (const top of layout) {
+		for (const part of scoreNodeToParts(top)) {
+			part.forEach((staff, staffIdx) => {
+				for (const voice of staff) {
+					voiceMap.set(voice, { partIndex, staffInPart: staffIdx + 1 });
 				}
-			}
+			});
 			partIndex++;
-		} else if (group.bound === "arc" || !group.bound) {
-			// Arc or plain = voices sharing a staff in same part
-			for (const item of group.items) {
-				if (typeof item === "string") {
-					voiceMap.set(parseInt(item), { partIndex, staffInPart: 1 });
-				} else if ((item as ABC.StaffGroup).items) {
-					for (const subItem of (item as ABC.StaffGroup).items) {
-						if (typeof subItem === "string") {
-							voiceMap.set(parseInt(subItem), { partIndex, staffInPart: 1 });
-						}
-					}
-				}
-			}
-			partIndex++;
-		} else {
-			// Square bracket or unknown - treat each item as separate part
-			for (const item of group.items) {
-				if (typeof item === "string") {
-					voiceMap.set(parseInt(item), { partIndex, staffInPart: 1 });
-					partIndex++;
-				} else if ((item as ABC.StaffGroup).items) {
-					const sg = item as ABC.StaffGroup;
-					if (sg.bound === "curly") {
-						let staffInPart = 1;
-						for (const subItem of sg.items) {
-							if (typeof subItem === "string") {
-								voiceMap.set(parseInt(subItem), { partIndex, staffInPart });
-							} else if ((subItem as ABC.StaffGroup).items) {
-								for (const leaf of (subItem as ABC.StaffGroup).items) {
-									if (typeof leaf === "string") {
-										voiceMap.set(parseInt(leaf), { partIndex, staffInPart });
-									}
-								}
-								staffInPart++;
-							}
-						}
-						partIndex++;
-					} else {
-						for (const subItem of sg.items) {
-							if (typeof subItem === "string") {
-								voiceMap.set(parseInt(subItem), { partIndex, staffInPart: 1 });
-							}
-						}
-						partIndex++;
-					}
-				}
-			}
 		}
 	}
 

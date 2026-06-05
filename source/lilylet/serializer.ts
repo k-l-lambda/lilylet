@@ -802,11 +802,16 @@ const serializePart = (
 	const voiceStrs: string[] = [];
 	let staff = currentStaff;
 
+	// A part is a grand staff only if its voices span more than one staff.
+	// Only then do we force \staff on every voice; single-staff parts emit \staff
+	// solely when the staff actually changes (e.g. resetting after a prior grand staff).
+	const partIsGrandStaff = new Set(part.voices.map(v => v.staff)).size > 1;
+
 	for (let i = 0; i < part.voices.length; i++) {
 		const voice = part.voices[i];
 		// Pass measureContext to all voices, isFirstVoice for key/time
 		const isFirstVoice = isFirstPart && i === 0;
-		const { str, newStaff } = serializeVoice(voice, staff, isGrandStaff, measureContext, isFirstVoice, clefsByStaff, emittedClefs);
+		const { str, newStaff } = serializeVoice(voice, staff, partIsGrandStaff, measureContext, isFirstVoice, clefsByStaff, emittedClefs);
 		voiceStrs.push(str);
 		staff = newStaff;
 	}

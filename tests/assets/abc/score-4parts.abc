@@ -1,0 +1,19 @@
+X:1
+%Romantic
+%Schumann, Robert
+%Chamber
+%%score [ ( 1 2 ) | ( 3 4 ) | ( 5 6 ) | ( 7 8 ) ]
+L:1/8
+Q:1/4=60
+M:2/4
+K:F
+V:1 treble nm="Violin 1"
+V:2 treble
+V:3 treble nm="Violin 2"
+V:4 treble
+V:5 alto nm="Viola"
+V:6 alto
+V:7 bass nm="Violoncello"
+V:8 bass
+[V:1]"^Andante non troppo lento"!p! (A|[V:2]x1|[V:3]z1|[V:4]x1|[V:5]z1|[V:6]x1|[V:7]z1|[V:8]x1|
+[V:1]defg)|[V:2]x4|[V:3]z!p! (Ade)|[V:4]x4|[V:5]z2 z!p! (^C|[V:6]x4|[V:7]z4|[V:8]x4|
