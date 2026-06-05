@@ -314,12 +314,20 @@ const convertKeySignature = (abcKey: ABC.KeySignature): KeySignature => {
  * Convert ABC clef string to Lilylet Clef
  */
 const convertClef = (clefStr: string): Clef | undefined => {
-	switch (clefStr?.toLowerCase()) {
-		case "treble": return Clef.treble;
-		case "bass": return Clef.bass;
-		case "alto": case "tenor": return Clef.alto;
+	// Split off an optional ABC octave shift suffix: "treble-8", "bass+8", "treble-15".
+	// ABC: "-N" lowers the sounding pitch (small N drawn below), "+N" raises it.
+	// LilyPond/Lilylet: "_N" = below, "^N" = above. Translate the sign accordingly.
+	const shift = clefStr?.match(/^(.*?)([+-])(8|15)$/);
+	const base = shift ? shift[1] : clefStr;
+	let resolved: string | undefined;
+	switch (base?.toLowerCase()) {
+		case "treble": resolved = "treble"; break;
+		case "bass": resolved = "bass"; break;
+		case "alto": case "tenor": resolved = "alto"; break;
 		default: return undefined;
 	}
+	if (shift) resolved += (shift[2] === "-" ? "_" : "^") + shift[3];
+	return resolved as Clef;
 };
 
 /**

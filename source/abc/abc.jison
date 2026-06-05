@@ -417,10 +417,10 @@ clef
 	| BASS								-> clef($1)
 	| TENOR								-> clef($1)
 	| ALTO								-> clef($1)
-	| TREBLE plus_minus_number			-> clef($1)
-	| BASS plus_minus_number			-> clef($1)
-	| TENOR plus_minus_number			-> clef($1)
-	| ALTO plus_minus_number			-> clef($1)
+	| TREBLE plus_minus_number			-> clef($1 + ($2 < 0 ? '-' : '+') + Math.abs($2))
+	| BASS plus_minus_number			-> clef($1 + ($2 < 0 ? '-' : '+') + Math.abs($2))
+	| TENOR plus_minus_number			-> clef($1 + ($2 < 0 ? '-' : '+') + Math.abs($2))
+	| ALTO plus_minus_number			-> clef($1 + ($2 < 0 ? '-' : '+') + Math.abs($2))
 	;
 
 sharp_or_flat
@@ -469,8 +469,8 @@ voice_exp
 	: number							-> voice($1)
 	| number NAME						-> voice($1, $2)
 	| number NAME assigns				-> voice($1, $2, $3)
-	| number NAME plus_minus_number		-> voice($1, $2)
-	| number NAME plus_minus_number assigns	-> voice($1, $2, $4)
+	| number NAME plus_minus_number		-> voice($1, $2 + ($3 < 0 ? '-' : '+') + Math.abs($3))
+	| number NAME plus_minus_number assigns	-> voice($1, $2 + ($3 < 0 ? '-' : '+') + Math.abs($3), $4)
 	| NAME								-> voice(1, $1)
 	| NAME assigns						-> voice(1, $1, $2)
 	| NAME plus_minus_number assigns	-> voice(1, $1, $3)
