@@ -830,8 +830,8 @@ const serializeMeasure = (
 	isGrandStaff: boolean = false,
 	currentKey?: KeySignature,
 	currentTime?: { numerator: number; denominator: number; symbol?: 'common' | 'cut' },
-	staffClefs?: Record<number, Clef>,
-	emittedClefs?: Record<number, Clef>
+	partStaffClefs?: Record<number, Record<number, Clef>>,
+	partEmittedClefs?: Record<number, Record<number, Clef>>
 ): { str: string; newStaff: number } => {
 	const parts: string[] = [];
 
@@ -843,13 +843,15 @@ const serializeMeasure = (
 		time: currentTime,
 	};
 
-	// Pass staffClefs to parts for per-voice clef lookup
-	const clefsByStaff = staffClefs || {};
+	// Per-part clef state: each part has its own staff→clef maps so that distinct
+	// parts sharing staff number 1 do not clobber each other's clefs.
+	const clefsFor = (pi: number) => partStaffClefs?.[pi] || {};
+	const emittedFor = (pi: number) => partEmittedClefs?.[pi] || (partEmittedClefs ? (partEmittedClefs[pi] = {}) : {});
 
 	// Parts
 	let staff = currentStaff;
 	if (measure.parts.length === 1) {
-		const { str: partStr, newStaff } = serializePart(measure.parts[0], staff, isGrandStaff, measureContext, true, clefsByStaff, emittedClefs);
+		const { str: partStr, newStaff } = serializePart(measure.parts[0], staff, isGrandStaff, measureContext, true, clefsFor(0), emittedFor(0));
 		if (partStr) {
 			parts.push(partStr);
 		}
@@ -860,7 +862,7 @@ const serializeMeasure = (
 		for (let i = 0; i < measure.parts.length; i++) {
 			const part = measure.parts[i];
 			// Pass measureContext to all parts, isFirstPart to first part only
-			const { str, newStaff } = serializePart(part, staff, isGrandStaff, measureContext, i === 0, clefsByStaff, emittedClefs);
+			const { str, newStaff } = serializePart(part, staff, isGrandStaff, measureContext, i === 0, clefsFor(i), emittedFor(i));
 			if (str) {
 				partStrs.push(str);
 			}
@@ -940,8 +942,11 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 	let currentStaff = 1; // Parser starts at staff 1
 	let currentKey: KeySignature | undefined;
 	let currentTime: { numerator: number; denominator: number; symbol?: 'common' | 'cut' } | undefined;
-	const staffClefs: Record<number, Clef> = {}; // Track clef per staff
-	const emittedClefs: Record<number, Clef> = {}; // Track which clefs have been output
+	// Clefs are tracked per part (each part is an independent instrument). Voice `staff`
+	// numbers are staff-within-part, so distinct parts may both use staff 1 — keying clef
+	// state by staff alone would conflate them. Outer key = part index, inner key = staff.
+	const partStaffClefs: Record<number, Record<number, Clef>> = {};
+	const partEmittedClefs: Record<number, Record<number, Clef>> = {};
 
 	for (let i = 0; i < doc.measures.length; i++) {
 		const measure = doc.measures[i];
@@ -953,8 +958,9 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 			currentTime = measure.timeSig;
 		}
 
-		// Collect clefs from this measure's voices
-		for (const part of measure.parts) {
+		// Collect clefs from this measure's voices, per part
+		measure.parts.forEach((part, pi) => {
+			const staffClefs = partStaffClefs[pi] || (partStaffClefs[pi] = {});
 			for (const voice of part.voices) {
 				let clefActiveStaff = voice.staff;
 				for (const event of voice.events) {
@@ -969,9 +975,9 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 					}
 				}
 			}
-		}
+		});
 
-		const { str: measureStr, newStaff } = serializeMeasure(measure, i === 0, currentStaff, isGrandStaff, currentKey, currentTime, staffClefs, emittedClefs);
+		const { str: measureStr, newStaff } = serializeMeasure(measure, i === 0, currentStaff, isGrandStaff, currentKey, currentTime, partStaffClefs, partEmittedClefs);
 		// Always include measure, even if empty (use space rest for empty measures)
 		measureStrs.push(measureStr || 's1');
 		currentStaff = newStaff;
