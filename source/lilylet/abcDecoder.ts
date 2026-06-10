@@ -34,6 +34,9 @@ import {
 	NavigationMarkType,
 	Tempo,
 	BarlineEvent,
+	MarkupEvent,
+	DynamicEvent,
+	Placement,
 } from "./types";
 
 
@@ -126,11 +129,24 @@ const convertAccidental = (acc: number | null): Accidental | undefined => {
 };
 
 /**
+ * Pitch-conversion context for resolving ABC's implicit accidentals into lilylet's
+ * absolute pitch model. ABC applies the key signature and in-measure accidentals
+ * implicitly to bare note letters; lilylet note names carry their own accidental, so
+ * we resolve the effective accidental here.
+ */
+interface PitchContext {
+	keyAlterations: Map<Phonet, Accidental>;  // letters altered by the active key signature
+	// In-measure accidental memory, keyed by "phonet:octave". An explicit accidental
+	// persists for the rest of the measure at that pitch/octave (standard notation rule).
+	measureAccidentals: Map<string, Accidental | "natural">;
+}
+
+/**
  * Convert ABC pitch to Lilylet Pitch
  * Uppercase C-B = octave 0, lowercase c-b = octave 1
  * quotes (from ' and ,) add/subtract octaves
  */
-const convertPitch = (abcPitch: ABC.Pitch): Pitch => {
+const convertPitch = (abcPitch: ABC.Pitch, ctx?: PitchContext): Pitch => {
 	const phonet = ABC_PHONET_MAP[abcPitch.phonet];
 	if (!phonet) {
 		throw new Error(`Unknown ABC phonet: ${abcPitch.phonet}`);
@@ -142,10 +158,36 @@ const convertPitch = (abcPitch: ABC.Pitch): Pitch => {
 	const octave = baseOctave + (abcPitch.quotes || 0);
 
 	const pitch: Pitch = { phonet, octave };
-	const accidental = convertAccidental(abcPitch.acc);
-	if (accidental) {
-		pitch.accidental = accidental;
+
+	// Resolve the effective accidental.
+	const explicit = convertAccidental(abcPitch.acc);          // accidental written on this note
+	const hasExplicit = abcPitch.acc !== null && abcPitch.acc !== undefined;
+
+	if (ctx) {
+		const memKey = `${phonet}:${octave}`;
+		if (hasExplicit) {
+			// Explicit accidental (incl. natural) overrides and is remembered for the measure.
+			if (abcPitch.acc === 0) {
+				ctx.measureAccidentals.set(memKey, "natural");
+				// natural cancels the key alteration → no accidental on the lilylet pitch
+			} else if (explicit) {
+				ctx.measureAccidentals.set(memKey, explicit);
+				pitch.accidental = explicit;
+			}
+		} else {
+			// No explicit accidental: inherit from in-measure memory, else the key signature.
+			const remembered = ctx.measureAccidentals.get(memKey);
+			if (remembered !== undefined) {
+				if (remembered !== "natural") pitch.accidental = remembered;
+			} else {
+				const fromKey = ctx.keyAlterations.get(phonet);
+				if (fromKey) pitch.accidental = fromKey;
+			}
+		}
+	} else if (explicit) {
+		pitch.accidental = explicit;
 	}
+
 	return pitch;
 };
 
@@ -308,6 +350,42 @@ const convertKeySignature = (abcKey: ABC.KeySignature): KeySignature => {
 		accidental: keyEntry.accidental,
 		mode: (abcKey.mode === "minor" || abcKey.mode === "min") ? "minor" : "major",
 	};
+};
+
+// Circle-of-fifths: a lilylet key (pitch+accidental+mode) → set of letters the key
+// signature alters, and the direction (sharp/flat). ABC note letters inherit these
+// alterations implicitly (e.g. K:Eb makes B sound as Bb); lilylet pitches are absolute,
+// so the decoder must bake the alteration into each pitch's accidental.
+const SHARP_ORDER: Phonet[] = [Phonet.f, Phonet.c, Phonet.g, Phonet.d, Phonet.a, Phonet.e, Phonet.b];
+const FLAT_ORDER: Phonet[] = [Phonet.b, Phonet.e, Phonet.a, Phonet.d, Phonet.g, Phonet.c, Phonet.f];
+
+const KEY_NAME_TO_FIFTHS: Record<string, number> = {
+	c: 0, g: 1, d: 2, a: 3, e: 4, b: 5, "f#": 6, "c#": 7,
+	f: -1, bb: -2, eb: -3, ab: -4, db: -5, gb: -6, cb: -7,
+};
+
+// Compute the number of sharps/flats (fifths) for a resolved KeySignature.
+const keySignatureFifths = (key: KeySignature): number => {
+	let letter = key.pitch as string;
+	if (key.accidental === Accidental.sharp) letter += "#";
+	else if (key.accidental === Accidental.flat) letter += "b";
+	let fifths = KEY_NAME_TO_FIFTHS[letter];
+	if (fifths === undefined) fifths = 0;
+	// Minor keys share the fifths of their relative major (3 fifths up).
+	if (key.mode === "minor") fifths += 3;
+	return fifths;
+};
+
+// Map of phonet → accidental implied by the key signature (only altered letters present).
+const keySignatureAlterations = (key: KeySignature): Map<Phonet, Accidental> => {
+	const fifths = keySignatureFifths(key);
+	const map = new Map<Phonet, Accidental>();
+	if (fifths > 0) {
+		for (let i = 0; i < fifths && i < SHARP_ORDER.length; i++) map.set(SHARP_ORDER[i], Accidental.sharp);
+	} else if (fifths < 0) {
+		for (let i = 0; i < -fifths && i < FLAT_ORDER.length; i++) map.set(FLAT_ORDER[i], Accidental.flat);
+	}
+	return map;
 };
 
 /**
@@ -567,7 +645,8 @@ interface VoiceConfig {
 const processBarPatch = (
 	patch: ABC.BarPatch,
 	unitLength: { numerator: number; denominator: number },
-	slurDepth: { count: number }
+	slurDepth: { count: number },
+	pitchCtx?: PitchContext
 ): { events: Event[]; barline?: string } => {
 	const events: Event[] = [];
 	const terms = patch.terms || [];
@@ -576,6 +655,11 @@ const processBarPatch = (
 
 	// Collect all events first, then handle broken rhythms and tuplets
 	const rawNoteRests: { event: NoteEvent | RestEvent; index: number; broken?: number }[] = [];
+
+	// A broken-rhythm marker (>, <) belongs to the LEFT note but modifies the pair
+	// (left, right). We can only apply it once the right note has been pushed, so we
+	// stash it here and resolve it when the next note/rest arrives.
+	let pendingBroken: number | null = null;
 
 	let i = 0;
 	while (i < terms.length) {
@@ -591,10 +675,18 @@ const processBarPatch = (
 						events.push({ type: "context", clef } as ContextChange);
 					}
 				} else if (ctrl.value?.root) {
+					const newKey = convertKeySignature(ctrl.value);
 					events.push({
 						type: "context",
-						key: convertKeySignature(ctrl.value),
+						key: newKey,
 					} as ContextChange);
+					// Update the active key alterations and clear in-measure accidentals.
+					if (pitchCtx) {
+						const alt = keySignatureAlterations(newKey);
+						pitchCtx.keyAlterations.clear();
+						for (const [k, v] of alt) pitchCtx.keyAlterations.set(k, v);
+						pitchCtx.measureAccidentals.clear();
+					}
 				}
 			} else if (ctrl.name === "M") {
 				if (ctrl.value?.numerator && ctrl.value?.denominator) {
@@ -632,7 +724,7 @@ const processBarPatch = (
 			while (j < terms.length && collected < r) {
 				const nextTerm = terms[j];
 				if ((nextTerm as ABC.EventTerm).event) {
-					const evt = convertEventTerm(nextTerm as ABC.EventTerm, unitLength, pendingMarks, pendingContextChanges);
+					const evt = convertEventTerm(nextTerm as ABC.EventTerm, unitLength, pendingMarks, pendingContextChanges, pitchCtx);
 					if (evt) {
 						// Push any pending context changes before tuplet
 						for (const ctx of pendingContextChanges.splice(0)) {
@@ -692,10 +784,16 @@ const processBarPatch = (
 		// Text
 		if ((term as ABC.TextTerm).text !== undefined) {
 			const text = (term as ABC.TextTerm).text;
-			// Check if it's a tempo/expression marking
-			if (text.startsWith("^")) {
-				// Markup text above staff
-			}
+			// ABC chord/annotation text: a leading ^ / _ marks placement above / below;
+			// other position prefixes (<,>,@) just denote placement we don't model, so strip.
+			let placement: Placement | undefined;
+			let content = text;
+			if (text.startsWith("^")) { placement = Placement.above; content = text.slice(1); }
+			else if (text.startsWith("_")) { placement = Placement.below; content = text.slice(1); }
+			else if (/^[<>@]/.test(text)) { content = text.slice(1); }
+			const markup: MarkupEvent = { type: "markup", content };
+			if (placement) markup.placement = placement;
+			events.push(markup);
 			i++;
 			continue;
 		}
@@ -709,7 +807,7 @@ const processBarPatch = (
 				events.push(ctx);
 			}
 
-			const evt = convertEventTerm(eventTerm, unitLength, pendingMarks, pendingContextChanges);
+			const evt = convertEventTerm(eventTerm, unitLength, pendingMarks, pendingContextChanges, pitchCtx);
 			if (evt) {
 				if (Array.isArray(evt)) {
 					events.push(...evt);
@@ -717,12 +815,19 @@ const processBarPatch = (
 					events.push(evt);
 				}
 
-				// Track broken rhythm
-				if (eventTerm.broken) {
+				// Resolve a broken-rhythm marker carried by the PREVIOUS note: it modifies
+				// the pair (previous note, this note). Apply now that this (the right) note exists.
+				if (pendingBroken !== null) {
 					const noteRestEvents = events.filter(e => e.type === "note" || e.type === "rest") as (NoteEvent | RestEvent)[];
 					if (noteRestEvents.length >= 2) {
-						applyBrokenRhythm(noteRestEvents, noteRestEvents.length - 2, eventTerm.broken);
+						applyBrokenRhythm(noteRestEvents, noteRestEvents.length - 2, pendingBroken);
 					}
+					pendingBroken = null;
+				}
+
+				// Stash this note's own broken marker (the right note is not parsed yet).
+				if (eventTerm.broken) {
+					pendingBroken = eventTerm.broken;
 				}
 			}
 			i++;
@@ -770,7 +875,8 @@ const convertEventTerm = (
 	eventTerm: ABC.EventTerm,
 	unitLength: { numerator: number; denominator: number },
 	pendingMarks: Mark[],
-	pendingContextChanges: ContextChange[]
+	pendingContextChanges: ContextChange[],
+	pitchCtx?: PitchContext
 ): Event | Event[] | undefined => {
 	const eventData = eventTerm.event;
 	if (!eventData) return undefined;
@@ -794,16 +900,24 @@ const convertEventTerm = (
 			rest.fullMeasure = true;
 		}
 
-		// Consume pending marks (attach to rest if any)
+		// A dynamic that precedes a rest (e.g. ABC "!p! z") has no note to attach to.
+		// Emit it as a standalone leading DynamicEvent before the rest; lilylet attaches
+		// it to the following sounding event. Other marks on a rest are dropped.
+		const leadingDynamics: DynamicEvent[] = pendingMarks
+			.filter(m => m.markType === "dynamic")
+			.map(m => ({ type: "dynamic", dynamicType: (m as { type: DynamicType }).type }));
 		pendingMarks.length = 0;
 
+		if (leadingDynamics.length > 0) {
+			return [...leadingDynamics, rest];
+		}
 		return rest;
 	}
 
 	// Note or chord
 	const pitches = chord.pitches.filter(p =>
 		p.phonet !== "z" && p.phonet !== "Z" && p.phonet !== "x" && p.phonet !== "y"
-	).map(convertPitch);
+	).map(p => convertPitch(p, pitchCtx));
 
 	if (pitches.length === 0) return undefined;
 
@@ -1005,6 +1119,12 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 	const measures = body.measures;
 	const voiceSlurDepths = new Map<number, { count: number }>();
 
+	// Per-voice key alterations (persist across measures; mutated by inline [K:] changes).
+	// Initialized from the tune's header key signature so bare ABC letters pick up the
+	// key's sharps/flats, which lilylet pitches must carry explicitly.
+	const initialKeyAlterations = keySig ? keySignatureAlterations(keySig) : new Map<Phonet, Accidental>();
+	const voiceKeyAlterations = new Map<number, Map<Phonet, Accidental>>();
+
 	// Process each ABC measure into Lilylet Measure
 	const lilyletMeasures: Measure[] = [];
 
@@ -1028,12 +1148,22 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 			const slurDepth = voiceSlurDepths.get(voiceNum) || { count: 0 };
 			voiceSlurDepths.set(voiceNum, slurDepth);
 
+			// Resolve this voice's persistent key alterations (seeded from the header key).
+			if (!voiceKeyAlterations.has(voiceNum)) {
+				voiceKeyAlterations.set(voiceNum, new Map(initialKeyAlterations));
+			}
+			// Fresh in-measure accidental memory for each measure (standard notation rule).
+			const pitchCtx: PitchContext = {
+				keyAlterations: voiceKeyAlterations.get(voiceNum)!,
+				measureAccidentals: new Map(),
+			};
+
 			// Merge all patches for this voice in this measure
 			const allEvents: Event[] = [];
 			let barline: string | undefined;
 
 			for (const patch of patches) {
-				const result = processBarPatch(patch, unitLength, slurDepth);
+				const result = processBarPatch(patch, unitLength, slurDepth, pitchCtx);
 				allEvents.push(...result.events);
 				if (result.barline && result.barline !== "|") {
 					barline = result.barline;

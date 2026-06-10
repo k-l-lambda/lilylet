@@ -239,7 +239,7 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <key_signature>"Loc"				return 'NAME';
 <key_signature>"HP"					return 'NAME';
 <key_signature>"Hp"					return 'NAME';
-<key_signature>[a-z]+[ \t]*=[^\n\]]*	{}
+<key_signature>[a-z]+[ \t]*[=][^\n\]]*	{}
 <key_signature>[A-G]				return 'A';
 <key_signature>[A-Z][a-z]+			return 'NAME';
 <key_signature>[b]					return 'FLAT';
@@ -555,7 +555,6 @@ music
 	| music N							-> $1
 	| music NAME						-> $1
 	| music '^' NAME					-> $1
-	| music '^'							-> $1
 	| music '[' N						-> $1
 	;
 
