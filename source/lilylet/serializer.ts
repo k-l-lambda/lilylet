@@ -602,8 +602,12 @@ interface MeasureContext {
 	clef?: Clef;
 }
 
-// Find first clef in voice events
+// Find the voice's leading clef: the clef in effect at the START of the voice, i.e.
+// a clef context event that appears before any musical event on the home staff.
+// A clef that first appears AFTER a note is a mid-voice change and must be emitted
+// inline where it occurs, not hoisted to the front — so it is not returned here.
 const findVoiceClef = (voice: Voice): Clef | undefined => {
+	const MUSICAL = new Set(['note', 'rest', 'tuplet', 'times', 'tremolo']);
 	let activeStaff = voice.staff;
 	for (const event of voice.events) {
 		if (event.type === 'context') {
@@ -612,6 +616,9 @@ const findVoiceClef = (voice: Voice): Clef | undefined => {
 			if (ctx.clef && activeStaff === voice.staff) {
 				return ctx.clef;
 			}
+		} else if (MUSICAL.has(event.type)) {
+			// Reached music on the home staff before any clef — no leading clef.
+			if (activeStaff === voice.staff) return undefined;
 		}
 	}
 	return undefined;
@@ -642,7 +649,6 @@ const serializeVoice = (
 	// before any music collapse to the last one (earlier ones are no-ops).
 	// leadStaffScanEnd is the index of the first event that ends this scan —
 	// context{staff} events before this index are skipped in the main loop.
-	const MUSICAL_TYPES = new Set(['note', 'rest', 'tuplet', 'times', 'tremolo']);
 	let effectiveInitialStaff = voice.staff;
 	let leadStaffScanEnd = 0;
 	for (let i = 0; i < voice.events.length; i++) {
@@ -664,7 +670,9 @@ const serializeVoice = (
 			leadStaffScanEnd = i + 1; // time/key/stemDir — continue scan
 			continue;
 		}
-		if (MUSICAL_TYPES.has(e.type)) break;
+		// Any other event (note/rest/tuplet/markup/dynamic/harmony/barline/…) has a
+		// visible position; a staff switch after it must not be hoisted ahead of it.
+		break;
 	}
 
 	// Output staff command if voice staff differs from current parser staff,
@@ -695,15 +703,16 @@ const serializeVoice = (
 		}
 	}
 
-	// Output clef only if not yet emitted or changed for this staff
-	const voiceClef = allStaffClefs?.[voice.staff] || findVoiceClef(voice);
+	// Output clef only if not yet emitted or changed for this staff.
+	// Prefer this voice's leading clef (a clef before any music); fall back to the
+	// carry-in clef from previous measures. A clef that first appears mid-voice is NOT
+	// hoisted here — it is emitted inline at its position.
+	const voiceClef = findVoiceClef(voice) ?? allStaffClefs?.[voice.staff];
 	const clefAlreadyEmitted = voiceClef && emittedClefs?.[voice.staff] === voiceClef;
 	if (voiceClef && !clefAlreadyEmitted) {
 		parts.push('\\clef "' + (CLEF_MAP[voiceClef] ?? voiceClef) + '"');
 		if (emittedClefs) emittedClefs[voice.staff] = voiceClef;
 	}
-	// Skip redundant clef context events if this staff's clef is already established
-	const clefOutputted = !!voiceClef && !!emittedClefs?.[voice.staff];
 
 	let activeStaff = effectiveInitialStaff;
 	let activeStemDir: StemDirection | undefined;
@@ -730,8 +739,13 @@ const serializeVoice = (
 			}
 			if (ctx.staff && !ctx.clef && !ctx.ottava) continue;  // same staff, pure no-op
 			if (ctx.staff) { /* same staff but has clef/ottava — fall through to emit them */ }
-			// Skip clef-only context events if clef already established for this staff
-			if (clefOutputted && ctx.clef && !ctx.key && !ctx.time && !ctx.ottava && !ctx.stemDirection && !ctx.tempo) {
+			// Skip a clef-only context event only if it is REDUNDANT — i.e. it restates the
+			// clef already active for this staff. A clef that differs is a genuine change and
+			// must be emitted inline at its position.
+			if (
+				ctx.clef && !ctx.key && !ctx.time && !ctx.ottava && !ctx.stemDirection && !ctx.tempo &&
+				emittedClefs?.[ctx.staff || activeStaff] === ctx.clef
+			) {
 				continue;
 			}
 		}
@@ -969,26 +983,32 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 			currentTime = measure.timeSig;
 		}
 
-		// Collect clefs from this measure's voices, per part
-		measure.parts.forEach((part, pi) => {
-			const staffClefs = partStaffClefs[pi] || (partStaffClefs[pi] = {});
-			for (const voice of part.voices) {
-				let clefActiveStaff = voice.staff;
-				for (const event of voice.events) {
-					if (event.type === 'context') {
-						const ctx = event as ContextChange;
-						if (ctx.staff) {
-							clefActiveStaff = ctx.staff;
-						}
-						if (ctx.clef) {
-							staffClefs[clefActiveStaff] = ctx.clef;
+		// Collect clefs from this measure's voices, per part — but only AFTER serializing
+		// the measure, so that during serialization allStaffClefs reflects the clef state
+		// CARRIED IN from previous measures (a mid-measure clef change must not be hoisted
+		// to the measure's front; it is emitted inline at its position).
+		const collectClefs = () => {
+			measure.parts.forEach((part, pi) => {
+				const staffClefs = partStaffClefs[pi] || (partStaffClefs[pi] = {});
+				for (const voice of part.voices) {
+					let clefActiveStaff = voice.staff;
+					for (const event of voice.events) {
+						if (event.type === 'context') {
+							const ctx = event as ContextChange;
+							if (ctx.staff) {
+								clefActiveStaff = ctx.staff;
+							}
+							if (ctx.clef) {
+								staffClefs[clefActiveStaff] = ctx.clef;
+							}
 						}
 					}
 				}
-			}
-		});
+			});
+		};
 
 		const { str: measureStr, newStaff } = serializeMeasure(measure, i === 0, currentStaff, isGrandStaff, currentKey, currentTime, partStaffClefs, partEmittedClefs);
+		collectClefs();
 		// Always include measure, even if empty (use space rest for empty measures)
 		measureStrs.push(measureStr || 's1');
 		currentStaff = newStaff;
