@@ -1,0 +1,3 @@
+
+\staff "1" \key ef \major \time 3/4 \clef "treble" ^\markup "Allegretto grazioso" \p r8 <bf ef g> r <bf ef g> r <bf ef g> \\
+\staff "2" \clef "bass" bf,4( c8. bf16 ef8. f16  | %1

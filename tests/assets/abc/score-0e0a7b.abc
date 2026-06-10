@@ -1,0 +1,10 @@
+X:1
+
+L:1/8
+M:3/4
+K:Eb
+V:1 treble nm="Fortepiano" snm="F-no"
+V:3 treble 
+V:2 bass 
+V:4 bass 
+[V:1]"^Allegretto grazioso"!p! z [B,EG] z [B,EG]z[B,EG]|[V:2](B,,2 C,>B,, E,>F,|[V:3]x6|[V:4]x6|
