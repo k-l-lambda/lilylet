@@ -12,6 +12,7 @@ import {
 	BarlineEvent,
 	HarmonyEvent,
 	MarkupEvent,
+	DynamicEvent,
 	Pitch,
 	Clef,
 	Accidental,
@@ -653,9 +654,10 @@ const noteEventToMEI = (
 
 
 // Convert RestEvent to MEI
-const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, crossStaff?: number): string => {
+const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, crossStaff?: number): { xml: string; elementId: string } => {
 	const dur = DURATIONS[event.duration.division] || "4";
-	let attrs = `xml:id="${generateId('rest')}" dur="${dur}"`;
+	const restId = generateId('rest');
+	let attrs = `xml:id="${restId}" dur="${dur}"`;
 	if (event.duration.dots > 0) attrs += ` dots="${event.duration.dots}"`;
 
 	// Cross-staff attribute
@@ -669,15 +671,16 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0,
 
 	// Space rest (invisible)
 	if (event.invisible) {
-		return `${indent}<space ${attrs} />\n`;
+		return { xml: `${indent}<space ${attrs} />\n`, elementId: restId };
 	}
 
 	// Full measure rest
 	if (event.fullMeasure) {
-		return `${indent}<mRest xml:id="${generateId('mrest')}" />\n`;
+		const mRestId = generateId('mrest');
+		return { xml: `${indent}<mRest xml:id="${mRestId}" />\n`, elementId: mRestId };
 	}
 
-	return `${indent}<rest ${attrs} />\n`;
+	return { xml: `${indent}<rest ${attrs} />\n`, elementId: restId };
 };
 
 
@@ -784,7 +787,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			}
 		} else if (e.type === 'rest') {
 			const restIndent = beamOpen ? baseIndent + '    ' : baseIndent;
-			xml += restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift, measureAccidentals);
+			xml += restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift, measureAccidentals).xml;
 		} else if (e.type === 'context') {
 			const ctx = e as ContextChange;
 			if (ctx.clef && ctx.clef !== activeClef) {
@@ -1006,7 +1009,7 @@ interface LayerResult {
 
 
 // Helper: check if an event (or any note inside a tuplet) has beam start/end
-const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TimesEvent | TremoloEvent | ContextChange | BarlineEvent | HarmonyEvent | MarkupEvent | { type: 'pitchReset' }): { beamStart: boolean; beamEnd: boolean } => {
+const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TimesEvent | TremoloEvent | ContextChange | BarlineEvent | HarmonyEvent | MarkupEvent | DynamicEvent | { type: 'pitchReset' }): { beamStart: boolean; beamEnd: boolean } => {
 	if (event.type === 'note') {
 		const markOptions = extractMarkOptions((event as NoteEvent).marks);
 		return { beamStart: markOptions.beamStart, beamEnd: markOptions.beamEnd };
@@ -1079,6 +1082,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	const barlines: BarlineRef[] = [];
 	const markups: MarkupRef[] = [];
 	const pendingMarkups: { content: string; placement?: 'above' | 'below' }[] = [];
+	const pendingDynamics: string[] = [];
 
 	// Track current stem direction from context changes
 	let currentStemDirection: StemDirection | undefined = undefined;
@@ -1098,6 +1102,14 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 			markups.push({ startid: noteId, content: mkup.content, placement: mkup.placement });
 		}
 		pendingMarkups.length = 0;
+	};
+
+	// Helper to flush pending leading dynamics onto a note ID
+	const flushPendingDynamics = (noteId: string) => {
+		for (const label of pendingDynamics) {
+			dynamics.push({ startid: noteId, label });
+		}
+		pendingDynamics.length = 0;
 	};
 
 	// Helper to check if pitches match for tie continuation
@@ -1168,6 +1180,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 
 				// Flush any pending markups onto this note
 				flushPendingMarkups(result.elementId);
+
+				// Flush any pending leading dynamics onto this note
+				flushPendingDynamics(result.elementId);
 
 				// If there's a pending ottava, start the span on this note
 				if (pendingOttava !== null && pendingOttava !== 0) {
@@ -1283,7 +1298,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 			case 'rest': {
 				// For cross-staff notation: pass staff number if different from voice's home staff
 				const restCrossStaff = currentStaff !== (voice.staff || 1) ? currentStaff : undefined;
-				xml += restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals, restCrossStaff);
+				const restResult = restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals, restCrossStaff);
+				xml += restResult.xml;
+				// A leading dynamic/markup attaches to the next event, which may be this rest
+				flushPendingMarkups(restResult.elementId);
+				flushPendingDynamics(restResult.elementId);
+				lastNoteId = restResult.elementId;
 				break;
 			}
 			case 'tuplet':
@@ -1301,6 +1321,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				// Flush any pending markups onto the first note of the tuplet
 				if (tupletResult.firstNoteId) {
 					flushPendingMarkups(tupletResult.firstNoteId);
+					flushPendingDynamics(tupletResult.firstNoteId);
 					lastNoteId = tupletResult.firstNoteId;
 				}
 
@@ -1414,6 +1435,13 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					// No note yet - save as pending, will attach to next note
 					pendingMarkups.push({ content: mkupEvent.content, placement: mkupEvent.placement });
 				}
+			}
+				break;
+
+			case 'dynamic': {
+				// Standalone (leading) dynamic - attaches to the following note
+				const dynEvent = event as DynamicEvent;
+				pendingDynamics.push(dynEvent.dynamicType);
 			}
 				break;
 		}

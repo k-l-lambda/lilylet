@@ -127,6 +127,7 @@
 	const barlineEvent = (style) => ({ type: 'barline', style });
 	const harmonyEvent = (text) => ({ type: 'harmony', text });
 	const markupEvent = (content, placement) => ({ type: 'markup', content, placement: placement || undefined });
+	const dynamicEvent = (type) => ({ type: 'dynamic', dynamicType: type });
 	const markupMark = (content) => ({ markType: 'markup', content });
 
 	// Parse PITCH token (e.g., "c", "cs", "bf", "css", "bff") into phonet and accidental
@@ -445,6 +446,7 @@ event
 	| barline_event
 	| harmony_event
 	| markup_event
+	| dynamic_event
 	;
 
 barline_event
@@ -457,6 +459,12 @@ harmony_event
 
 markup_event
 	: CMD_MARKUP STRING							-> markupEvent($2.slice(1, -1))
+	| '^' CMD_MARKUP STRING						-> markupEvent($3.slice(1, -1), 'above')
+	| '_' CMD_MARKUP STRING						-> markupEvent($3.slice(1, -1), 'below')
+	;
+
+dynamic_event
+	: dynamic_mark								-> dynamicEvent($1.type)
 	;
 
 pitch_reset_event

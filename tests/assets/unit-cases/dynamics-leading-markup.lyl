@@ -1,0 +1,2 @@
+\time 3/4 \clef "treble" ^\markup "Allegretto" \p r8 c'8 d'8 e'8 f'8 g'8 |
+\markup "dolce" \mf a'4 b'4 c''4

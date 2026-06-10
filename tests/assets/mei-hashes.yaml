@@ -67,6 +67,7 @@ demo-BWV114.lyl: eada4560485dbba721b45b62c9181286
 demo-BWV610.lyl: 3df60b66823417a2b6a00cb9b06ad913
 demo-chopin-10-3.lyl: 8c563c369c7b8a1649e5dcc9ab5f0509
 demo-chopin48-1.lyl: 24b94495786dbee197b39f165192b47a
+demo-score-0e0a7b.lyl: 3b7ab8647a9d674ba3fc76d4c0200dc0
 dots-double-dot.lyl: aa040772f2976039ef287924440b16bc
 dots-single-dot.lyl: 87fa13ee6932358e03df35e70e6f25e2
 durations-16th-note.lyl: f8add798b8ddfc51747fba43ecd12208
@@ -75,6 +76,7 @@ durations-64th-note.lyl: cd451b320dcd69238ad4a7471f2fa0de
 dynamics-forte.lyl: b2e3b00bd2c064847584a2b0d4ddbaf6
 dynamics-fortepiano.lyl: d0e04ab549e868bbd1a893a649b90c26
 dynamics-fortissimo.lyl: 084a6ff37e8261d656d7f3c2463daa51
+dynamics-leading-markup.lyl: eb1038c810d4b84109217ff0ffca2645
 dynamics-mezzo-forte.lyl: 626f41963e053ac08778d66fa81e2f80
 dynamics-mezzo-piano.lyl: f08493eec79202fb1064a9ed11ddaf86
 dynamics-pianissimo.lyl: bc16a958b6bb972b29026e0c370182e5

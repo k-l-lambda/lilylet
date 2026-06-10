@@ -18,6 +18,8 @@ import {
 	TimesEvent,
 	TremoloEvent,
 	BarlineEvent,
+	MarkupEvent,
+	DynamicEvent,
 	Pitch,
 	Duration,
 	Mark,
@@ -578,6 +580,15 @@ const serializeEvent = (
 			return serializeTremoloEvent(event as TremoloEvent, env);
 		case 'barline':
 			return { str: serializeBarlineEvent(event as BarlineEvent), newEnv: env };
+		case 'markup': {
+			const mk = event as MarkupEvent;
+			const prefix = mk.placement === 'above' ? '^' : mk.placement === 'below' ? '_' : '';
+			return { str: `${prefix}\\markup "${mk.content}"`, newEnv: env };
+		}
+		case 'dynamic': {
+			const dynStr = DYNAMIC_MAP[(event as DynamicEvent).dynamicType];
+			return { str: dynStr || '', newEnv: env };
+		}
 		default:
 			return { str: '', newEnv: env };
 	}

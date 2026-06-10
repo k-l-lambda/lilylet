@@ -278,7 +278,12 @@ export interface MarkupEvent {
 	placement?: Placement;  // Optional placement (above/below)
 }
 
-export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | TimesEvent | PitchResetEvent | BarlineEvent | HarmonyEvent | MarkupEvent;
+export interface DynamicEvent {
+	type: 'dynamic';
+	dynamicType: DynamicType;  // Standalone dynamic at a leading position (before any note)
+}
+
+export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | TupletEvent | TimesEvent | PitchResetEvent | BarlineEvent | HarmonyEvent | MarkupEvent | DynamicEvent;
 
 // === Structure ===
 
