@@ -468,6 +468,7 @@ numeric_tempo
 
 voice_exp
 	: number							-> voice($1)
+	| number assigns					-> voice($1, null, $2)
 	| number NAME						-> voice($1, $2)
 	| number NAME assigns				-> voice($1, $2, $3)
 	| number NAME plus_minus_number		-> voice($1, $2 + ($3 < 0 ? '-' : '+') + Math.abs($3))
@@ -765,7 +766,14 @@ duration
 	: number '/' number					-> frac(Number($1), Number($3))
 	| '/' number						-> frac(1, Number($2))
 	| number							-> frac(Number($1))
-	| '/'								-> frac(1, 2)
+	| slashes							-> frac(1, Math.pow(2, $1))
+	| number slashes					-> frac(Number($1), Math.pow(2, $2))
+	;
+
+// One or more '/' halve the unit length each: '/'=1/2, '//'=1/4, '///'=1/8.
+slashes
+	: '/'								-> 1
+	| slashes '/'						-> $1 + 1
 	;
 
 broken_rhythm
