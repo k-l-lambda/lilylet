@@ -226,10 +226,10 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <voice_header>[ \t]+				{}
 <voice_header>\n					{ this.popState(); }
 <voice_header>\]					{ this.popState(); return ']'; }
-<key_signature>"treble"				return 'TREBLE';
-<key_signature>"bass"				return 'BASS';
-<key_signature>"tenor"				return 'TENOR';
-<key_signature>"alto"				return 'ALTO';
+<key_signature>"treble"[0-9]*		return 'TREBLE';
+<key_signature>"bass"[0-9]*			return 'BASS';
+<key_signature>"tenor"[0-9]*		return 'TENOR';
+<key_signature>"alto"[0-9]*			return 'ALTO';
 <key_signature>"none"				return 'NAME';
 <key_signature>"Dor"				return 'NAME';
 <key_signature>"Phr"				return 'NAME';
