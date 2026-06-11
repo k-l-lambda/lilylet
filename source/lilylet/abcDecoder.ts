@@ -768,7 +768,7 @@ const processBarPatch = (
 
 		// Grace notes
 		if ((term as any).grace) {
-			const graceEvents = convertGraceEvents(term as any, unitLength);
+			const graceEvents = convertGraceEvents(term as any, unitLength, pitchCtx);
 			events.push(...graceEvents);
 			i++;
 			continue;
@@ -955,7 +955,8 @@ const convertEventTerm = (
  */
 const convertGraceEvents = (
 	graceTerm: any,
-	unitLength: { numerator: number; denominator: number }
+	unitLength: { numerator: number; denominator: number },
+	pitchCtx?: PitchContext
 ): NoteEvent[] => {
 	const events: NoteEvent[] = [];
 	if (!graceTerm.events) return events;
@@ -968,7 +969,7 @@ const convertGraceEvents = (
 
 			const pitches = chord.pitches.filter((p: ABC.Pitch) =>
 				p.phonet !== "z" && p.phonet !== "Z" && p.phonet !== "x"
-			).map(convertPitch);
+			).map((p: ABC.Pitch) => convertPitch(p, pitchCtx));
 
 			if (pitches.length === 0) continue;
 
