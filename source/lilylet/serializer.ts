@@ -278,13 +278,15 @@ const serializeMarks = (marks: Mark[]): string => {
 const serializeNoteEvent = (
 	event: NoteEvent,
 	env: PitchEnv,
-	prevDuration?: Duration
+	prevDuration?: Duration,
+	suppressGracePrefix: boolean = false
 ): { str: string; newEnv: PitchEnv } => {
 	const parts: string[] = [];
 	let currentEnv = env;
 
-	// Grace note prefix
-	if (event.grace) {
+	// Grace note prefix. When the caller groups consecutive grace notes into a single
+	// scoped \grace { ... }, it suppresses the per-note prefix and emits the wrapper.
+	if (event.grace && !suppressGracePrefix) {
 		parts.push('\\grace ');
 	}
 
@@ -564,11 +566,12 @@ const serializeBarlineEvent = (event: BarlineEvent): string => {
 const serializeEvent = (
 	event: Event,
 	env: PitchEnv,
-	prevDuration?: Duration
+	prevDuration?: Duration,
+	suppressGracePrefix: boolean = false
 ): { str: string; newEnv: PitchEnv } => {
 	switch (event.type) {
 		case 'note':
-			return serializeNoteEvent(event as NoteEvent, env, prevDuration);
+			return serializeNoteEvent(event as NoteEvent, env, prevDuration, suppressGracePrefix);
 		case 'rest':
 			return serializeRestEvent(event as RestEvent, env, prevDuration);
 		case 'context':
@@ -716,6 +719,7 @@ const serializeVoice = (
 
 	let activeStaff = effectiveInitialStaff;
 	let activeStemDir: StemDirection | undefined;
+	let graceGroupOpen = false;  // whether a scoped \grace { ... } is currently open
 
 	for (let eventIdx = 0; eventIdx < voice.events.length; eventIdx++) {
 		const event = voice.events[eventIdx];
@@ -781,7 +785,19 @@ const serializeVoice = (
 			}
 		}
 
-		const { str: eventStr, newEnv } = serializeEvent(event, pitchEnv, prevDuration);
+		const isGraceNote = event.type === 'note' && !!(event as NoteEvent).grace;
+
+		// Group consecutive grace notes into one scoped \grace { ... } instead of
+		// emitting a separate \grace prefix per note.
+		if (isGraceNote && !graceGroupOpen) {
+			parts.push('\\grace {');
+			graceGroupOpen = true;
+		} else if (!isGraceNote && graceGroupOpen) {
+			parts.push('}');
+			graceGroupOpen = false;
+		}
+
+		const { str: eventStr, newEnv } = serializeEvent(event, pitchEnv, prevDuration, graceGroupOpen);
 		pitchEnv = newEnv;
 
 		if (eventStr) {
@@ -803,6 +819,11 @@ const serializeVoice = (
 			const ctx = event as ContextChange;
 			emittedClefs[ctx.staff || activeStaff] = ctx.clef!;
 		}
+	}
+
+	// Close a grace group left open at the end of the voice (unusual but possible).
+	if (graceGroupOpen) {
+		parts.push('}');
 	}
 
 	return { str: parts.join(' '), newStaff: voice.staff };
