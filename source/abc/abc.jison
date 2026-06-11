@@ -565,7 +565,15 @@ music
 	| music N							-> $1
 	| music NAME						-> $1
 	| music '^' NAME					-> $1
+	| music '^' articulation_letter		-> $1
 	| music '[' N						-> $1
+	;
+
+// Articulation-class letters (P macro: HJLMOPRSTuv). After a stray '^' inside a
+// text annotation, a word like "Menuetto"/"Largo" starts with one of these and the
+// lexer emits it as the articulation token, not NAME — swallow it like '^' NAME.
+articulation_letter
+	: 'P' | 'T' | 'H' | 'J' | 'L' | 'M' | 'R' | 'O' | 'S' | 'u' | 'v'
 	;
 
 control
