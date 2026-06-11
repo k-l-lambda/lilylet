@@ -37,14 +37,14 @@
 
 	const patch = (terms, bar) => {
 		const control = {};
-		terms.forEach(term => {
+		(terms || []).forEach(term => {
 			if (term.control)
 				control[term.control.name] = term.control.value;
 		});
 
 		return {
 			control,
-			terms,
+			terms: terms || [],
 			bar,
 		};
 	};
@@ -540,8 +540,16 @@ bar
 	| '|' ']' ':'						-> '|]'
 	| ':' '|' ']'						-> ':|]'
 	| '|' N								-> '|' + $2
+	| '|' N volta_rest					-> '|' + $2 + $3
 	| ':' '|' N							-> ':|' + $2
+	| ':' '|' N volta_rest				-> ':|' + $2 + $3
 	| '&'								-> '&'
+	;
+
+// Additional volta endings after the first number, comma-separated: "1,2", "1,2,3".
+volta_rest
+	: ',' N								-> ',' + $2
+	| volta_rest ',' N					-> $1 + ',' + $3
 	;
 
 music
