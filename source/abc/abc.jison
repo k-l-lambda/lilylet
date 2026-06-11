@@ -262,9 +262,10 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <spec_comment_name>[\w]+			{ this.popState(); this.pushState('spec_comment_skip'); }
 <spec_comment_name>\n				{ this.popState(); this.popState(); }
 <spec_comment>[ \t]+				{}
-<spec_comment>[([{]				{ this._scoreDepth = (this._scoreDepth || 0) + 1; return yytext; }
+<spec_comment>[([{]					{ this._scoreDepth = (this._scoreDepth || 0) + 1; return yytext; }
 <spec_comment>[)\]}]				{ this._scoreDepth = (this._scoreDepth || 0) - 1; return yytext; }
 <spec_comment>[|]					return yytext
+<spec_comment>[A-Z][:]				{ this.popState(); this.popState(); this.unput(yytext); return 'LAYOUT_END'; }
 <spec_comment>[\w]+					return 'NN'
 <spec_comment>\n					{ if (this._scoreDepth > 0) { /* layout continues on next line */ } else { this.popState(); this.popState(); return 'LAYOUT_END'; } }
 <spec_comment_skip>[^\n]+			{}
