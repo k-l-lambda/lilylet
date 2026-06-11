@@ -195,10 +195,10 @@ Am									\b[A-G](?=[m][a][j]|[m][i][n]\b)
 a									\b[a-g](?=[\W\d\sA-Ga-g_yzHJLMOPRSTuv]*\b)
 z									\b[z]
 Z									\b[Z]
-x									\b[x](?=[\W\d\s])
+x									\b[x](?=[\W\d\s]|[_^=]*[A-Ga-g])
 y									\b[y]
 N									[0-9]
-P									\b[HJLMOPRSTuv](?=[A-Ga-g][A-Ga-g0-9]*\b)
+P									\b[HJLMOPRSTuv](?=[_^=]*[A-Ga-g][A-Ga-g0-9_^=,']*)
 PP									\b[HJLMOPRSTuv](?=[xz!\[^_=\s"])
 
 SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
@@ -211,8 +211,8 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 <string>\\\"						return 'STR_CONTENT'
 <string>[^"]+						return 'STR_CONTENT'
 
-^[T][:][\s]*						{ this.pushState('title_string'); return 'T:'; }
-^[C][:][\s]*						{ this.pushState('title_string'); return 'C:'; }
+^[T][:][\s]*						{ var pre = this.matched.slice(0, this.matched.length - yytext.length); if (pre === '' || pre.slice(-1) === '\n') { this.pushState('title_string'); return 'T:'; } this.unput(yytext.slice(1)); yytext = 'T'; return 'T'; }
+^[C][:][\s]*						{ var pre = this.matched.slice(0, this.matched.length - yytext.length); if (pre === '' || pre.slice(-1) === '\n') { this.pushState('title_string'); return 'C:'; } this.unput(yytext.slice(1)); yytext = 'C'; return 'A'; }
 <title_string>\n					{ this.popState(); }
 <title_string>[^\n]+				return 'STR_CONTENT'
 
