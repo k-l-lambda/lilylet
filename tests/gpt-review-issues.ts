@@ -4,7 +4,7 @@
  */
 
 import { parseCode, musicXmlEncoder, musicXmlDecoder } from "../source/lilylet/index.js";
-import type { TupletEvent, NoteEvent, ContextChange } from "../source/lilylet/types.js";
+import type { TupletEvent, TimesEvent, NoteEvent, ContextChange } from "../source/lilylet/types.js";
 
 let passed = 0;
 let failed = 0;
@@ -30,13 +30,13 @@ console.log("=" .repeat(80));
 console.log("\n--- Tuplet Ratio Direction ---\n");
 
 {
-	// A triplet in Lilylet: \times 2/3 {c8 d e} means 3 notes in the time of 2
-	// Lilylet TupletEvent.ratio should be {numerator:2, denominator:3}
+	// A triplet in Lilylet: \times 2/3 {c8 d e} means 3 notes in the time of 2.
+	// The \times syntax parses to a TimesEvent (type 'times'); ratio is {numerator:2, denominator:3}.
 	const lyl = `\\time 2/4 \\clef "treble" \\times 2/3 {c8[ d e]}`;
 	const doc = parseCode(lyl);
 	const tuplet = doc.measures[0].parts[0].voices[0].events.find(
-		e => e.type === 'tuplet'
-	) as TupletEvent;
+		e => e.type === 'times'
+	) as TimesEvent;
 
 	assert(
 		tuplet.ratio.numerator === 2 && tuplet.ratio.denominator === 3,
@@ -55,7 +55,7 @@ console.log("\n--- Tuplet Ratio Direction ---\n");
 		`actual-3=${hasActual3}, normal-2=${hasNormal2}`
 	);
 
-	// Decode back - check ratio is preserved
+	// Decode back - MusicXML tuplets decode to a TupletEvent (type 'tuplet').
 	const doc2 = musicXmlDecoder.decode(xml);
 	const tuplet2 = doc2.measures[0].parts[0].voices[0].events.find(
 		e => e.type === 'tuplet'
@@ -80,8 +80,8 @@ console.log("\n--- Tuplet Ratio Direction ---\n");
 	const lyl = `\\time 3/8 \\clef "treble" \\times 3/4 {c8[ d e f]}`;
 	const doc = parseCode(lyl);
 	const tuplet = doc.measures[0].parts[0].voices[0].events.find(
-		e => e.type === 'tuplet'
-	) as TupletEvent;
+		e => e.type === 'times'
+	) as TimesEvent;
 
 	assert(
 		tuplet.ratio.numerator === 3 && tuplet.ratio.denominator === 4,
@@ -281,13 +281,15 @@ console.log("\n--- Encoder Idempotency ---\n");
 
 	assert(xml1 === xml2, "Encoder: double-encode produces identical output (cross-staff tuplets)");
 
-	// Also check that the AST tuplet durations aren't mutated
+	// Also check that the AST tuplet durations aren't mutated.
+	// \times syntax parses to 'times' events (TimesEvent).
 	for (const m of doc.measures) {
 		for (const p of m.parts) {
 			for (const v of p.voices) {
 				for (const e of v.events) {
-					if (e.type === 'tuplet') {
-						for (const sub of (e as TupletEvent).events) {
+					if (e.type === 'tuplet' || e.type === 'times') {
+						for (const sub of (e as TupletEvent | TimesEvent).events) {
+							if (sub.type !== 'note' && sub.type !== 'rest') continue;
 							if (sub.duration.tuplet !== undefined) {
 								assert(false, "Encoder: tuplet sub-event duration.tuplet not restored",
 									`Found lingering tuplet: ${JSON.stringify(sub.duration.tuplet)}`);

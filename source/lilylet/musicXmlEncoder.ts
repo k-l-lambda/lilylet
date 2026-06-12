@@ -753,6 +753,7 @@ const encodeMeasure = (
 					break;
 				}
 
+				case 'times':
 				case 'tuplet': {
 					const tupletEvents = event.events.filter(e => e.type === 'note' || e.type === 'rest') as (NoteEvent | RestEvent)[];
 					for (let ti = 0; ti < tupletEvents.length; ti++) {

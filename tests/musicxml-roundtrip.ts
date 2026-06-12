@@ -8,7 +8,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { parseCode, serializeLilyletDoc, musicXmlEncoder, musicXmlDecoder } from "../source/lilylet/index.js";
-import type { LilyletDoc, Event, NoteEvent, RestEvent, TupletEvent } from "../source/lilylet/types.js";
+import type { LilyletDoc, Event, NoteEvent, RestEvent, TupletEvent, TimesEvent } from "../source/lilylet/types.js";
 
 
 const UNIT_CASES_DIR = path.join(import.meta.dirname, "assets/unit-cases");
@@ -36,13 +36,15 @@ interface TestResult {
 
 
 /**
- * Flatten tuplet events - extract inner events from TupletEvent
+ * Flatten tuplet events - extract inner events from TupletEvent/TimesEvent.
+ * Both \times (TimesEvent) and decoded tuplets (TupletEvent) wrap inner
+ * note/rest events the same way, so flatten both.
  */
 const flattenEvents = (events: Event[]): Event[] => {
 	const result: Event[] = [];
 	for (const e of events) {
-		if (e.type === 'tuplet') {
-			result.push(...(e as TupletEvent).events);
+		if (e.type === 'tuplet' || e.type === 'times') {
+			result.push(...(e as TupletEvent | TimesEvent).events);
 		} else {
 			result.push(e);
 		}
