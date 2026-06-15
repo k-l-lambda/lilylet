@@ -80,39 +80,60 @@ const CLEF_SHAPES: Record<string, { shape: string; line: number }> = {
 };
 
 
-// Resolve a clef string into MEI shape/line plus optional octave displacement.
-// Octave transposition follows the LilyPond convention: a "_8"/"_15" suffix lowers
-// the sounding pitch by one/two octaves (the small 8/15 is drawn below the clef),
-// and "^8"/"^15" raises it (drawn above). MEI encodes this as dis ("8" | "15")
-// and dis.place ("below" | "above").
-const resolveClef = (clefStr: string): { shape: string; line: number; dis?: "8" | "15"; disPlace?: "above" | "below" } => {
-	const match = clefStr.match(/^(.*?)([_^])(8|15)$/);
+// Semitone offsets of the major/perfect intervals within one diatonic octave,
+// indexed by diatonic step (0 = unison, 1 = 2nd, … 6 = 7th).
+const DIATONIC_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
+
+// Convert a LilyPond clef interval-number suffix into an MEI written→sounding
+// transposition. The number N is a diatonic interval number (2 = 2nd, 3 = 3rd,
+// 5 = 5th, 8 = octave, 15 = two octaves); "_" lowers the sounding pitch, "^"
+// raises it. Returns { diat, semi } where diat is the diatonic step shift
+// (N - 1, signed) and semi is the corresponding chromatic shift in semitones,
+// extended octave-wise for compound intervals.
+const clefTransposition = (intervalNumber: number, up: boolean): { diat: number; semi: number } => {
+	const k = intervalNumber - 1;					// diatonic steps
+	const semis = DIATONIC_SEMITONES[k % 7] + 12 * Math.floor(k / 7);
+	const sign = up ? 1 : -1;
+	return { diat: sign * k, semi: sign * semis };
+};
+
+// Resolve a clef string into MEI shape/line plus optional written→sounding
+// transposition. Per the LilyPond convention a "_N"/"^N" suffix transposes the
+// clef down/up by the diatonic interval N (e.g. "treble_8" octave down,
+// "treble_5" fifth down, "treble^3" third up). MEI's clef.dis only covers octave
+// displacement (8|15|22), so all clef transposition — octaves included — is
+// encoded uniformly via att.transposition (trans.diat / trans.semi) on staffDef.
+const resolveClef = (clefStr: string): { shape: string; line: number; trans?: { diat: number; semi: number } } => {
+	const match = clefStr.match(/^(.*?)([_^])(\d+)$/);
 	const base = match ? match[1] : clefStr;
 	const clefInfo = CLEF_SHAPES[base] || CLEF_SHAPES.treble;
 	if (!match) return { shape: clefInfo.shape, line: clefInfo.line };
+	const trans = clefTransposition(Number(match[3]), match[2] === "^");
 	return {
 		shape: clefInfo.shape,
 		line: clefInfo.line,
-		dis: match[3] as "8" | "15",
-		disPlace: match[2] === "^" ? "above" : "below",
+		trans,
 	};
 };
 
 // Attributes for a standalone <clef> element (mid-measure clef change).
+// A mid-measure <clef> cannot carry att.transposition (that is a staff-level
+// property on <staffDef>); a mid-piece change of transposition would require a
+// new <staffDef>, which is out of scope here. So only shape/line are emitted.
 const clefElementAttrs = (clefStr: string): string => {
 	const c = resolveClef(clefStr);
-	let attrs = `shape="${c.shape}" line="${c.line}"`;
-	if (c.dis) attrs += ` dis="${c.dis}" dis.place="${c.disPlace}"`;
-	return attrs;
+	return `shape="${c.shape}" line="${c.line}"`;
 };
 
-// Attributes for a <staffDef> clef (clef.* namespace).
+// Attributes for a <staffDef> clef (clef.* namespace), plus att.transposition
+// (trans.diat / trans.semi) when the clef declares a transposition.
 const staffDefClefAttrs = (clefStr: string): string => {
 	const c = resolveClef(clefStr);
 	let attrs = `clef.shape="${c.shape}" clef.line="${c.line}"`;
-	if (c.dis) attrs += ` clef.dis="${c.dis}" clef.dis.place="${c.disPlace}"`;
+	if (c.trans) attrs += ` trans.diat="${c.trans.diat}" trans.semi="${c.trans.semi}"`;
 	return attrs;
 };
+
 
 
 // Lilylet duration division to MEI dur

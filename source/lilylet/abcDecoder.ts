@@ -395,6 +395,9 @@ const convertClef = (clefStr: string): Clef | undefined => {
 	// Split off an optional ABC octave shift suffix: "treble-8", "bass+8", "treble-15".
 	// ABC: "-N" lowers the sounding pitch (small N drawn below), "+N" raises it.
 	// LilyPond/Lilylet: "_N" = below, "^N" = above. Translate the sign accordingly.
+	// (Only octave amounts 8/15 are handled here; the Lilylet "_N"/"^N" clef suffix
+	// itself accepts arbitrary diatonic intervals — see meiEncoder.resolveClef — but
+	// ABC's general transpose= property is a separate, unhandled feature.)
 	const shift = clefStr?.match(/^(.*?)([+-])(8|15)$/);
 	const base = shift ? shift[1] : clefStr;
 	let resolved: string | undefined;
