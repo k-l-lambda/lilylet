@@ -49,6 +49,7 @@ const getCategory = (name: string): string => {
     if (name.startsWith('tremolos-')) return 'tremolos';
     if (name.startsWith('tuplets-')) return 'tuplets';
     if (name.startsWith('cross-staves-')) return 'cross-staves';
+    if (name.startsWith('staves-')) return 'staves';
     if (name.startsWith('text-')) return 'markup';
     if (name.startsWith('demo-')) return 'demo';
     if (name === 'comments') return 'other';
@@ -245,6 +246,7 @@ const html = `<!DOCTYPE html>
         <button class="filter-btn" data-filter="tremolos">Tremolos</button>
         <button class="filter-btn" data-filter="tuplets">Tuplets</button>
         <button class="filter-btn" data-filter="cross-staves">Cross Staves</button>
+        <button class="filter-btn" data-filter="staves">Staves</button>
         <button class="filter-btn" data-filter="demo">Demo</button>
     </div>
 

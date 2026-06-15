@@ -2,7 +2,7 @@
 
 \key c \major \time 4/4 R1 \\\ % v1
 R1 \\\ % v2
-R1 \\\ % va
-\staff "1" R1 \\ % pl
-\staff "2" R1 \\\ % pr
-R1 | % b
+\clef "C" R1 \\\ % va
+\staff "1" \clef "treble" R1 \\ % pl
+\staff "2" \clef "bass" R1 \\\ % pr
+\clef "bass_8" R1 | % b

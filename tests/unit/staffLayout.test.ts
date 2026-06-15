@@ -82,11 +82,13 @@ console.log('\nMEI staffGrp encode');
 	const layout = parseStaffLayout('<[v1-v2].va> {pl-pr} <b>');
 	const mei = encodeStaffLayoutMEI(layout);
 	assert(mei.includes('symbol="bracket"'), `emits symbol="bracket"`);
-	assert(mei.includes('symbol="square"'), `emits symbol="square"`);
+	// MEI's square-bracket variant is "bracketsq" (NOT "square", which is MusicXML)
+	assert(mei.includes('symbol="bracketsq"'), `emits symbol="bracketsq" (MEI square variant)`);
+	assert(!mei.includes('symbol="square"'), `does NOT emit invalid symbol="square"`);
 	assert(mei.includes('symbol="brace"'), `emits symbol="brace"`);
 	// the square group [v1-v2] has solid conjunction → bar.thru="true"
-	assert(/symbol="square">[\s\S]*?bar\.thru="true"|bar\.thru="true"[^>]*symbol="square"/.test(mei),
-		`square group has bar.thru="true"`);
+	assert(/symbol="bracketsq">[\s\S]*?bar\.thru="true"|bar\.thru="true"[^>]*symbol="bracketsq"/.test(mei),
+		`bracketsq group has bar.thru="true"`);
 	assert((mei.match(/<staffDef /g) || []).length === 6, `6 staffDef leaves`);
 	assert(/<staffDef n="1">/.test(mei) && /<staffDef n="6">/.test(mei), `staffDef numbered 1..6`);
 }

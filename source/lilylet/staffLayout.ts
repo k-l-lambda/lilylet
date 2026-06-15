@@ -68,8 +68,10 @@ const CONJUNCTIONS_MAP: { [conj: string]: StaffConjunctionType } = {
 	".": StaffConjunctionType.Dashed,
 };
 
-// MEI part-group / staffGrp symbol by StaffGroupType (Default → none).
-const GROUP_SYMBOLS: (string | null)[] = [null, "brace", "bracket", "square"];
+// MEI staffGrp @symbol by StaffGroupType (Default → none). MEI's allowed values
+// are brace | bracket | bracketsq | line | none — note the square variant is
+// "bracketsq", NOT "square" (the latter is MusicXML's <group-symbol> value).
+const GROUP_SYMBOLS_MEI: (string | null)[] = [null, "brace", "bracket", "bracketsq"];
 
 const randomB64 = (): string => {
 	const code = Buffer.from(Math.random().toString().slice(2)).toString("base64").replace(/=/g, "");
@@ -257,7 +259,7 @@ const stateMEIGroup = (
 	const name = group.key !== undefined ? nameDict[group.key] : undefined;
 
 	if (group.subs) {
-		const symbol = GROUP_SYMBOLS[group.type] ? ` symbol="${GROUP_SYMBOLS[group.type]}"` : "";
+		const symbol = GROUP_SYMBOLS_MEI[group.type] ? ` symbol="${GROUP_SYMBOLS_MEI[group.type]}"` : "";
 		statements.push(`${pad}<staffGrp bar.thru="${bool((group.bar ?? 0) > 1)}"${symbol}>`);
 		if (name) statements.push(`${pad}${tab}<label>${name}</label>`);
 		group.subs.forEach(sub => stateMEIGroup(statements, sub, nameDict, ids, indent + 1, tab));
