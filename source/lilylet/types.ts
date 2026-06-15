@@ -301,6 +301,7 @@ export interface Metadata {
 	opus?: string;
 	instrument?: string;
 	genre?: string;
+	staves?: string;				// Raw staff-layout code, e.g. "<[v1-v2].va> {pl-pr} <b>"
 	autoBeam?: 'auto' | 'on' | 'off';
 }
 

@@ -951,6 +951,9 @@ const serializeMetadata = (metadata: Metadata): string => {
 	if (metadata.instrument) {
 		lines.push('[instrument "' + escapeString(metadata.instrument) + '"]');
 	}
+	if (metadata.staves) {
+		lines.push('[staves "' + escapeString(metadata.staves) + '"]');
+	}
 	if (metadata.autoBeam) {
 		lines.push('[auto-beam "' + escapeString(metadata.autoBeam) + '"]');
 	}
