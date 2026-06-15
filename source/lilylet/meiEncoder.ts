@@ -26,6 +26,7 @@ import {
 	Tempo,
 	Event,
 } from "./types";
+import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 
 
 // MEI key signatures: positive = sharps, negative = flats
@@ -2016,6 +2017,41 @@ const analyzePartStructure = (doc: LilyletDoc): PartInfo[] => {
 	return partInfos;
 };
 
+// MEI staffGrp @symbol for a layout group type (Default → none; Square → bracketsq).
+const LAYOUT_SYMBOL: (string | null)[] = [null, "brace", "bracket", "bracketsq"];
+
+// Recursively emit a <staffGrp>/<staffDef> tree from a parsed [staves] layout group.
+// `staffDefs` maps a leaf staff index (0-based, in layout order) to the staffDef XML
+// for the matching global staff. bar.thru reflects the group's conjunction (Solid).
+const layoutGroupToMEI = (
+	group: StaffGroup,
+	staffDefs: string[],
+	leafCounter: { i: number },
+	indent: string,
+): string => {
+	const isLeaf = !!group.staff && (!group.subs || group.subs.length === 0);
+
+	// A leaf with no grouping symbol (Default) emits just the next staffDef.
+	if (isLeaf && (group.type === StaffGroupType.Default || !LAYOUT_SYMBOL[group.type])) {
+		return staffDefs[leafCounter.i++] ?? "";
+	}
+
+	const symbol = LAYOUT_SYMBOL[group.type] ? ` symbol="${LAYOUT_SYMBOL[group.type]}"` : "";
+	const barThru = (group.bar ?? 0) > 1 ? ' bar.thru="true"' : '';
+	let xml = `${indent}<staffGrp xml:id="${generateId("staffgrp")}"${symbol}${barThru}>\n`;
+	if (isLeaf) {
+		// A single staff that still carries a grouping bracket (e.g. "<b>"): MEI allows
+		// a staffGrp wrapping one staffDef, so the bracket is drawn around the lone staff.
+		xml += staffDefs[leafCounter.i++] ?? "";
+	} else {
+		for (const sub of group.subs || []) {
+			xml += layoutGroupToMEI(sub, staffDefs, leafCounter, indent + "    ");
+		}
+	}
+	xml += `${indent}</staffGrp>\n`;
+	return xml;
+};
+
 // Encode scoreDef with part groups
 const encodeScoreDef = (
 	keySig: string,
@@ -2023,36 +2059,64 @@ const encodeScoreDef = (
 	timeDen: number,
 	partInfos: PartInfo[],
 	indent: string,
-	meterSymbol?: 'common' | 'cut'
+	meterSymbol?: 'common' | 'cut',
+	stavesCode?: string
 ): string => {
 	const scoreDefId = generateId("scoredef");
 
 	// Build meter attributes
 	const meterSymAttr = meterSymbol ? ` meter.sym="${meterSymbol}"` : '';
 	let xml = `${indent}<scoreDef xml:id="${scoreDefId}" key.sig="${keySig}"${meterSymAttr} meter.count="${timeNum}" meter.unit="${timeDen}">\n`;
-	xml += `${indent}    <staffGrp xml:id="${generateId("staffgrp")}">\n`;
 
-	for (let pi = 0; pi < partInfos.length; pi++) {
-		const info = partInfos[pi];
-
-		// If part has multiple staves (grand staff), wrap in staffGrp with brace
-		if (info.maxStaff > 1) {
-			xml += `${indent}        <staffGrp xml:id="${generateId("staffgrp")}" symbol="brace" bar.thru="true">\n`;
-			for (let ls = 1; ls <= info.maxStaff; ls++) {
-				const globalStaff = info.staffOffset + ls;
-				const clef = info.clefs[ls] || Clef.treble;
-				xml += `${indent}            <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)} />\n`;
-			}
-			xml += `${indent}        </staffGrp>\n`;
-		} else {
-			// Single staff part
-			const globalStaff = info.staffOffset + 1;
-			const clef = info.clefs[1] || Clef.treble;
-			xml += `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)} />\n`;
+	// Flat ordered list of global staves (n + clef), in part/voice order.
+	const flatStaves: { n: number; clef: Clef }[] = [];
+	for (const info of partInfos) {
+		for (let ls = 1; ls <= info.maxStaff; ls++) {
+			flatStaves.push({ n: info.staffOffset + ls, clef: info.clefs[ls] || Clef.treble });
 		}
 	}
 
-	xml += `${indent}    </staffGrp>\n`;
+	// If a [staves] layout is present and its leaf count matches the staves, drive
+	// the nested staffGrp (bracket/bracketsq/brace) from it. Otherwise fall back to
+	// the per-part grand-staff grouping.
+	let layoutUsed = false;
+	if (stavesCode) {
+		const layout = parseStaffLayout(stavesCode);
+		if (layout.stavesCount === flatStaves.length) {
+			const staffDefs = flatStaves.map(
+				s => `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${s.n}" lines="5" ${staffDefClefAttrs(s.clef)} />\n`
+			);
+			xml += layoutGroupToMEI(layout.group, staffDefs, { i: 0 }, `${indent}    `);
+			layoutUsed = true;
+		}
+	}
+
+	if (!layoutUsed) {
+		xml += `${indent}    <staffGrp xml:id="${generateId("staffgrp")}">\n`;
+
+		for (let pi = 0; pi < partInfos.length; pi++) {
+			const info = partInfos[pi];
+
+			// If part has multiple staves (grand staff), wrap in staffGrp with brace
+			if (info.maxStaff > 1) {
+				xml += `${indent}        <staffGrp xml:id="${generateId("staffgrp")}" symbol="brace" bar.thru="true">\n`;
+				for (let ls = 1; ls <= info.maxStaff; ls++) {
+					const globalStaff = info.staffOffset + ls;
+					const clef = info.clefs[ls] || Clef.treble;
+					xml += `${indent}            <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)} />\n`;
+				}
+				xml += `${indent}        </staffGrp>\n`;
+			} else {
+				// Single staff part
+				const globalStaff = info.staffOffset + 1;
+				const clef = info.clefs[1] || Clef.treble;
+				xml += `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)} />\n`;
+			}
+		}
+
+		xml += `${indent}    </staffGrp>\n`;
+	}
+
 	xml += `${indent}</scoreDef>\n`;
 	return xml;
 };
@@ -2418,7 +2482,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += `${indent}${indent}<body>\n`;
 	mei += `${indent}${indent}${indent}<mdiv xml:id="${generateId("mdiv")}">\n`;
 	mei += `${indent}${indent}${indent}${indent}<score xml:id="${generateId("score")}">\n`;
-	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol);
+	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol, doc.metadata?.staves);
 	mei += `${indent}${indent}${indent}${indent}${indent}<section xml:id="${generateId("section")}">\n`;
 
 	// Track tie state across measures for cross-measure ties
