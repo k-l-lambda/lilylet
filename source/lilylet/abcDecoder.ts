@@ -396,8 +396,8 @@ const convertClef = (clefStr: string): Clef | undefined => {
 	// ABC: "-N" lowers the sounding pitch (small N drawn below), "+N" raises it.
 	// LilyPond/Lilylet: "_N" = below, "^N" = above. Translate the sign accordingly.
 	// (Only octave amounts 8/15 are handled here; the Lilylet "_N"/"^N" clef suffix
-	// itself accepts arbitrary diatonic intervals — see meiEncoder.resolveClef — but
-	// ABC's general transpose= property is a separate, unhandled feature.)
+	// itself accepts arbitrary diatonic intervals — see meiEncoder.resolveClef — and a
+	// voice's transpose= property is folded into the same suffix via transposeClefSuffix.)
 	const shift = clefStr?.match(/^(.*?)([+-])(8|15)$/);
 	const base = shift ? shift[1] : clefStr;
 	let resolved: string | undefined;
@@ -409,6 +409,29 @@ const convertClef = (clefStr: string): Clef | undefined => {
 	}
 	if (shift) resolved += (shift[2] === "-" ? "_" : "^") + shift[3];
 	return resolved as Clef;
+};
+
+/**
+ * Fold an ABC voice `transpose=N` property (a written→sounding shift in
+ * SEMITONES) into the Lilylet clef-suffix form `_M` / `^M`, where M is a
+ * diatonic interval number. ABC carries only semitones, so the diatonic
+ * interval is approximated by the nearest scale-step count
+ * (steps = round(semi * 7/12), interval number = |steps| + 1); `_` lowers,
+ * `^` raises. The Lilylet→MEI encoder later expands the suffix back into
+ * trans.diat / trans.semi (see meiEncoder.resolveClef). This is exact when the
+ * semitone count is a major/perfect interval (e.g. -2, -9, +2, ±12) and a
+ * nearest-interval approximation otherwise.
+ */
+const transposeClefSuffix = (clef: Clef | undefined, semitones: number): Clef | undefined => {
+	if (!clef || !semitones) return clef;
+	// A clef that already carries an octave suffix (treble_8 etc.) is left as-is;
+	// stacking another shift on top is not meaningful for ABC sources.
+	if (/[_^]\d+$/.test(clef as string)) return clef;
+	const steps = Math.round((semitones * 7) / 12);
+	if (steps === 0) return clef;
+	const num = Math.abs(steps) + 1;
+	const suffix = (steps < 0 ? "_" : "^") + num;
+	return (clef + suffix) as Clef;
 };
 
 /**
@@ -1106,7 +1129,17 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 						properties: voiceValue?.properties,
 					});
 					if (clefStr) {
-						const clef = convertClef(clefStr);
+						let clef = convertClef(clefStr);
+						// Fold a voice transpose= (semitones) into the clef suffix so it
+						// survives to MEI as trans.diat/trans.semi (transposing instruments
+						// like "Clarinet transpose=-2", "Horn transpose=-9").
+						const transposeRaw = (voiceValue as any)?.properties?.transpose;
+						const transposeSemi = typeof transposeRaw === "number"
+							? transposeRaw
+							: (transposeRaw != null ? Number(transposeRaw) : NaN);
+						if (clef && Number.isFinite(transposeSemi) && transposeSemi !== 0) {
+							clef = transposeClefSuffix(clef, transposeSemi);
+						}
 						if (clef) voiceClefs.set(voiceId, clef);
 					}
 				}
