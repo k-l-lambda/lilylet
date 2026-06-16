@@ -580,27 +580,34 @@ const abcLayoutToStaves = (layout: ABC.StaffGroup[]): string | null => {
 		return (node.items || []).every(isStaffLeaf);
 	};
 
-	const emit = (node: ABC.StaffGroup | string): string => {
+	// A square group maps to lilylet Bracket `<>` at the TOP level, but to lilylet Square
+	// `[]` when nested inside another group — e.g. ABC `[[1 2] 3 | 4]` → `<[1,2]3-4>`.
+	// A curly group always maps to Brace `{}`. `nested` is false for a top-level entry.
+	const emit = (node: ABC.StaffGroup | string, nested: boolean): string => {
 		if (isStaffLeaf(node)) return firstVoice(node) || "";
 
 		const group = node as ABC.StaffGroup;
-		const open = group.bound === "curly" ? "{" : "<";   // square → bracket <>, curly → brace {}
-		const close = group.bound === "curly" ? "}" : ">";
+		const open = group.bound === "curly" ? "{" : (group.bound === "square" && nested) ? "[" : "<";
+		const close = group.bound === "curly" ? "}" : (group.bound === "square" && nested) ? "]" : ">";
 
 		const items = group.items || [];
 		let inner = "";
 		items.forEach((item, i) => {
-			inner += emit(item);
+			inner += emit(item, true);
 			if (i < items.length - 1) {
-				const conj = (item as ABC.StaffGroup).barThruAfter ? "-" : ",";
-				inner += conj;
+				// A Blank separator (',') is only needed between two bare staff leaves; a
+				// grouped neighbour's bracket already delimits the slot, so suppress it there
+				// (giving `[1,2]3` not `[1,2],3`). A Solid join ('-', barThru) is always kept.
+				const next = items[i + 1];
+				if ((item as ABC.StaffGroup).barThruAfter) inner += "-";
+				else if (isStaffLeaf(item) && isStaffLeaf(next)) inner += ",";
 			}
 		});
 		return `${open}${inner}${close}`;
 	};
 
 	const tops = layout.map((top, i) => {
-		let s = emit(top);
+		let s = emit(top, false);
 		// A bare top-level staff leaf (e.g. the `9` in `[ … ] 9 [ … ]`) still occupies a slot;
 		// emit() already yields its id with no wrapper, which is the desired output.
 		return { s, barThru: !!top.barThruAfter, isLast: i === layout.length - 1 };
