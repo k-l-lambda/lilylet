@@ -37,7 +37,9 @@ import {
 	MarkupEvent,
 	DynamicEvent,
 	Placement,
+	InstrumentName,
 } from "./types";
+import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 
 
 // ============ Constants ============
@@ -612,6 +614,88 @@ const abcLayoutToStaves = (layout: ABC.StaffGroup[]): string | null => {
 
 	out = out.trim();
 	return out.length > 0 ? out : null;
+};
+
+
+/**
+ * Translate ABC voice instrument names (V:n nm="…" snm="…") into a lilylet `instruments`
+ * map keyed by staff-layout group key.
+ *
+ * ABC names sit on individual voices; lilylet staves are staff-leaf (an arc's first voice
+ * is the staff id). So we first collect a per-staff name from the staff-id voice. Then,
+ * per the user's rule: if a GROUP carries an instrument only on its first staff and the
+ * rest of the group is unnamed, the name belongs to the whole group — hoist it to the
+ * group key and drop it from the leaf. This matches engraving convention (one bracketed
+ * section, e.g. "Violini", named once for the group rather than on its top staff).
+ *
+ * `voiceInstr` maps an ABC voice number to its {name, shortName}. The layout's staff ids
+ * are arc-first voice numbers, so a staff id "5" looks up voice 5's name.
+ */
+const abcInstrumentsToLilylet = (
+	stavesCode: string,
+	voiceInstr: Map<number, InstrumentName>,
+): { [key: string]: InstrumentName } | null => {
+	const layout = parseStaffLayout(stavesCode);
+	const result: { [key: string]: InstrumentName } = {};
+
+	// Per-staff instrument, keyed by staff id (the arc-first voice number as a string).
+	const staffInstr = new Map<string, InstrumentName>();
+	for (const id of layout.staffIds) {
+		const v = parseInt(id, 10);
+		if (!isNaN(v) && voiceInstr.has(v)) staffInstr.set(id, voiceInstr.get(v)!);
+	}
+
+	// First staff id under a group (in layout order).
+	const firstStaffId = (group: StaffGroup): string | undefined => {
+		if (group.staff) return group.staff;
+		for (const sub of group.subs || []) {
+			const id = firstStaffId(sub);
+			if (id !== undefined) return id;
+		}
+		return undefined;
+	};
+
+	// All staff ids under a group except the first.
+	const restStaffIds = (group: StaffGroup): string[] => {
+		const all: string[] = [];
+		const collect = (g: StaffGroup) => {
+			if (g.staff) all.push(g.staff);
+			(g.subs || []).forEach(collect);
+		};
+		collect(group);
+		return all.slice(1);
+	};
+
+	// Walk groups top-down; hoist a first-staff-only name onto the group, else keep leaves.
+	const walk = (group: StaffGroup) => {
+		const isLeaf = !!group.staff && (!group.subs || group.subs.length === 0);
+		if (isLeaf) {
+			// A plain leaf keeps its own name (assigned in the flush pass below).
+			return;
+		}
+
+		const first = firstStaffId(group);
+		const firstInstr = first !== undefined ? staffInstr.get(first) : undefined;
+		const rest = restStaffIds(group);
+		const restNamed = rest.some(id => staffInstr.has(id));
+
+		// Group with a real grouping symbol, named only on its first staff → hoist.
+		const hasSymbol = group.type !== StaffGroupType.Default;
+		if (hasSymbol && firstInstr && !restNamed && group.key !== undefined) {
+			result[group.key] = firstInstr;
+			staffInstr.delete(first!);  // consumed by the group
+			return;  // children below the hoisted name carry nothing
+		}
+
+		for (const sub of group.subs || []) walk(sub);
+	};
+
+	walk(layout.group);
+
+	// Flush any per-staff names that weren't hoisted onto a group.
+	for (const [id, instr] of staffInstr) result[id] = instr;
+
+	return Object.keys(result).length > 0 ? result : null;
 };
 
 
@@ -1229,6 +1313,29 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 	if (layoutHeader) {
 		const staves = abcLayoutToStaves((layoutHeader as any).staffLayout);
 		if (staves) metadata.staves = staves;
+
+		// Translate per-voice nm/snm into a lilylet instruments map. Collect names by ABC
+		// voice number (the staff id is the arc-first voice), then let abcInstrumentsToLilylet
+		// apply the first-staff-only → whole-group hoisting rule.
+		if (metadata.staves) {
+			const voiceInstr = new Map<number, InstrumentName>();
+			for (const [vid, config] of voiceConfigs) {
+				const props = config.properties;
+				if (!props) continue;
+				const name = props.nm ?? props.name;
+				if (typeof name !== "string" || !name.length) continue;
+				const v = typeof vid === "number" ? vid : parseInt(String(vid), 10);
+				if (isNaN(v)) continue;
+				const short = props.snm ?? props.sname;
+				voiceInstr.set(v, typeof short === "string" && short.length
+					? { name, shortName: short }
+					: { name });
+			}
+			if (voiceInstr.size > 0) {
+				const instruments = abcInstrumentsToLilylet(metadata.staves, voiceInstr);
+				if (instruments) metadata.instruments = instruments;
+			}
+		}
 	}
 
 	// Group measures by voice
