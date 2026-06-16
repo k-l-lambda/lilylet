@@ -749,6 +749,15 @@ const parseMetadata = (doc: Document): Metadata => {
 				}
 			}
 		}
+
+		// Staff layout: recover the raw [staves] string stashed at encode time.
+		const miscFields = getElements(identificationEl, 'miscellaneous-field');
+		for (const field of miscFields) {
+			if (getAttribute(field, 'name') === 'lilylet-staves') {
+				const code = field.textContent?.trim();
+				if (code) metadata.staves = code;
+			}
+		}
 	}
 
 	return Object.keys(metadata).length > 0 ? metadata : {};

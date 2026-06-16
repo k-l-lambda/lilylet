@@ -43,6 +43,8 @@ import {
 	calculateDuration,
 } from "./musicXmlUtils";
 
+import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
+
 
 // === Constants and Reverse Mappings ===
 
@@ -134,6 +136,11 @@ const BARLINE_TO_XML: Record<string, { barStyle: string; repeat?: string }> = {
 	':..:': { barStyle: 'light-heavy', repeat: 'backward' },  // Will need special handling
 };
 
+
+// MusicXML <group-symbol> value by StaffGroupType (Default → none). MusicXML's
+// allowed values are brace | bracket | line | square | none — note that, unlike
+// MEI (which uses "bracketsq"), MusicXML's square variant IS spelled "square".
+const GROUP_SYMBOLS_XML: (string | null)[] = [null, "brace", "bracket", "square"];
 
 // === XML Helper Functions ===
 
@@ -848,9 +855,119 @@ const encodeMetadata = (metadata: Metadata, level: number): string => {
 	xml += `${indent(level + 2)}<encoding-date>${new Date().toISOString().split('T')[0]}</encoding-date>\n`;
 	xml += `${indent(level + 1)}</encoding>\n`;
 
+	// Preserve the raw staff-layout string for a lossless round-trip. MusicXML has
+	// no native carrier for it (its <part-group> only expresses grouping, not the
+	// conjunction/anonymous-id detail), so we stash the verbatim code here.
+	if (metadata.staves) {
+		xml += `${indent(level + 1)}<miscellaneous>\n`;
+		xml += `${indent(level + 2)}<miscellaneous-field name="lilylet-staves">${escapeXml(metadata.staves)}</miscellaneous-field>\n`;
+		xml += `${indent(level + 1)}</miscellaneous>\n`;
+	}
+
 	xml += `${indent(level)}</identification>\n`;
 
 	return xml;
+};
+
+
+/**
+ * Build <part-group> start/stop brackets from a parsed staff-layout, keyed by the
+ * part index they wrap around.
+ *
+ * The layout is staff-leaf (one leaf per staff); MusicXML <part-group> brackets group
+ * *parts*. We map each part to the consecutive run of staff-leaves it owns (a grand-staff
+ * part owns `maxStaff` leaves), then translate every layout group whose leaf-span aligns
+ * with whole-part boundaries into a part-group. Groups that fall entirely inside one part
+ * (e.g. the brace over a single grand-staff part) are intrinsic to that part's <staves>
+ * and are skipped here. Returns { starts, stops } maps: partIndex → XML snippets.
+ */
+const buildPartGroups = (
+	stavesCode: string,
+	staffCountPerPart: number[],
+	level: number,
+): { starts: Map<number, string>; stops: Map<number, string> } => {
+	const starts = new Map<number, string>();
+	const stops = new Map<number, string>();
+
+	const layout = parseStaffLayout(stavesCode);
+	const totalLeaves = staffCountPerPart.reduce((a, b) => a + b, 0);
+	if (layout.stavesCount !== totalLeaves) {
+		// Layout/parts mismatch — skip grouping rather than emit something wrong.
+		return { starts, stops };
+	}
+
+	// leaf index → part index, and the [firstLeaf, lastLeaf] each part spans.
+	const partFirstLeaf: number[] = [];
+	const partLastLeaf: number[] = [];
+	let leaf = 0;
+	for (let pi = 0; pi < staffCountPerPart.length; pi++) {
+		partFirstLeaf[pi] = leaf;
+		leaf += staffCountPerPart[pi];
+		partLastLeaf[pi] = leaf - 1;
+	}
+
+	const leafToPart = (leafIdx: number): number => {
+		for (let pi = 0; pi < staffCountPerPart.length; pi++) {
+			if (leafIdx >= partFirstLeaf[pi] && leafIdx <= partLastLeaf[pi]) return pi;
+		}
+		return -1;
+	};
+
+	let groupNumber = 0;
+	const leafCounter = { i: 0 };
+
+	const walk = (group: StaffGroup): void => {
+		const isLeaf = !!group.staff && (!group.subs || group.subs.length === 0);
+		const symbol = GROUP_SYMBOLS_XML[group.type];
+
+		if (isLeaf) {
+			// A leaf may itself carry a bracket (e.g. <b>): a one-staff part-group.
+			const li = leafCounter.i++;
+			if (symbol) {
+				const pi = leafToPart(li);
+				if (pi >= 0 && partFirstLeaf[pi] === li && partLastLeaf[pi] === li) {
+					emit(pi, pi, symbol, group.bar);
+				}
+			}
+			return;
+		}
+
+		// Span the leaves covered by this group's subtree, then recurse.
+		const firstLeaf = leafCounter.i;
+		for (const sub of group.subs || []) walk(sub);
+		const lastLeaf = leafCounter.i - 1;
+
+		if (symbol) {
+			const startPart = leafToPart(firstLeaf);
+			const endPart = leafToPart(lastLeaf);
+			// Only emit when the span aligns with whole-part boundaries AND wraps >1 part
+			// (a group inside a single part is the part's own grand staff, not a part-group).
+			if (
+				startPart >= 0 && endPart >= 0 && startPart !== endPart &&
+				partFirstLeaf[startPart] === firstLeaf && partLastLeaf[endPart] === lastLeaf
+			) {
+				emit(startPart, endPart, symbol, group.bar);
+			}
+		}
+	};
+
+	const emit = (startPart: number, endPart: number, symbol: string, bar?: number): void => {
+		const num = ++groupNumber;
+		const barLine = (bar ?? 0) > 1;
+		let s = `${indent(level)}<part-group type="start" number="${num}">\n`;
+		s += `${indent(level + 1)}<group-symbol>${symbol}</group-symbol>\n`;
+		s += `${indent(level + 1)}<group-barline>${barLine ? 'yes' : 'no'}</group-barline>\n`;
+		s += `${indent(level)}</part-group>\n`;
+		starts.set(startPart, (starts.get(startPart) || '') + s);
+
+		const e = `${indent(level)}<part-group type="stop" number="${num}"/>\n`;
+		// Stops are emitted after the end part; inner groups must close before outer ones,
+		// so prepend (deepest group, emitted last, closes first).
+		stops.set(endPart, e + (stops.get(endPart) || ''));
+	};
+
+	walk(layout.group);
+	return { starts, stops };
 };
 
 
@@ -870,15 +987,31 @@ export const encode = (doc: LilyletDoc): string => {
 	// Determine number of parts from first measure
 	const numParts = doc.measures.length > 0 ? doc.measures[0].parts.length : 1;
 
+	// Staff-layout → <part-group> brackets/braces (if a [staves] layout is present and
+	// its staff count matches the parts' total staves).
+	let partGroups: { starts: Map<number, string>; stops: Map<number, string> } = {
+		starts: new Map(), stops: new Map(),
+	};
+	if (doc.metadata?.staves && doc.measures.length > 0) {
+		const staffCountPerPart = doc.measures[0].parts.map(part => {
+			let maxStaff = 1;
+			for (const voice of part.voices) maxStaff = Math.max(maxStaff, voice.staff || 1);
+			return maxStaff;
+		});
+		partGroups = buildPartGroups(doc.metadata.staves, staffCountPerPart, 2);
+	}
+
 	// Part list
 	xml += `${indent(1)}<part-list>\n`;
 	for (let pi = 0; pi < numParts; pi++) {
 		const partId = `P${pi + 1}`;
 		const partName = doc.measures[0]?.parts[pi]?.name
 			|| (numParts === 1 ? (doc.metadata?.title ? escapeXml(doc.metadata.title) : 'Music') : `Part ${pi + 1}`);
+		xml += partGroups.starts.get(pi) || '';
 		xml += `${indent(2)}<score-part id="${partId}">\n`;
 		xml += `${indent(3)}<part-name>${escapeXml(partName)}</part-name>\n`;
 		xml += `${indent(2)}</score-part>\n`;
+		xml += partGroups.stops.get(pi) || '';
 	}
 	xml += `${indent(1)}</part-list>\n`;
 
