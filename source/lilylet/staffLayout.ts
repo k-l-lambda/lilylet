@@ -240,6 +240,82 @@ export class StaffLayout {
 
 export const parseStaffLayout = (code: string): StaffLayout => new StaffLayout(tokenize(code));
 
+// ── Staff-layout serialization (inverse of parseStaffLayout) ──
+// Reconstruct a layout string from a parsed StaffLayout by walking the group tree,
+// so every staff slot and conjunction is preserved structurally (a regex strip of the
+// ids would drop a BARE anonymous leaf — its empty token gets swallowed by whitespace).
+//
+// `anonymous` emits empty ids (the parser re-auto-names slots "1","2",… by position).
+// `idMap` optionally overrides individual staff ids by their original id.
+//
+// Conjunction rendering: Solid → "-", Dashed → ".", Blank → " " ONLY when both sides
+// are bracketed groups (the brackets self-delimit the slots); otherwise Blank → ","
+// so an adjacent empty/bare leaf still tokenizes as its own slot.
+
+const CONJ_CHAR: { [c in StaffConjunctionType]: string } = {
+	[StaffConjunctionType.Solid]: "-",
+	[StaffConjunctionType.Dashed]: ".",
+	[StaffConjunctionType.Blank]: ",",
+};
+
+export interface SerializeStaffLayoutOptions {
+	anonymous?: boolean;
+	idMap?: (originalId: string) => string;
+}
+
+export const serializeStaffLayout = (layout: StaffLayout, options: SerializeStaffLayoutOptions = {}): string => {
+	const { anonymous = false, idMap } = options;
+	const isGrouped = (group: StaffGroup): boolean => group.type !== StaffGroupType.Default && !!group.subs;
+
+	const leafText = (id: string): string => (anonymous ? "" : idMap ? idMap(id) : id);
+
+	// flat leaf index of a group's first / last staff (for the inter-child conjunction).
+	const firstLeafIndex = (group: StaffGroup): number => layout.staffIds.indexOf(groupHead(group)!);
+	const lastLeafIndex = (group: StaffGroup): number => layout.staffIds.indexOf(groupTail(group)!);
+
+	const sep = (conj: StaffConjunctionType, left: StaffGroup, right: StaffGroup): string => {
+		if (conj !== StaffConjunctionType.Blank) return CONJ_CHAR[conj];
+		// Blank: a space is safe only when both neighbours are bracketed (self-delimiting).
+		return isGrouped(left) && isGrouped(right) ? " " : ",";
+	};
+
+	const emit = (group: StaffGroup): string => {
+		if (!group.subs) return leafText(group.staff!);  // Default leaf
+
+		const open = group.type === StaffGroupType.Brace ? "{" : group.type === StaffGroupType.Bracket ? "<" : group.type === StaffGroupType.Square ? "[" : "";
+		const close = group.type === StaffGroupType.Brace ? "}" : group.type === StaffGroupType.Bracket ? ">" : group.type === StaffGroupType.Square ? "]" : "";
+
+		let inner = "";
+		group.subs.forEach((sub, i) => {
+			inner += emit(sub);
+			if (i < group.subs!.length - 1) {
+				const next = group.subs![i + 1];
+				const conj = layout.conjunctions[lastLeafIndex(sub)] ?? StaffConjunctionType.Blank;
+				inner += sep(conj, sub, next);
+				void firstLeafIndex;  // (lastLeafIndex(sub) === firstLeafIndex(next) - 1)
+			}
+		});
+		return open + inner + close;
+	};
+
+	let out = emit(layout.group);
+
+	// A TRAILING bare anonymous leaf emits "" with nothing after it to delimit the slot
+	// (a leaf before a closing bracket is fine — the bracket gives it bounds; an internal
+	// one is flushed by the next separator). The tokenizer only flushes a final empty item
+	// if it carries bounds, so append one "," to materialize that last empty slot. This only
+	// arises when the OUTERMOST container is the Default sequence (no enclosing bracket) and
+	// its last child is a bare leaf; if the whole layout is wrapped in a bracket, the closing
+	// bracket already delimits the final leaf. The trailing conjunction is dropped on re-parse
+	// (conjunctions = items[0..n-1]), so it is harmless. Anonymous output only.
+	if (anonymous && layout.group.type === StaffGroupType.Default && layout.group.subs) {
+		const lastTop = layout.group.subs[layout.group.subs.length - 1];
+		if (!lastTop.subs && lastTop.staff !== undefined) out += ",";
+	}
+
+	return out;
+};
+
 // ── MEI staffGrp encoding (ported from FindLab staffLayout/encoding.js encodeMEI) ──
 // Recursively emit nested <staffGrp> with symbol (brace/bracket/square) and bar.thru,
 // with <staffDef n="..."> leaves keyed by staff index. nameDict maps a group key to a

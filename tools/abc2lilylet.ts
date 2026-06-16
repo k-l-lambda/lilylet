@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { abcDecoder, parseCode } from "../source/lilylet/index";
+import { abcDecoder, parseCode, parseStaffLayout, serializeStaffLayout } from "../source/lilylet/index";
 import { serializeLilyletDoc } from "../source/lilylet/serializer";
-import type { Event, LilyletDoc, RestEvent, TimeSig, Voice } from "../source/lilylet/types";
+import type { Event, InstrumentName, LilyletDoc, Metadata, RestEvent, TimeSig, Voice } from "../source/lilylet/types";
 
 
 interface CliOptions {
@@ -11,6 +11,7 @@ interface CliOptions {
 	excludeSpaceVoices: boolean;
 	stylesInComments: boolean;
 	forceFullMeasureRest: boolean;
+	anonymousStaves: boolean;
 	skipExisting: boolean;
 }
 
@@ -37,6 +38,11 @@ Options:
                            filling the whole measure is written as R (e.g. r2. -> R2.),
                            even if the ABC used lowercase z. Off by default — only the
                            ABC's own uppercase Z multi-measure rests become R.
+  --anonymous-staves       Strip staff-id names from the [staves] layout (e.g.
+                           "<1-3-5-7>" -> "<--->"), so the parser auto-names slots
+                           1,2,3,… by position. Instrument keys ([instrument-<key>])
+                           are remapped to the matching anonymous ordinal(s). Off by
+                           default — original staff ids are kept.
   --skip-existing          Skip files whose output .lyl already exists (resume a run)
   --help, -h               Show this help
 `;
@@ -47,6 +53,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 	let excludeSpaceVoices = true;
 	let stylesInComments = false;
 	let forceFullMeasureRest = false;
+	let anonymousStaves = false;
 	let skipExisting = false;
 	const positional: string[] = [];
 
@@ -71,6 +78,8 @@ const parseArgs = (argv: string[]): CliOptions => {
 			stylesInComments = true;
 		} else if (arg === "--force-fullmeasure-rest") {
 			forceFullMeasureRest = true;
+		} else if (arg === "--anonymous-staves") {
+			anonymousStaves = true;
 		} else if (arg === "--skip-existing") {
 			skipExisting = true;
 		} else if (arg.startsWith("-")) {
@@ -93,6 +102,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 		excludeSpaceVoices,
 		stylesInComments,
 		forceFullMeasureRest,
+		anonymousStaves,
 		skipExisting,
 	};
 };
@@ -230,6 +240,37 @@ const removePureSpaceVoices = (doc: LilyletDoc): void => {
 	}
 };
 
+// Rewrite the [staves] layout into anonymous form: drop every staff-id name token
+// (e.g. "<[v1-v2].va> {pl-pr} <b>" -> "<[-].> {-} <>", "<1-3-5-7>" -> "<--->"), keeping
+// all bounds/conjunctions so the parser auto-names the now-empty slots "1","2","3",… by
+// position. We reconstruct the string from the PARSED layout via serializeStaffLayout
+// (not a regex strip — that would silently drop a BARE top-level staff like the `12` in
+// "<9-11> 12 <…>", whose emptied token gets swallowed by whitespace). The
+// [instrument-<key>] keys, which reference the original staff ids (a single id, or a
+// "head-tail" group range), are remapped to the matching anonymous ordinal(s) so each
+// instrument name still lands on the right staff.
+const anonymizeStaves = (metadata: Metadata | undefined): void => {
+	if (!metadata || !metadata.staves) return;
+
+	// original (deduplicated) staff id -> 1-based anonymous ordinal, in layout order.
+	const layout = parseStaffLayout(metadata.staves);
+	const ordinal = new Map<string, string>();
+	layout.staffIds.forEach((id, index) => ordinal.set(id, String(index + 1)));
+
+	// reconstruct the layout with empty ids (structure-preserving; keeps every slot).
+	metadata.staves = serializeStaffLayout(layout, { anonymous: true });
+
+	// remap instrument keys (single id, or "head-tail" range) to anonymous ordinals.
+	if (metadata.instruments) {
+		const remapped: { [key: string]: InstrumentName } = {};
+		for (const [key, instr] of Object.entries(metadata.instruments)) {
+			const mappedKey = key.split("-").map(id => ordinal.get(id) ?? id).join("-");
+			remapped[mappedKey] = instr;
+		}
+		metadata.instruments = remapped;
+	}
+};
+
 const outputPathFor = (inputFile: string, inputDir: string, outputDir: string): string => {
 	const relative = path.relative(inputDir, inputFile);
 	const parsed = path.parse(relative);
@@ -280,6 +321,7 @@ const main = () => {
 
 				if (options.excludeSpaceVoices) removePureSpaceVoices(doc);
 				if (options.forceFullMeasureRest) markFullMeasureRests(doc);
+				if (options.anonymousStaves) anonymizeStaves(doc.metadata);
 
 				let lylContent = serializeLilyletDoc(doc);
 				if (options.stylesInComments) {
@@ -308,6 +350,7 @@ const main = () => {
 		console.log(`Output: ${options.outputDir}`);
 		console.log(`Pure-space voices: ${options.excludeSpaceVoices ? "excluded" : "kept"}`);
 		console.log(`Force full-measure rest: ${options.forceFullMeasureRest ? "on" : "off"}`);
+		console.log(`Anonymous staves: ${options.anonymousStaves ? "on" : "off"}`);
 
 		if (errors.length > 0) {
 			console.log("\nFailed files:");
