@@ -28,6 +28,7 @@ import {
 	InstrumentName,
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
+import { gmProgramOf } from "./gmInstruments";
 
 
 // MEI key signatures: positive = sharps, negative = flats
@@ -2062,15 +2063,53 @@ const analyzePartStructure = (doc: LilyletDoc): PartInfo[] => {
 // MEI staffGrp @symbol for a layout group type (Default → none; Square → bracketsq).
 const LAYOUT_SYMBOL: (string | null)[] = [null, "brace", "bracket", "bracketsq"];
 
+// MIDI channel allocator: assigns one channel per distinct GM program so that
+// instruments get separate timbres. Verovio defaults every staff to channel 0
+// unless <instrDef midi.channel> is set, which would make all ProgramChanges
+// collide on one channel (only the last program would sound). We dedup by
+// program number — duplicate desks (e.g. two "Violins" staves) share a channel
+// — and skip channel 9 (the GM percussion channel) for pitched instruments.
+interface ChannelAllocator {
+	byProgram: Map<number, number>;
+	nextChannel: number;
+}
+
+const newChannelAllocator = (): ChannelAllocator => ({ byProgram: new Map(), nextChannel: 0 });
+
+// Channel for a program: reuse the channel already assigned to that program,
+// else take the next free channel (skipping 9). Wraps past 16 as graceful
+// degradation for scores with more than 15 distinct timbres.
+const allocChannel = (alloc: ChannelAllocator, program: number): number => {
+	const existing = alloc.byProgram.get(program);
+	if (existing !== undefined) return existing;
+	let ch = alloc.nextChannel;
+	if (ch % 16 === 9) ch++;		// skip GM drum channel
+	const assigned = ch % 16;
+	alloc.byProgram.set(program, assigned);
+	alloc.nextChannel = ch + 1;
+	return assigned;
+};
+
 // Build <label>/<labelAbbr> child XML for an instrument entry, or "" if none.
+// When the instrument name resolves to a General MIDI program, also emit an
+// <instrDef midi.instrnum midi.channel> sibling so Verovio's MIDI export assigns
+// that timbre (it honors only the numeric @midi.instrnum) on its own channel
+// (@midi.channel, else all instruments collide on channel 0). Unknown names emit
+// just the label, leaving Verovio's default program (0 = piano).
 const instrumentLabelXML = (
 	instr: InstrumentName | undefined,
 	indent: string,
+	channels?: ChannelAllocator,
 ): string => {
 	if (!instr) return "";
 	let xml = `${indent}<label>${escapeXml(instr.name)}</label>\n`;
 	if (instr.shortName !== undefined) {
 		xml += `${indent}<labelAbbr>${escapeXml(instr.shortName)}</labelAbbr>\n`;
+	}
+	const program = gmProgramOf(instr.name);
+	if (program !== undefined) {
+		const chanAttr = channels ? ` midi.channel="${allocChannel(channels, program)}"` : "";
+		xml += `${indent}<instrDef xml:id="${generateId("instrdef")}" midi.instrnum="${program}"${chanAttr} />\n`;
 	}
 	return xml;
 };
@@ -2087,28 +2126,29 @@ const layoutGroupToMEI = (
 	leafCounter: { i: number },
 	indent: string,
 	instruments: { [key: string]: InstrumentName },
+	channels: ChannelAllocator,
 ): string => {
 	const isLeaf = !!group.staff && (!group.subs || group.subs.length === 0);
 	const instr = group.key !== undefined ? instruments[group.key] : undefined;
 
 	// A leaf with no grouping symbol (Default) emits just the next staffDef (with label).
 	if (isLeaf && (group.type === StaffGroupType.Default || !LAYOUT_SYMBOL[group.type])) {
-		return staffDefWithLabel(staffDefAttrs[leafCounter.i++], instr, indent);
+		return staffDefWithLabel(staffDefAttrs[leafCounter.i++], instr, indent, channels);
 	}
 
 	const symbol = LAYOUT_SYMBOL[group.type] ? ` symbol="${LAYOUT_SYMBOL[group.type]}"` : "";
 	const barThru = (group.bar ?? 0) > 1 ? ' bar.thru="true"' : '';
 	let xml = `${indent}<staffGrp xml:id="${generateId("staffgrp")}"${symbol}${barThru}>\n`;
 	// A multi-staff group's instrument name labels the whole group.
-	if (!isLeaf) xml += instrumentLabelXML(instr, indent + "    ");
+	if (!isLeaf) xml += instrumentLabelXML(instr, indent + "    ", channels);
 	if (isLeaf) {
 		// A single staff that still carries a grouping bracket (e.g. "<b>"): MEI allows
 		// a staffGrp wrapping one staffDef. The instrument names the lone staff, so the
 		// label goes on the staffDef inside.
-		xml += staffDefWithLabel(staffDefAttrs[leafCounter.i++], instr, indent + "    ");
+		xml += staffDefWithLabel(staffDefAttrs[leafCounter.i++], instr, indent + "    ", channels);
 	} else {
 		for (const sub of group.subs || []) {
-			xml += layoutGroupToMEI(sub, staffDefAttrs, leafCounter, indent + "    ", instruments);
+			xml += layoutGroupToMEI(sub, staffDefAttrs, leafCounter, indent + "    ", instruments, channels);
 		}
 	}
 	xml += `${indent}</staffGrp>\n`;
@@ -2120,11 +2160,12 @@ const staffDefWithLabel = (
 	attrs: string | undefined,
 	instr: InstrumentName | undefined,
 	indent: string,
+	channels?: ChannelAllocator,
 ): string => {
 	if (attrs === undefined) return "";
 	if (!instr) return `${indent}<staffDef ${attrs} />\n`;
 	let xml = `${indent}<staffDef ${attrs}>\n`;
-	xml += instrumentLabelXML(instr, indent + "    ");
+	xml += instrumentLabelXML(instr, indent + "    ", channels);
 	xml += `${indent}</staffDef>\n`;
 	return xml;
 };
@@ -2141,6 +2182,10 @@ const encodeScoreDef = (
 	instruments: { [key: string]: InstrumentName } = {}
 ): string => {
 	const scoreDefId = generateId("scoredef");
+
+	// One MIDI channel allocator per score: assigns a distinct channel per GM
+	// program so instruments don't collide on channel 0 (see allocChannel).
+	const channels = newChannelAllocator();
 
 	// Build meter attributes
 	const meterSymAttr = meterSymbol ? ` meter.sym="${meterSymbol}"` : '';
@@ -2164,7 +2209,7 @@ const encodeScoreDef = (
 			const staffDefAttrs = flatStaves.map(
 				s => `xml:id="${generateId('staffdef')}" n="${s.n}" lines="5" ${staffDefClefAttrs(s.clef)}`
 			);
-			xml += layoutGroupToMEI(layout.group, staffDefAttrs, { i: 0 }, `${indent}    `, instruments);
+			xml += layoutGroupToMEI(layout.group, staffDefAttrs, { i: 0 }, `${indent}    `, instruments, channels);
 			layoutUsed = true;
 		}
 	}
@@ -2183,13 +2228,13 @@ const encodeScoreDef = (
 				const last = info.staffOffset + info.maxStaff;
 				const instr = instruments[`${first}-${last}`];
 				xml += `${indent}        <staffGrp xml:id="${generateId("staffgrp")}" symbol="brace" bar.thru="true">\n`;
-				xml += instrumentLabelXML(instr, `${indent}            `);
+				xml += instrumentLabelXML(instr, `${indent}            `, channels);
 				for (let ls = 1; ls <= info.maxStaff; ls++) {
 					const globalStaff = info.staffOffset + ls;
 					const clef = info.clefs[ls] || Clef.treble;
 					const leafInstr = instruments[`${globalStaff}`];
 					const attrs = `xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)}`;
-					xml += staffDefWithLabel(attrs, leafInstr, `${indent}            `);
+					xml += staffDefWithLabel(attrs, leafInstr, `${indent}            `, channels);
 				}
 				xml += `${indent}        </staffGrp>\n`;
 			} else {
@@ -2198,7 +2243,7 @@ const encodeScoreDef = (
 				const clef = info.clefs[1] || Clef.treble;
 				const leafInstr = instruments[`${globalStaff}`];
 				const attrs = `xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)}`;
-				xml += staffDefWithLabel(attrs, leafInstr, `${indent}        `);
+				xml += staffDefWithLabel(attrs, leafInstr, `${indent}        `, channels);
 			}
 		}
 
