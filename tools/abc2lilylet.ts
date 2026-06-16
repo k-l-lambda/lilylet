@@ -9,7 +9,7 @@ interface CliOptions {
 	inputDir: string;
 	outputDir: string;
 	excludeSpaceVoices: boolean;
-	transcribeMeta: boolean;
+	stylesInComments: boolean;
 	skipExisting: boolean;
 }
 
@@ -27,9 +27,10 @@ Options:
   --output, -o             Output directory for generated .lyl files
   --keep-space-voices      Keep voices that contain only invisible rests/spaces
   --include-space-voices   Alias for --keep-space-voices
-  --meta                   Extract NotaGen catalog metadata (non-standard ABC):
-                           leading %period/%composer/%instrumentation comments,
-                           with a filename fallback, into [genre]/[composer]/[instrument].
+  --styles-in-comments     Preserve NotaGen catalog tags (non-standard ABC) as raw
+                           leading %period/%composer/%instrumentation comment lines
+                           at the top of the .lyl, with a filename fallback. Does NOT
+                           emit [genre]/[composer]/[instrument] meta fields.
                            Off by default — only standard ABC info fields (C:, T:, ...) are kept.
   --skip-existing          Skip files whose output .lyl already exists (resume a run)
   --help, -h               Show this help
@@ -39,7 +40,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 	let inputDir = "";
 	let outputDir = "";
 	let excludeSpaceVoices = true;
-	let transcribeMeta = false;
+	let stylesInComments = false;
 	let skipExisting = false;
 	const positional: string[] = [];
 
@@ -60,8 +61,8 @@ const parseArgs = (argv: string[]): CliOptions => {
 			excludeSpaceVoices = false;
 		} else if (arg === "--exclude-space-voices") {
 			excludeSpaceVoices = true;
-		} else if (arg === "--meta") {
-			transcribeMeta = true;
+		} else if (arg === "--styles-in-comments") {
+			stylesInComments = true;
 		} else if (arg === "--skip-existing") {
 			skipExisting = true;
 		} else if (arg.startsWith("-")) {
@@ -82,7 +83,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 		inputDir: path.resolve(inputDir),
 		outputDir: path.resolve(outputDir),
 		excludeSpaceVoices,
-		transcribeMeta,
+		stylesInComments,
 		skipExisting,
 	};
 };
@@ -123,15 +124,40 @@ const COMPOSER_SET = new Set([
 	"Vivaldi, Antonio", "Warlock, Peter", "Wolf, Hugo", "Zumsteeg, Emilie",
 ]);
 
-const fillCatalogMetaFromFilename = (doc: LilyletDoc, filePath: string): void => {
-	const base = path.parse(filePath).name;
-	const tokens = base.split("_");
-	for (const token of tokens) {
-		const value = token.trim();
-		if (PERIOD_SET.has(value)) doc.metadata = { ...doc.metadata, genre: doc.metadata?.genre ?? value };
-		else if (INSTRUMENTATION_SET.has(value)) doc.metadata = { ...doc.metadata, instrument: doc.metadata?.instrument ?? value };
-		else if (COMPOSER_SET.has(value)) doc.metadata = { ...doc.metadata, composer: doc.metadata?.composer ?? value };
+// Build the raw NotaGen catalog comment lines (`%<period>` / `%<composer>` /
+// `%<instrumentation>`) to preserve verbatim at the top of the .lyl. Values are
+// taken from the ABC's own leading single-% comments where present; any field
+// missing from the content is filled from the underscore-separated filename
+// (the NotaGen `period_composer_instrumentation` naming). Returns the lines in
+// canonical period/composer/instrument order; empty if nothing is found.
+const catalogCommentLines = (abcContent: string, filePath: string): string[] => {
+	let genre: string | undefined;
+	let composer: string | undefined;
+	let instrument: string | undefined;
+
+	// from the ABC content: leading single-% comments (skip `%%` directives)
+	for (const rawLine of abcContent.split(/\r?\n/)) {
+		const line = rawLine.trim();
+		if (!line.startsWith("%") || line.startsWith("%%")) continue;
+		const value = line.slice(1).trim();
+		if (!genre && PERIOD_SET.has(value)) genre = value;
+		else if (!instrument && INSTRUMENTATION_SET.has(value)) instrument = value;
+		else if (!composer && COMPOSER_SET.has(value)) composer = value;
 	}
+
+	// filename fallback (period_composer_instrumentation) for any missing field
+	for (const token of path.parse(filePath).name.split("_")) {
+		const value = token.trim();
+		if (!genre && PERIOD_SET.has(value)) genre = value;
+		else if (!instrument && INSTRUMENTATION_SET.has(value)) instrument = value;
+		else if (!composer && COMPOSER_SET.has(value)) composer = value;
+	}
+
+	const lines: string[] = [];
+	if (genre) lines.push(`%${genre}`);
+	if (composer) lines.push(`%${composer}`);
+	if (instrument) lines.push(`%${instrument}`);
+	return lines;
 };
 
 const eventHasSoundingContent = (event: Event): boolean => {
@@ -199,13 +225,18 @@ const main = () => {
 			}
 			try {
 				const content = fs.readFileSync(file, "utf-8");
-				const doc = abcDecoder.decode(content, { catalogComments: options.transcribeMeta });
+				const doc = abcDecoder.decode(content);
 				if (!doc.measures || doc.measures.length === 0) throw new Error("No measures produced");
 
 				if (options.excludeSpaceVoices) removePureSpaceVoices(doc);
-				if (options.transcribeMeta) fillCatalogMetaFromFilename(doc, file);
 
-				const lylContent = serializeLilyletDoc(doc);
+				let lylContent = serializeLilyletDoc(doc);
+				if (options.stylesInComments) {
+					// preserve the NotaGen catalog tags as raw leading %-comment lines
+					// (instead of [genre]/[composer]/[instrument] meta fields)
+					const commentLines = catalogCommentLines(content, file);
+					if (commentLines.length > 0) lylContent = commentLines.join("\n") + "\n" + lylContent;
+				}
 				const reparsed = parseCode(lylContent);
 
 				fs.mkdirSync(path.dirname(outputFile), { recursive: true });
