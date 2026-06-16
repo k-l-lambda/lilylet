@@ -120,11 +120,22 @@ const resolveClef = (clefStr: string): { shape: string; line: number; trans?: { 
 
 // Attributes for a standalone <clef> element (mid-measure clef change).
 // A mid-measure <clef> cannot carry att.transposition (that is a staff-level
-// property on <staffDef>); a mid-piece change of transposition would require a
-// new <staffDef>, which is out of scope here. So only shape/line are emitted.
+// property Verovio only reads from <staffDef>); the visible clef shape/line is
+// emitted here, and a sounding-pitch transposition change is mirrored by a
+// between-measure <scoreDef>/<staffDef trans.*> emitted in the measure loop
+// (see emitClefTranspositionScoreDef). So only shape/line are emitted here.
 const clefElementAttrs = (clefStr: string): string => {
 	const c = resolveClef(clefStr);
 	return `shape="${c.shape}" line="${c.line}"`;
+};
+
+// The written→sounding transposition a clef declares, as {diat, semi}; {0,0}
+// when the clef declares none. Used to detect mid-piece transposition changes
+// and to emit the resetting <staffDef> when a transposing clef is replaced by a
+// plain one (Verovio retains a prior trans.* until an explicit 0/0 overrides it).
+const clefTransOf = (clefStr: string): { diat: number; semi: number } => {
+	const c = resolveClef(clefStr);
+	return c.trans || { diat: 0, semi: 0 };
 };
 
 // Attributes for a <staffDef> clef (clef.* namespace), plus att.transposition
@@ -1728,6 +1739,36 @@ const generateTempoElement = (tempo: Tempo, indent: string, staff: number = 1): 
 // Clef state for cross-measure clef tracking - maps staff number to current clef
 type ClefState = Record<number, Clef>;
 
+// The clef governing a measure's sounding pitch on one global staff: the clef
+// carried in from the previous measure, overridden by a leading clef change that
+// appears before the first note/rest in the measure (the normal boundary-change
+// case). A clef change occurring *after* notes does not retune this measure — it
+// becomes the carried clef for the next measure via clefState. This per-measure
+// granularity matches what Verovio honors for MIDI: a transposition change takes
+// effect only via a between-measure <scoreDef>/<staffDef trans.*>, never from a
+// mid-measure <clef> element.
+const measureStartClef = (measure: Measure, globalStaff: number, partInfos: PartInfo[], carriedClef?: string): string | undefined => {
+	let active = carriedClef;
+	for (let pi = 0; pi < measure.parts.length; pi++) {
+		const partOffset = partInfos[pi]?.staffOffset || 0;
+		for (const voice of measure.parts[pi].voices) {
+			if ((partOffset + (voice.staff || 1)) !== globalStaff) continue;
+			for (const event of voice.events) {
+				if (event.type === 'note' || event.type === 'rest' ||
+					event.type === 'tuplet' || event.type === 'times' || event.type === 'tremolo') {
+					break; // notes have started; a later clef change governs the next measure
+				}
+				if (event.type === 'context') {
+					const ctx = event as ContextChange;
+					if (ctx.clef) active = ctx.clef;
+				}
+			}
+		}
+	}
+	return active;
+};
+
+
 // Barline style to MEI @right attribute mapping
 const BARLINE_TO_MEI: Record<string, string> = {
 	'|': 'single',
@@ -2547,11 +2588,18 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 
 	// Initialize clef state from partInfos (convert local staff to global staff)
 	const clefState: ClefState = {};
+	// Running written→sounding transposition per global staff, as the verbatim
+	// "diat,semi" key. Seeded from the initial clefs (which the leading <scoreDef>
+	// already encoded via staffDefClefAttrs), then advanced whenever a measure
+	// starts under a clef with a different transposition.
+	const transState: Record<number, string> = {};
 	for (let pi = 0; pi < partInfos.length; pi++) {
 		const partInfo = partInfos[pi];
 		for (const [localStaffStr, clef] of Object.entries(partInfo.clefs)) {
 			const globalStaff = partInfo.staffOffset + parseInt(localStaffStr);
 			clefState[globalStaff] = clef;
+			const t = clefTransOf(clef);
+			transState[globalStaff] = `${t.diat},${t.semi}`;
 		}
 	}
 
@@ -2601,6 +2649,37 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 				// Output a scoreDef with the new time signature
 				const meterSymAttr = currentMeterSymbol ? ` meter.sym="${currentMeterSymbol}"` : '';
 				mei += `${indent}${indent}${indent}${indent}${indent}${indent}<scoreDef xml:id="${generateId('scoredef')}"${meterSymAttr} meter.count="${currentTimeNum}" meter.unit="${currentTimeDen}" />\n`;
+			}
+		}
+		// Check for a written→sounding transposition change at this measure
+		// boundary and mirror it into MIDI. Verovio applies att.transposition only
+		// from <staffDef>, never from a mid-measure <clef>, so a change of
+		// transposing clef must be re-declared via a between-measure <scoreDef>.
+		// We emit only the staves whose transposition actually changed (a partial
+		// <staffGrp> leaves the others' state intact), using explicit "0,0" to
+		// clear a prior transposition when a transposing clef is replaced by a
+		// plain one. mi === 0 is already covered by the leading <scoreDef>.
+		if (mi > 0) {
+			const changed: string[] = [];
+			for (let si = 1; si <= totalStaves; si++) {
+				const startClef = measureStartClef(measure, si, partInfos, clefState[si]);
+				if (startClef === undefined) continue;
+				const t = clefTransOf(startClef);
+				const key = `${t.diat},${t.semi}`;
+				if (transState[si] === undefined) { transState[si] = key; continue; }
+				if (key !== transState[si]) {
+					transState[si] = key;
+					const c = resolveClef(startClef);
+					changed.push(`${indent}${indent}${indent}${indent}${indent}${indent}${indent}${indent}<staffDef xml:id="${generateId('staffdef')}" n="${si}" lines="5" clef.shape="${c.shape}" clef.line="${c.line}" trans.diat="${t.diat}" trans.semi="${t.semi}" />`);
+				}
+			}
+			if (changed.length > 0) {
+				const sd = `${indent}${indent}${indent}${indent}${indent}${indent}`;
+				mei += `${sd}<scoreDef xml:id="${generateId('scoredef')}">\n`;
+				mei += `${sd}${indent}<staffGrp xml:id="${generateId('staffgrp')}">\n`;
+				mei += changed.join("\n") + "\n";
+				mei += `${sd}${indent}</staffGrp>\n`;
+				mei += `${sd}</scoreDef>\n`;
 			}
 		}
 		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements);
