@@ -1,0 +1,6 @@
+[staves "{-}"]
+[instrument-1 "LH"]
+[instrument-2 "RH"]
+
+\staff "1" \clef "treble" c1 \\
+\staff "2" \clef "bass" c,1 |

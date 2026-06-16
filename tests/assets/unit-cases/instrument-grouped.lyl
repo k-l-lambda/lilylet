@@ -1,0 +1,7 @@
+[staves "<,,,>"]
+[instrument-1-4 "Violins"]
+
+\clef "treble" c1 \\\
+\clef "treble" e1 \\\
+\clef "treble" g1 \\\
+\clef "treble" c'1 |

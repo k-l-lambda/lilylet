@@ -302,7 +302,16 @@ export interface Metadata {
 	instrument?: string;
 	genre?: string;
 	staves?: string;				// Raw staff-layout code, e.g. "<[v1-v2].va> {pl-pr} <b>"
+	// Per-staff / per-group instrument names, keyed by staff-layout group key (a single
+	// staff id like "1"/"v1", or a range like "1-2"/"pl-pr"). Declared via the
+	// [instrument-<key> "Name" "Short"] header. Maps to MEI <label>/<labelAbbr>.
+	instruments?: { [key: string]: InstrumentName };
 	autoBeam?: 'auto' | 'on' | 'off';
+}
+
+export interface InstrumentName {
+	name: string;
+	shortName?: string;
 }
 
 // Part within a measure: can be a single staff or grand staff (multiple staves)

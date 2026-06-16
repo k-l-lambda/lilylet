@@ -25,6 +25,7 @@ import {
 	NavigationMarkType,
 	Tempo,
 	Event,
+	InstrumentName,
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 
@@ -2020,35 +2021,70 @@ const analyzePartStructure = (doc: LilyletDoc): PartInfo[] => {
 // MEI staffGrp @symbol for a layout group type (Default → none; Square → bracketsq).
 const LAYOUT_SYMBOL: (string | null)[] = [null, "brace", "bracket", "bracketsq"];
 
-// Recursively emit a <staffGrp>/<staffDef> tree from a parsed [staves] layout group.
-// `staffDefs` maps a leaf staff index (0-based, in layout order) to the staffDef XML
-// for the matching global staff. bar.thru reflects the group's conjunction (Solid).
-const layoutGroupToMEI = (
-	group: StaffGroup,
-	staffDefs: string[],
-	leafCounter: { i: number },
+// Build <label>/<labelAbbr> child XML for an instrument entry, or "" if none.
+const instrumentLabelXML = (
+	instr: InstrumentName | undefined,
 	indent: string,
 ): string => {
-	const isLeaf = !!group.staff && (!group.subs || group.subs.length === 0);
+	if (!instr) return "";
+	let xml = `${indent}<label>${escapeXml(instr.name)}</label>\n`;
+	if (instr.shortName !== undefined) {
+		xml += `${indent}<labelAbbr>${escapeXml(instr.shortName)}</labelAbbr>\n`;
+	}
+	return xml;
+};
 
-	// A leaf with no grouping symbol (Default) emits just the next staffDef.
+// Recursively emit a <staffGrp>/<staffDef> tree from a parsed [staves] layout group.
+// `staffDefAttrs` maps a leaf staff index (0-based, in layout order) to the attribute
+// string for the matching global staff's <staffDef>. `instruments` maps a layout group
+// key (staffLayout's groupKey: a staff id or range) to its instrument name; matching
+// names are emitted as <label>/<labelAbbr> on the staffGrp (groups) or staffDef (leaves).
+// bar.thru reflects the group's conjunction (Solid).
+const layoutGroupToMEI = (
+	group: StaffGroup,
+	staffDefAttrs: string[],
+	leafCounter: { i: number },
+	indent: string,
+	instruments: { [key: string]: InstrumentName },
+): string => {
+	const isLeaf = !!group.staff && (!group.subs || group.subs.length === 0);
+	const instr = group.key !== undefined ? instruments[group.key] : undefined;
+
+	// A leaf with no grouping symbol (Default) emits just the next staffDef (with label).
 	if (isLeaf && (group.type === StaffGroupType.Default || !LAYOUT_SYMBOL[group.type])) {
-		return staffDefs[leafCounter.i++] ?? "";
+		return staffDefWithLabel(staffDefAttrs[leafCounter.i++], instr, indent);
 	}
 
 	const symbol = LAYOUT_SYMBOL[group.type] ? ` symbol="${LAYOUT_SYMBOL[group.type]}"` : "";
 	const barThru = (group.bar ?? 0) > 1 ? ' bar.thru="true"' : '';
 	let xml = `${indent}<staffGrp xml:id="${generateId("staffgrp")}"${symbol}${barThru}>\n`;
+	// A multi-staff group's instrument name labels the whole group.
+	if (!isLeaf) xml += instrumentLabelXML(instr, indent + "    ");
 	if (isLeaf) {
 		// A single staff that still carries a grouping bracket (e.g. "<b>"): MEI allows
-		// a staffGrp wrapping one staffDef, so the bracket is drawn around the lone staff.
-		xml += staffDefs[leafCounter.i++] ?? "";
+		// a staffGrp wrapping one staffDef. The instrument names the lone staff, so the
+		// label goes on the staffDef inside.
+		xml += staffDefWithLabel(staffDefAttrs[leafCounter.i++], instr, indent + "    ");
 	} else {
 		for (const sub of group.subs || []) {
-			xml += layoutGroupToMEI(sub, staffDefs, leafCounter, indent + "    ");
+			xml += layoutGroupToMEI(sub, staffDefAttrs, leafCounter, indent + "    ", instruments);
 		}
 	}
 	xml += `${indent}</staffGrp>\n`;
+	return xml;
+};
+
+// Emit a <staffDef> from its attribute string, with optional instrument <label> children.
+const staffDefWithLabel = (
+	attrs: string | undefined,
+	instr: InstrumentName | undefined,
+	indent: string,
+): string => {
+	if (attrs === undefined) return "";
+	if (!instr) return `${indent}<staffDef ${attrs} />\n`;
+	let xml = `${indent}<staffDef ${attrs}>\n`;
+	xml += instrumentLabelXML(instr, indent + "    ");
+	xml += `${indent}</staffDef>\n`;
 	return xml;
 };
 
@@ -2060,7 +2096,8 @@ const encodeScoreDef = (
 	partInfos: PartInfo[],
 	indent: string,
 	meterSymbol?: 'common' | 'cut',
-	stavesCode?: string
+	stavesCode?: string,
+	instruments: { [key: string]: InstrumentName } = {}
 ): string => {
 	const scoreDefId = generateId("scoredef");
 
@@ -2083,10 +2120,10 @@ const encodeScoreDef = (
 	if (stavesCode) {
 		const layout = parseStaffLayout(stavesCode);
 		if (layout.stavesCount === flatStaves.length) {
-			const staffDefs = flatStaves.map(
-				s => `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${s.n}" lines="5" ${staffDefClefAttrs(s.clef)} />\n`
+			const staffDefAttrs = flatStaves.map(
+				s => `xml:id="${generateId('staffdef')}" n="${s.n}" lines="5" ${staffDefClefAttrs(s.clef)}`
 			);
-			xml += layoutGroupToMEI(layout.group, staffDefs, { i: 0 }, `${indent}    `);
+			xml += layoutGroupToMEI(layout.group, staffDefAttrs, { i: 0 }, `${indent}    `, instruments);
 			layoutUsed = true;
 		}
 	}
@@ -2097,20 +2134,30 @@ const encodeScoreDef = (
 		for (let pi = 0; pi < partInfos.length; pi++) {
 			const info = partInfos[pi];
 
-			// If part has multiple staves (grand staff), wrap in staffGrp with brace
+			// If part has multiple staves (grand staff), wrap in staffGrp with brace.
+			// Instrument key for a part follows staffLayout's groupKey: a single staff
+			// number, or "first-last" for a grand staff.
 			if (info.maxStaff > 1) {
+				const first = info.staffOffset + 1;
+				const last = info.staffOffset + info.maxStaff;
+				const instr = instruments[`${first}-${last}`];
 				xml += `${indent}        <staffGrp xml:id="${generateId("staffgrp")}" symbol="brace" bar.thru="true">\n`;
+				xml += instrumentLabelXML(instr, `${indent}            `);
 				for (let ls = 1; ls <= info.maxStaff; ls++) {
 					const globalStaff = info.staffOffset + ls;
 					const clef = info.clefs[ls] || Clef.treble;
-					xml += `${indent}            <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)} />\n`;
+					const leafInstr = instruments[`${globalStaff}`];
+					const attrs = `xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)}`;
+					xml += staffDefWithLabel(attrs, leafInstr, `${indent}            `);
 				}
 				xml += `${indent}        </staffGrp>\n`;
 			} else {
 				// Single staff part
 				const globalStaff = info.staffOffset + 1;
 				const clef = info.clefs[1] || Clef.treble;
-				xml += `${indent}        <staffDef xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)} />\n`;
+				const leafInstr = instruments[`${globalStaff}`];
+				const attrs = `xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)}`;
+				xml += staffDefWithLabel(attrs, leafInstr, `${indent}        `);
 			}
 		}
 
@@ -2482,7 +2529,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += `${indent}${indent}<body>\n`;
 	mei += `${indent}${indent}${indent}<mdiv xml:id="${generateId("mdiv")}">\n`;
 	mei += `${indent}${indent}${indent}${indent}<score xml:id="${generateId("score")}">\n`;
-	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol, doc.metadata?.staves);
+	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol, doc.metadata?.staves, doc.metadata?.instruments);
 	mei += `${indent}${indent}${indent}${indent}${indent}<section xml:id="${generateId("section")}">\n`;
 
 	// Track tie state across measures for cross-measure ties

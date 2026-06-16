@@ -1,0 +1,13 @@
+[staves "<[v1-v2].va> {pl-pr} <b>"]
+[instrument-v1 "Violin 1"]
+[instrument-v2 "Violin 2"]
+[instrument-va "Viola"]
+[instrument-pl-pr "Piano"]
+[instrument-b "Oboe" "Ob."]
+
+\key c \major \time 4/4 R1 \\\ % v1
+R1 \\\ % v2
+\clef "C" R1 \\\ % va
+\staff "1" \clef "treble" R1 \\ % pl
+\staff "2" \clef "bass" R1 \\\ % pr
+\clef "bass_8" R1 | % b

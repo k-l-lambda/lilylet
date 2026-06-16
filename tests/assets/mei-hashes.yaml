@@ -94,6 +94,13 @@ hairpins-cross-measures.lyl: 6bce5e046f53729fcd01846a649a82da
 hairpins-decrescendo.lyl: c83a20b4fa2f81d5976e44aa0c83041f
 harmony-basic.lyl: 89da1d5f79952b175fdaa0ab672689d0
 headers.lyl: 5047fbdf548dfaa27e9dd84e317029fe
+instrument-basic.lyl: efe4686a3c56301334ab85748603b98f
+instrument-combined-grandstaff.lyl: 9de68106e8b351bb0992763dc664c586
+instrument-grouped.lyl: 110f2845b1755efd4e62c4ed45e4d023
+instrument-orchestral-anonymous.lyl: 52714999536cdc8527d20ca323853ef2
+instrument-orchestral-named.lyl: 52714999536cdc8527d20ca323853ef2
+instrument-piano-separated.lyl: fe0edf874696cfd065d4eceb26a05bff
+instrument-shortname.lyl: 1349bad90ef87839938b1764256ad032
 key-signatures-a-major-k3.lyl: 3bf6845e90ddd744566f8d1219d766e4
 key-signatures-a-minor-k0.lyl: 6d64e8dd29692d4dad18edf1335acf4d
 key-signatures-af-major-k-3.lyl: b56100885cf6611049bc7e3ddbcf8126
@@ -155,8 +162,8 @@ rest-positioned-consecutive.lyl: fe8bb7d708a2995380dcf620b008185a
 rest-positioned-env-chain.lyl: 8365e8f1ad14268dc1aa028ff4d3d0c1
 rest-space.lyl: 9232cf8f68f003b6955b42fbd87cc702
 rest-with-pitch.lyl: 909111b0ffc6844aa2b315728bf92dea
-staves-anonymous.lyl: a25770fc84e691a3d5e388ce536f4e0e
-staves-named.lyl: a25770fc84e691a3d5e388ce536f4e0e
+staves-anonymous.lyl: 19abe502e9fff8d5e1b525fa3c086663
+staves-named.lyl: 19abe502e9fff8d5e1b525fa3c086663
 stem-direction-stem-down.lyl: 9f79888f35c76450bf2eacc4cb39af70
 stem-direction-stem-up.lyl: 8f3f9af8a9488b952933a09f10c1b6d0
 tempo-beats.lyl: 8d561ce06129c20445abb5e2509a9b33

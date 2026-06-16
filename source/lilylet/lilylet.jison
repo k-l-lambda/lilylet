@@ -130,6 +130,25 @@
 	const dynamicEvent = (type) => ({ type: 'dynamic', dynamicType: type });
 	const markupMark = (content) => ({ markType: 'markup', content });
 
+	// Build an { instruments: { <key>: { name, shortName? } } } fragment from a
+	// `[instrument-<key>` header token. <key> is a staff-layout group key — a single
+	// staff id ("1", "v1", "b") or a range ("1-2", "pl-pr") — taken verbatim after the
+	// "[instrument-" prefix so it lines up with staffLayout's groupKey().
+	const instrumentStaff = (token, name, shortName) => {
+		const key = token.slice('[instrument-'.length);
+		const entry = shortName !== undefined ? { name, shortName } : { name };
+		return { instruments: { [key]: entry } };
+	};
+
+	// Merge two header fragments. Plain fields are overwritten by the later one, but the
+	// `instruments` map is deep-merged so multiple [instrument-<key>] lines accumulate.
+	const mergeHeaders = (a, b) => {
+		const merged = { ...a, ...b };
+		if (a.instruments || b.instruments)
+			merged.instruments = { ...a.instruments, ...b.instruments };
+		return merged;
+	};
+
 	// Parse PITCH token (e.g., "c", "cs", "bf", "css", "bff") into phonet and accidental
 	const parsePitch = (text, octave) => {
 		const phonet = text[0].toLowerCase();
@@ -227,6 +246,7 @@
 \[arranger						return 'HEADER_ARRANGER'
 \[lyricist						return 'HEADER_LYRICIST'
 \[opus							return 'HEADER_OPUS'
+\[instrument\-[A-Za-z0-9_]+(?:\-[A-Za-z0-9_]+)*	return 'HEADER_INSTRUMENT_STAFF'
 \[instrument					return 'HEADER_INSTRUMENT'
 \[genre							return 'HEADER_GENRE'
 \[staves						return 'HEADER_STAVES'
@@ -351,6 +371,8 @@ document
 content
 	: headers measures							-> ({ metadata: $1, measures: $2 })
 	| headers newlines measures					-> ({ metadata: $1, measures: $3 })
+	| newlines headers measures					-> ({ metadata: $2, measures: $3 })
+	| newlines headers newlines measures		-> ({ metadata: $2, measures: $4 })
 	| newlines measures							-> ({ metadata: undefined, measures: $2 })
 	| measures									-> ({ metadata: undefined, measures: $1 })
 	;
@@ -362,9 +384,9 @@ newlines
 
 headers
 	: header									-> $1
-	| headers header							-> ({ ...$1, ...$2 })
+	| headers header							-> mergeHeaders($1, $2)
 	| headers NEWLINE							-> $1
-	| headers NEWLINE header					-> ({ ...$1, ...$3 })
+	| headers NEWLINE header					-> mergeHeaders($1, $3)
 	;
 
 header
@@ -375,6 +397,8 @@ header
 	| HEADER_LYRICIST STRING ']'				-> ({ lyricist: $2.slice(1, -1) })
 	| HEADER_OPUS STRING ']'					-> ({ opus: $2.slice(1, -1) })
 	| HEADER_INSTRUMENT STRING ']'				-> ({ instrument: $2.slice(1, -1) })
+	| HEADER_INSTRUMENT_STAFF STRING ']'		-> instrumentStaff($1, $2.slice(1, -1))
+	| HEADER_INSTRUMENT_STAFF STRING STRING ']'	-> instrumentStaff($1, $2.slice(1, -1), $3.slice(1, -1))
 	| HEADER_GENRE STRING ']'					-> ({ genre: $2.slice(1, -1) })
 	| HEADER_STAVES STRING ']'					-> ({ staves: $2.slice(1, -1) })
 	| HEADER_AUTOBEAM STRING ']'				-> ({ autoBeam: $2.slice(1, -1) })

@@ -954,6 +954,16 @@ const serializeMetadata = (metadata: Metadata): string => {
 	if (metadata.staves) {
 		lines.push('[staves "' + escapeString(metadata.staves) + '"]');
 	}
+	if (metadata.instruments) {
+		for (const [key, instr] of Object.entries(metadata.instruments)) {
+			let line = '[instrument-' + key + ' "' + escapeString(instr.name) + '"';
+			if (instr.shortName !== undefined) {
+				line += ' "' + escapeString(instr.shortName) + '"';
+			}
+			line += ']';
+			lines.push(line);
+		}
+	}
 	if (metadata.autoBeam) {
 		lines.push('[auto-beam "' + escapeString(metadata.autoBeam) + '"]');
 	}

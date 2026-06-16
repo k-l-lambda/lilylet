@@ -1,0 +1,13 @@
+[staves "<[-].> {-} <>"]
+[instrument-1 "Violin 1"]
+[instrument-2 "Violin 2"]
+[instrument-3 "Viola"]
+[instrument-4-5 "Piano"]
+[instrument-6 "Oboe" "Ob."]
+
+\key c \major \time 4/4 R1 \\\ % 1
+R1 \\\ % 2
+\clef "C" R1 \\\ % 3
+\staff "1" \clef "treble" R1 \\ % 4
+\staff "2" \clef "bass" R1 \\\ % 5
+\clef "bass_8" R1 | % 6
