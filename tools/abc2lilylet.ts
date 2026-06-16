@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { abcDecoder, parseCode } from "../source/lilylet/index";
 import { serializeLilyletDoc } from "../source/lilylet/serializer";
-import type { Event, LilyletDoc, Voice } from "../source/lilylet/types";
+import type { Event, LilyletDoc, RestEvent, TimeSig, Voice } from "../source/lilylet/types";
 
 
 interface CliOptions {
@@ -10,6 +10,7 @@ interface CliOptions {
 	outputDir: string;
 	excludeSpaceVoices: boolean;
 	stylesInComments: boolean;
+	forceFullMeasureRest: boolean;
 	skipExisting: boolean;
 }
 
@@ -32,6 +33,10 @@ Options:
                            at the top of the .lyl, with a filename fallback. Does NOT
                            emit [genre]/[composer]/[instrument] meta fields.
                            Off by default — only standard ABC info fields (C:, T:, ...) are kept.
+  --force-fullmeasure-rest A voice whose only time-consuming event is a single rest
+                           filling the whole measure is written as R (e.g. r2. -> R2.),
+                           even if the ABC used lowercase z. Off by default — only the
+                           ABC's own uppercase Z multi-measure rests become R.
   --skip-existing          Skip files whose output .lyl already exists (resume a run)
   --help, -h               Show this help
 `;
@@ -41,6 +46,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 	let outputDir = "";
 	let excludeSpaceVoices = true;
 	let stylesInComments = false;
+	let forceFullMeasureRest = false;
 	let skipExisting = false;
 	const positional: string[] = [];
 
@@ -63,6 +69,8 @@ const parseArgs = (argv: string[]): CliOptions => {
 			excludeSpaceVoices = true;
 		} else if (arg === "--styles-in-comments") {
 			stylesInComments = true;
+		} else if (arg === "--force-fullmeasure-rest") {
+			forceFullMeasureRest = true;
 		} else if (arg === "--skip-existing") {
 			skipExisting = true;
 		} else if (arg.startsWith("-")) {
@@ -84,6 +92,7 @@ const parseArgs = (argv: string[]): CliOptions => {
 		outputDir: path.resolve(outputDir),
 		excludeSpaceVoices,
 		stylesInComments,
+		forceFullMeasureRest,
 		skipExisting,
 	};
 };
@@ -171,6 +180,47 @@ const isPureSpaceVoice = (voice: Voice): boolean => {
 	return voice.events.length > 0 && !voice.events.some(eventHasSoundingContent);
 };
 
+// Duration {division, dots} as a fraction of a whole note (numerator over a
+// power-of-two denominator). E.g. quarter = 1/4, dotted half = 3/4.
+const durationFraction = (division: number, dots: number): { num: number; den: number } => {
+	// undotted = 1/division; each dot adds half of the previous value:
+	// total = (1/division) * (2 - 2^-dots) = (2^(dots+1) - 1) / (division * 2^dots)
+	const num = (1 << (dots + 1)) - 1;
+	const den = division * (1 << dots);
+	return { num, den };
+};
+
+// A measure-filling single rest: the voice's only TIME-CONSUMING event is one
+// rest whose duration equals the measure's time signature. Convert such rests to
+// full-measure rests (serialized as `R` instead of e.g. `r2.`). Zero-duration
+// annotations (context/barline/pitchReset/markup/dynamic/harmony) do NOT block
+// the conversion — only other sounding notes/tuplets do; the markup stays
+// attached to the rest and serializes onto the `R`.
+const markFullMeasureRests = (doc: LilyletDoc): void => {
+	let timeSig: TimeSig | undefined;
+	for (const measure of doc.measures) {
+		if (measure.timeSig) timeSig = measure.timeSig;
+		if (!timeSig || measure.partial) continue;
+		const tsNum = timeSig.numerator;
+		const tsDen = timeSig.denominator;
+		for (const part of measure.parts) {
+			for (const voice of part.voices) {
+				const rests = voice.events.filter(e => e.type === "rest") as RestEvent[];
+				// other TIME-CONSUMING events (notes/tuplets/times/tremolo) block it;
+				// markup/dynamic/context/barline carry no duration and are allowed.
+				const otherSounding = voice.events.filter(
+					e => e.type === "note" || e.type === "tuplet" || e.type === "times" || e.type === "tremolo");
+				if (rests.length !== 1 || otherSounding.length > 0) continue;
+				const rest = rests[0];
+				if (rest.invisible || rest.fullMeasure || rest.pitch) continue;
+				const { num, den } = durationFraction(rest.duration.division, rest.duration.dots);
+				// rest fills the bar iff num/den === tsNum/tsDen
+				if (num * tsDen === tsNum * den) rest.fullMeasure = true;
+			}
+		}
+	}
+};
+
 const removePureSpaceVoices = (doc: LilyletDoc): void => {
 	for (const measure of doc.measures) {
 		for (const part of measure.parts) {
@@ -229,6 +279,7 @@ const main = () => {
 				if (!doc.measures || doc.measures.length === 0) throw new Error("No measures produced");
 
 				if (options.excludeSpaceVoices) removePureSpaceVoices(doc);
+				if (options.forceFullMeasureRest) markFullMeasureRests(doc);
 
 				let lylContent = serializeLilyletDoc(doc);
 				if (options.stylesInComments) {
@@ -256,6 +307,7 @@ const main = () => {
 		console.log(`\nTotal: ${files.length}, Written: ${written}, Skipped: ${skipped}, Failed: ${errors.length}`);
 		console.log(`Output: ${options.outputDir}`);
 		console.log(`Pure-space voices: ${options.excludeSpaceVoices ? "excluded" : "kept"}`);
+		console.log(`Force full-measure rest: ${options.forceFullMeasureRest ? "on" : "off"}`);
 
 		if (errors.length > 0) {
 			console.log("\nFailed files:");
