@@ -130,6 +130,7 @@ namespace ABC {
 	export interface StaffGroup {
 		items: (StaffGroup | string)[];
 		bound?: 'arc' | 'square' | 'curly';
+		barThruAfter?: boolean;   // a '|' followed this sibling in %%score (barlines run through)
 	};
 
 

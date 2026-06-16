@@ -361,7 +361,7 @@ staff_layout
 staff_layout_items
 	: staff_layout_item						-> [$1]
 	| staff_layout_items staff_layout_item	-> [...$1, $2]
-	| staff_layout_items '|'				-> $1
+	| staff_layout_items '|'				{ if ($1.length) $1[$1.length - 1].barThruAfter = true; $$ = $1; }
 	;
 
 staff_layout_item

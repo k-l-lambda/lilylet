@@ -542,6 +542,79 @@ const parseScoreLayout = (
 };
 
 
+/**
+ * Translate an ABC %%score layout into the equivalent lilylet staves expression.
+ *
+ * The two models differ in their leaf unit: ABC %%score is VOICE-leaf (an arc `( … )`
+ * collapses several voices onto one staff), whereas lilylet staves is STAFF-leaf. So
+ * each ABC staff becomes exactly one lilylet staff id, named (per spec) by the FIRST
+ * voice token inside its arc.
+ *
+ * Bracket mapping (ABC → lilylet):
+ *   ( … )  arc    → one staff leaf (id = first voice)         e.g. (1 3) → "1"
+ *   bare   leaf   → one staff leaf (id = that voice)          e.g. 7     → "7"
+ *   { … }  curly  → brace (grand staff)                       → { … }
+ *   [ … ]  square → bracket (orchestral)                      → < … >
+ *
+ * Conjunction between two siblings: a trailing `|` in %%score means barlines run through
+ * the two staves, mapped to the solid conjunction `-`; otherwise the blank `,` is used.
+ */
+const abcLayoutToStaves = (layout: ABC.StaffGroup[]): string | null => {
+	// First voice token under a node (the staff's lilylet id).
+	const firstVoice = (node: ABC.StaffGroup | string): string | null => {
+		if (typeof node === "string") return node;
+		for (const item of node.items || []) {
+			const v = firstVoice(item);
+			if (v !== null) return v;
+		}
+		return null;
+	};
+
+	// A node is a single staff (an arc, or a bare leaf) iff it has no curly/square nesting.
+	const isStaffLeaf = (node: ABC.StaffGroup | string): boolean => {
+		if (typeof node === "string") return true;
+		if (node.bound === "curly" || node.bound === "square") return false;
+		// arc or unbounded: a staff only if every descendant is too (no nested groups)
+		return (node.items || []).every(isStaffLeaf);
+	};
+
+	const emit = (node: ABC.StaffGroup | string): string => {
+		if (isStaffLeaf(node)) return firstVoice(node) || "";
+
+		const group = node as ABC.StaffGroup;
+		const open = group.bound === "curly" ? "{" : "<";   // square → bracket <>, curly → brace {}
+		const close = group.bound === "curly" ? "}" : ">";
+
+		const items = group.items || [];
+		let inner = "";
+		items.forEach((item, i) => {
+			inner += emit(item);
+			if (i < items.length - 1) {
+				const conj = (item as ABC.StaffGroup).barThruAfter ? "-" : ",";
+				inner += conj;
+			}
+		});
+		return `${open}${inner}${close}`;
+	};
+
+	const tops = layout.map((top, i) => {
+		let s = emit(top);
+		// A bare top-level staff leaf (e.g. the `9` in `[ … ] 9 [ … ]`) still occupies a slot;
+		// emit() already yields its id with no wrapper, which is the desired output.
+		return { s, barThru: !!top.barThruAfter, isLast: i === layout.length - 1 };
+	});
+
+	let out = "";
+	tops.forEach((t, i) => {
+		out += t.s;
+		if (i < tops.length - 1) out += t.barThru ? " - " : " ";
+	});
+
+	out = out.trim();
+	return out.length > 0 ? out : null;
+};
+
+
 // ============ Marks/Decorations Conversion ============
 
 const convertArticulationMark = (artName: string): Mark | undefined => {
@@ -1150,6 +1223,13 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 
 	// Parse score layout
 	const scoreLayout = parseScoreLayout(headers);
+
+	// Translate the ABC %%score layout into a lilylet staves expression (staff-leaf model).
+	const layoutHeader = headers.find((h: any) => h.staffLayout);
+	if (layoutHeader) {
+		const staves = abcLayoutToStaves((layoutHeader as any).staffLayout);
+		if (staves) metadata.staves = staves;
+	}
 
 	// Group measures by voice
 	// ABC measures contain BarPatches, each with a voice control V:n
