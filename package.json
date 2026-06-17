@@ -37,6 +37,7 @@
     "test:abc-svg": "tsx ./tests/abc-abcjs-svg.ts",
     "train:bpe": "tsx ./tools/trainBpeTokenizer.ts",
     "build:manual-tokenizer": "tsx ./tools/buildManualTokenizer.ts",
+    "build:browser-bundle": "esbuild tools/browserBundle.ts --bundle --format=iife --platform=browser --minify --outfile=dist/lilylet.bundle.js",
     "test:bpe": "tsx ./tests/unit/bpeTokenizer.test.ts",
     "build:tests": "tsc -p tsconfig.tests.json; cp source/lilylet/grammar.jison.js lib-tests/source/lilylet/ && cp source/abc/grammar.jison.js lib-tests/source/abc/ && node tools/fixEsmExtensions.cjs lib-tests && ln -sfn ../../tests/assets lib-tests/tests/assets",
     "test:roundtrip:compiled": "node lib-tests/tests/lilypond-roundtrip.js",
