@@ -14,6 +14,10 @@
       "types": "./lib/browser.d.ts",
       "default": "./lib/browser.js"
     },
+    "./highlight": {
+      "types": "./lib/lilylet/highlight.d.ts",
+      "default": "./lib/lilylet/highlight.js"
+    },
     "./lib/lilypondDecoder.js": {
       "types": "./lib/lilypondDecoder.d.ts",
       "default": "./lib/lilypondDecoder.js"
@@ -25,7 +29,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node tools/convertGrammarToESM.cjs && node tools/fixEsmExtensions.cjs",
-    "build:grammar": "npx tsx ./tools/buildJisonParser.ts && node tools/convertGrammarToESM.cjs",
+    "build:grammar": "npx tsx ./tools/buildJisonParser.ts && node tools/convertGrammarToESM.cjs && npm run build:highlight",
+    "build:highlight": "npx tsx ./tools/buildHighlight.ts",
     "prepublishOnly": "npm run build:grammar && npm run build",
     "test": "tsx ./tests/parser.ts",
     "test:mei": "tsx ./tests/mei.ts",
