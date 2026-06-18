@@ -1,6 +1,6 @@
 
 // Generate a framework-agnostic syntax-highlighting definition for Lilylet
-// directly from the lexer (`%lex`) section of `source/lilylet/lilylet.jison`.
+// directly from the COMPILED lexer in `source/lilylet/grammar.jison.js`.
 //
 // Why generate? The jison lexer already is the authoritative "regex -> token"
 // table for the language. A syntax highlighter is exactly a lexer plus a
@@ -8,15 +8,25 @@
 // highlighter in lock-step with the language definition instead of drifting in
 // a hand-maintained copy.
 //
+// Why read the compiled parser (not the .jison text)? The generated parser
+// already holds the lexer rules as ready-to-use JS RegExp objects, so we skip a
+// hand-rolled flex->regex converter entirely (and inherit jison's `\b` word
+// boundaries, which the text form lacked). We recover the token NAME for each
+// rule from `lexer.performAction` (case index -> numeric token id) crossed with
+// `parser.symbols_` (name -> id). The token->scope VALUE map is still the one
+// hand-maintained artifact below — the grammar has no notion of "colour".
+//
 // The emitted module (`source/lilylet/highlight.ts`) has NO editor dependency
 // (no CodeMirror/Lezer). It exports generic, semantic SCOPE names plus a
 // longest-match tokenizer. Downstream editors map SCOPE -> their own theme.
 //
-// Run: `npx tsx ./tools/buildHighlight.ts`  (wired into build:highlight)
+// Build order: this MUST run after grammar.jison.js is (re)generated — it is
+// chained after build:grammar. Run: `npx tsx ./tools/buildHighlight.ts`.
 
 import fs from "fs";
+// @ts-ignore - jison generated file
+import grammar from "../source/lilylet/grammar.jison.js";
 
-const JISON_PATH = "./source/lilylet/lilylet.jison";
 const OUT_PATH = "./source/lilylet/highlight.ts";
 
 // The ONE hand-maintained artifact: map each lexer token name to a generic,
@@ -149,132 +159,87 @@ const DISCARD_SCOPE: Record<string, string> = {
 };
 
 interface LexRule {
-	pattern: string;	// raw flex pattern (left-hand side)
-	token: string | null;	// returned token name, or null for discarded rules
+	re: RegExp;		// compiled lexer regex (anchored ^(?:...) form from jison)
+	token: string | null;	// token name, or null for discarded rules
 	scope: string;		// resolved highlight scope ("" = emit nothing)
 }
 
-// Extract the `%lex ... /lex` section's rule lines. Each rule is
-// `<pattern><whitespace><action>`, where action is either `return 'TOKEN'`,
-// `{}` / `{...}` (discard), or `%{ ... %}` (multiline — none in the lex block).
-const extractLexRules = (jison: string): LexRule[] => {
-	const lexStart = jison.indexOf("%lex");
-	const lexEnd = jison.indexOf("/lex", lexStart);
-	if (lexStart < 0 || lexEnd < 0) throw new Error("no %lex .. /lex block found");
-	// The rule table is after the `%%` that follows the %options.
-	const body = jison.slice(lexStart, lexEnd);
-	const ruleStart = body.indexOf("%%");
-	if (ruleStart < 0) throw new Error("no %% in lex block");
-	const lines = body.slice(ruleStart + 2).split(/\r?\n/);
+// Recover, for each compiled lexer rule, its token name and highlight scope by
+// reading the generated parser's internals:
+//   - grammar.lexer.rules[i]    : the compiled RegExp for rule i
+//   - grammar.lexer.performAction: a big switch; `case i:` returns a numeric
+//                                   token id (or nothing, for discarded rules)
+//   - grammar.symbols_          : { name -> id }; we invert it to id -> name
+const extractLexRules = (): LexRule[] => {
+	const lexer = grammar.lexer;
+	const symbols: Record<string, number> = grammar.symbols_;
+	if (!lexer || !Array.isArray(lexer.rules) || !symbols)
+		throw new Error("grammar.jison.js missing lexer.rules / symbols_ — rebuild the parser first");
+
+	const idToName: Record<number, string> = {};
+	for (const [name, id] of Object.entries(symbols)) idToName[id] = name;
+
+	// Parse performAction's `case <i>: ... return <id>` to map rule index ->
+	// token id. Rules whose case has no `return` are discarded by the lexer.
+	const actionSrc: string = lexer.performAction.toString();
+	const parts = actionSrc.split(/case (\d+):/).slice(1);
+	const tokenIdByRule: Record<number, number | null> = {};
+	for (let i = 0; i < parts.length; i += 2) {
+		const idx = Number(parts[i]);
+		const body = parts[i + 1] || "";
+		const ret = body.match(/return (\d+)/);
+		tokenIdByRule[idx] = ret ? Number(ret[1]) : null;
+	}
 
 	const rules: LexRule[] = [];
-	for (const raw of lines) {
-		const line = raw.replace(/\s+$/, "");
-		if (!line.trim()) continue;
-		if (line.trim().startsWith("//")) continue;
-
-		// Split pattern from action at the first run of whitespace that is NOT
-		// inside the pattern. flex patterns here have no unescaped spaces, so the
-		// first tab/space run is the separator.
-		const m = line.match(/^(\S+)\s+(.*)$/);
-		if (!m) {
-			// A pattern with no action on the same line — skip (none expected).
-			continue;
-		}
-		const pattern = m[1];
-		const action = m[2].trim();
-
-		let token: string | null = null;
-		const ret = action.match(/^return\s+'([^']+)'/);
-		if (ret) token = ret[1];
+	lexer.rules.forEach((re: RegExp, i: number) => {
+		const tokenId = tokenIdByRule[i] ?? null;
+		const token = tokenId != null ? idToName[tokenId] : null;
 
 		let scope: string;
 		if (token) {
 			if (!(token in SCOPE_MAP))
-				throw new Error(`unmapped token '${token}' (pattern ${pattern}) — add it to SCOPE_MAP`);
+				throw new Error(`unmapped token '${token}' (rule ${i}, /${re.source}/) — add it to SCOPE_MAP`);
 			scope = SCOPE_MAP[token];
 		} else {
-			// Discarded rule ({} or {...}). Colour only if listed in DISCARD_SCOPE.
-			scope = pattern in DISCARD_SCOPE ? DISCARD_SCOPE[pattern] : "";
+			// Discarded rule. Colour only if its regex source is listed in
+			// DISCARD_SCOPE (keys are flex patterns; match against re.source).
+			scope = discardScopeFor(re);
 		}
 
-		rules.push({ pattern, token, scope });
-	}
+		rules.push({ re, token, scope });
+	});
 	return rules;
 };
 
-// Convert a flex/jison lexer pattern into a JS regex *source* string anchored
-// at the current position. The lexer patterns used here are a small subset:
-//   - "..." double-quoted literals  -> escaped literal
-//   - character classes [a-g], [0-9], [ \t]
-//   - groups, ?, +, *, alternation
-//   - escaped metachars \%, \[, \", \\, \-, \r, \n
-// flex quoted strings treat their contents literally; outside quotes the text
-// is already regex-like. We scan structurally — quoted literals, character
-// classes, escape pairs, and bare chars each handled as a unit — then escape
-// `/` so the result is safe to drop into a `/.../ ` regex literal.
-const flexToRegexSource = (pattern: string): string => {
-	let out = "";
-	let i = 0;
-	while (i < pattern.length) {
-		const ch = pattern[i];
-		if (ch === '"') {
-			// Quoted literal: copy verbatim until the closing quote, escaping
-			// regex metachars. Inside, `\\` is an escaped backslash.
-			i++;
-			let lit = "";
-			while (i < pattern.length && pattern[i] !== '"') {
-				if (pattern[i] === "\\" && i + 1 < pattern.length) {
-					// keep the escaped char literally (e.g. \\ -> backslash)
-					lit += pattern[i + 1] === "\\" ? "\\" : pattern[i + 1];
-					i += 2;
-				} else {
-					lit += pattern[i];
-					i++;
-				}
-			}
-			i++; // closing quote
-			out += lit.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-		} else if (ch === "[") {
-			// Character class: copy verbatim through the matching `]`. Contents
-			// (incl. a literal `"`) are regex-valid as-is; honour escapes so a
-			// `\]` doesn't prematurely close the class.
-			out += ch;
-			i++;
-			while (i < pattern.length && pattern[i] !== "]") {
-				if (pattern[i] === "\\" && i + 1 < pattern.length) {
-					out += pattern[i] + pattern[i + 1];
-					i += 2;
-				} else {
-					out += pattern[i];
-					i++;
-				}
-			}
-			if (i < pattern.length) { out += "]"; i++; }
-		} else if (ch === "\\" && i + 1 < pattern.length) {
-			// Escape pair outside quotes/classes. Keep it as a unit so an
-			// escaped quote (\") does NOT open a quoted-literal run. flex
-			// escapes here (\%, \[, \], \-, \r, \n) are all valid JS regex
-			// escapes; \" becomes a bare " (needs no escaping in a regex).
-			const next = pattern[i + 1];
-			out += next === '"' ? '"' : "\\" + next;
-			i += 2;
-		} else if (ch === "/") {
-			// Bare slash — escape for the regex literal.
-			out += "\\/";
-			i++;
-		} else {
-			// Bare regex char (groups, ?, +, *, |, etc.) — pass through.
-			out += ch;
-			i++;
-		}
-	}
-	return out;
+// Resolve a discarded rule's scope by matching its compiled regex against the
+// DISCARD_SCOPE table. The compiled form is `^(?:<body>)`, so we test the body
+// against the known flex patterns (comment `%.*`, whitespace, catch-all `.`).
+const discardScopeFor = (re: RegExp): string => {
+	const body = re.source.replace(/^\^\(\?:/, "").replace(/\)$/, "");
+	if (/^%\.\*$/.test(body)) return DISCARD_SCOPE["\\%.*"] ?? "";
+	return "";
+};
+
+// Turn jison's anchored `^(?:<body>)` source into a sticky, case-insensitive
+// regex literal source for the emitted tokenizer: drop the leading `^` (sticky
+// `y` already anchors at lastIndex), keep the rest verbatim.
+const toStickySource = (re: RegExp): string => {
+	const s = re.source;
+	return s.startsWith("^") ? s.slice(1) : s;
 };
 
 const main = (): void => {
-	const jison = fs.readFileSync(JISON_PATH, "utf-8");
-	const rules = extractLexRules(jison);
+	const rules = extractLexRules();
+
+	// Cross-check SCOPE_MAP against the grammar's real token set: warn on entries
+	// that no longer correspond to any lexer token (stale after a grammar edit).
+	// Unmapped *new* tokens already throw inside extractLexRules.
+	const grammarTokens = new Set(rules.map(r => r.token).filter(Boolean) as string[]);
+	const stale = Object.keys(SCOPE_MAP).filter(
+		name => !grammarTokens.has(name) && !["NEWLINE", "EOF"].includes(name));
+	if (stale.length)
+		console.warn(`[buildHighlight] WARNING: SCOPE_MAP has ${stale.length} token(s) not in the grammar: ${stale.join(", ")}`);
 
 	// Emit only rules that carry a scope (drop pure whitespace/fallthrough), but
 	// KEEP their original order: flex uses longest-match with order as the
@@ -282,13 +247,13 @@ const main = (): void => {
 	const emitted = rules.filter(r => r.scope);
 
 	const ruleLiterals = emitted.map(r => {
-		const src = flexToRegexSource(r.pattern);
+		const src = toStickySource(r.re);
 		return `\t{ re: /${src}/iy, scope: ${JSON.stringify(r.scope)} },`;
 	}).join("\n");
 
 	const scopes = Array.from(new Set(emitted.map(r => r.scope))).sort();
 
-	const out = `// AUTO-GENERATED by tools/buildHighlight.ts from source/lilylet/lilylet.jison.
+	const out = `// AUTO-GENERATED by tools/buildHighlight.ts from source/lilylet/grammar.jison.js.
 // Do NOT edit by hand. Run \`npm run build:highlight\` to regenerate.
 //
 // Framework-agnostic syntax-highlighting definition for Lilylet, derived from
