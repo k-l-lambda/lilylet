@@ -410,6 +410,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 	beamStart: boolean;
 	beamEnd: boolean;
 	dynamic?: string;
+	dynamics: string[];  // all dynamics on this event (a note may carry several, e.g. fp written as two marks)
 	hairpin?: string;
 	pedal?: string;
 	pedals?: ('up' | 'down')[];
@@ -431,6 +432,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 		beamStart: false,
 		beamEnd: false,
 		dynamic: undefined as string | undefined,
+		dynamics: [] as string[],
 		hairpin: undefined as string | undefined,
 		pedal: undefined as string | undefined,
 		pedals: [] as ('up' | 'down')[],
@@ -474,7 +476,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 			case 'dynamic': {
 				const dynStr = DYNAMIC_MAP[mark.type];
 				if (dynStr) {
-					result.dynamic = dynStr;
+					result.dynamic = dynStr;  // kept for back-compat (first dynamic)
+					result.dynamics.push(dynStr);
 				}
 				break;
 			}
@@ -559,7 +562,8 @@ interface NoteEventResult {
 	trill: boolean;
 	mordent: 'lower' | 'upper' | false;  // lower = mordent, upper = prall
 	turn: boolean;
-	dynamic?: string;  // dynamic marking (p, pp, f, ff, etc.)
+	dynamic?: string;  // dynamic marking (p, pp, f, ff, etc.) — first one (back-compat)
+	dynamics: string[];  // all dynamics on this event
 	slurStart: boolean;  // For tracking slur spans
 	slurEnd: boolean;    // For tracking slur spans
 	fingerings: { finger: number; placement?: 'above' | 'below' }[];
@@ -627,6 +631,7 @@ const noteEventToMEI = (
 			mordent: markOptions.mordent,
 			turn: markOptions.turn,
 			dynamic: markOptions.dynamic,
+			dynamics: markOptions.dynamics,
 			slurStart: markOptions.slurStart,
 			slurEnd: markOptions.slurEnd,
 			fingerings: markOptions.fingerings,
@@ -689,6 +694,7 @@ const noteEventToMEI = (
 		mordent: markOptions.mordent,
 		turn: markOptions.turn,
 		dynamic: markOptions.dynamic,
+		dynamics: markOptions.dynamics,
 		slurStart: markOptions.slurStart,
 		slurEnd: markOptions.slurEnd,
 		fingerings: markOptions.fingerings,
@@ -833,7 +839,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			if (result.slurEnd) slurEnds.push(result.elementId);
 
 			// Collect other control events
-			if (result.dynamic) dynamics.push({ startid: result.elementId, label: result.dynamic });
+			if (result.dynamics) for (const label of result.dynamics) dynamics.push({ startid: result.elementId, label });
 			if (result.fermata) fermatas.push({ startid: result.elementId, shape: result.fermata === 'short' ? 'angular' : undefined });
 			if (result.trill) trills.push({ startid: result.elementId });
 			if (result.mordent) mordents.push({ startid: result.elementId, form: result.mordent === 'upper' ? 'upper' : undefined });
@@ -1360,8 +1366,8 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				if (result.turn) {
 					turns.push({ startid: result.elementId });
 				}
-				if (result.dynamic) {
-					dynamics.push({ startid: result.elementId, label: result.dynamic });
+				if (result.dynamics) {
+					for (const label of result.dynamics) dynamics.push({ startid: result.elementId, label });
 				}
 				// Track fingerings
 				for (const fing of result.fingerings) {
