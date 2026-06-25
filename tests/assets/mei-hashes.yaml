@@ -57,7 +57,7 @@ chords-wide-interval.lyl: 5bccaeada8cd40a1fe098c34fce40c6c
 clefs-alto-clef-cc.lyl: e4bacdfec40e91f13f964c948fafabf4
 clefs-bass-clef-cf.lyl: 42a2d45d119ae5e4025b592c00bb8723
 clefs-change-in-voice.lyl: 811cc0e83f8cc86bec29d8b798e74c2a
-clefs-inside-tuplet.lyl: a033120d88b7a7cbf892498dad57f1fc
+clefs-inside-tuplet.lyl: ae358340f14a3d2b022fec397f3eeee6
 clefs-octave-shift.lyl: ff1e4728088093ed0ef020960dac76d6
 clefs-transpose-arbitrary.lyl: c77987bdccf944acd5da95662dc09c9a
 comments.lyl: 0f39d889545cafef523e8846fe84d886

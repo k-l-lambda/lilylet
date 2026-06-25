@@ -464,14 +464,15 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 		notations = parseNotations(notationsEl);
 	}
 
-	// Fingering
-	let fingering: number | undefined;
+	// Fingering — a note may carry several <fingering> (one per chord member).
+	let fingerings: number[] | undefined;
 	const technicalEl = noteEl.getElementsByTagName('technical')[0];
 	if (technicalEl) {
-		const fingeringText = getElementText(technicalEl, 'fingering');
-		if (fingeringText) {
-			fingering = parseInt(fingeringText, 10);
-		}
+		const fingeringEls = getElements(technicalEl, 'fingering');
+		const parsed = fingeringEls
+			.map(el => parseInt(el.textContent?.trim() || '', 10))
+			.filter(n => Number.isFinite(n));
+		if (parsed.length > 0) fingerings = parsed;
 	}
 
 	// Beams - direct children of note, not in notations
@@ -500,7 +501,7 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 		staff,
 		stem: stem as any,
 		notations,
-		fingering,
+		fingerings,
 		beams,
 	};
 };
@@ -1113,9 +1114,13 @@ const convertMeasure = (
 				pendingContextChanges.length = 0;  // Clear
 			}
 
-			// Get pending marks for this voice
-			const marks: Mark[] = pendingMarks.get(voiceNum) || [];
-			pendingMarks.delete(voiceNum);
+			// Get pending marks for this voice. Rests can't hold marks (RestEvent has
+			// no `marks` field), so do NOT consume them on a rest — leave them queued
+			// for the next real note or the end-of-measure flush. Otherwise a pedal/
+			// hairpin stop that lands just before a rest (common in piano scores:
+			// `<pedal stop/>` followed by rests filling the voice) is silently dropped.
+			const marks: Mark[] = note.isRest ? [] : (pendingMarks.get(voiceNum) || []);
+			if (!note.isRest) pendingMarks.delete(voiceNum);
 
 			if (note.isRest) {
 				// Rest event
@@ -1149,9 +1154,11 @@ const convertMeasure = (
 				const notationMarks = notationsToMarks(note.notations, spannerTracker, [lilyletPitch]);
 				marks.push(...notationMarks);
 
-				// Add fingering
-				if (note.fingering !== undefined && note.fingering >= 1 && note.fingering <= 5) {
-					marks.push({ markType: 'fingering', finger: note.fingering });
+				// Add fingerings (one per chord member; MEI emits a <fing> each)
+				if (note.fingerings) {
+					for (const finger of note.fingerings) {
+						if (finger >= 0 && finger <= 9) marks.push({ markType: 'fingering', finger });
+					}
 				}
 
 				// Handle chord: merge with previous note in same voice

@@ -75,7 +75,7 @@ export interface MusicXmlNote {
 	staff?: number;             // Staff number (for cross-staff)
 	stem?: MusicXmlStemDirection;
 	notations?: MusicXmlNotations;
-	fingering?: number;         // 1-5
+	fingerings?: number[];      // one per chord member; a single note has at most one
 	beams?: { type: 'begin' | 'continue' | 'end'; number: number }[];
 }
 

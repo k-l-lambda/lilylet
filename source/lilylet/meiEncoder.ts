@@ -742,6 +742,8 @@ interface TupletEventResult {
 	turns: TurnRef[];
 	arpeggios: ArpegRef[];
 	pedals: PedalMark[];  // pedal marks on notes inside the tuplet (independent events)
+	fingerings: FingerRef[];  // fingering marks on notes inside the tuplet
+	markups: MarkupRef[];  // text directions (markup) on notes inside the tuplet
 	endingClef?: string;  // Updated clef name if changed inside the tuplet
 }
 
@@ -786,6 +788,8 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	const turns: TurnRef[] = [];
 	const arpeggios: ArpegRef[] = [];
 	const pedals: PedalMark[] = [];
+	const fingerings: FingerRef[] = [];
+	const markups: MarkupRef[] = [];
 
 	// Handle internal beam groups: if notes have manual beam marks, respect them
 	const hasInternalBeams = !inParentBeam && tupletHasInternalBeams(event);
@@ -827,6 +831,13 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			if (result.turn) turns.push({ startid: result.elementId });
 			if (result.arpeggio) arpeggios.push({ plist: result.elementId });
 			if (result.pedals) for (const dir of result.pedals) pedals.push({ startId: result.elementId, dir });
+			// Fingerings and text directions (markup) on inner notes are control
+			// events that attach by id — collect them so the layer loop can emit
+			// <fing>/<dir> for them (previously silently dropped inside tuplets).
+			for (const fing of result.fingerings)
+				fingerings.push({ startid: result.elementId, finger: fing.finger, placement: fing.placement });
+			for (const mkup of result.markups)
+				markups.push({ startid: result.elementId, content: mkup.content, placement: mkup.placement });
 
 			// Close beam if this note ends a beam group
 			if (hasInternalBeams && markOptions.beamEnd && beamOpen) {
@@ -857,7 +868,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	}
 
 	xml += `${indent}</tuplet>\n`;
-	return { xml, firstNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios, pedals, endingClef };
+	return { xml, firstNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios, pedals, fingerings, markups, endingClef };
 };
 
 
@@ -1409,6 +1420,8 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				turns.push(...tupletResult.turns);
 				arpeggios.push(...tupletResult.arpeggios);
 				pedals.push(...tupletResult.pedals);
+				fingerings.push(...tupletResult.fingerings);
+				markups.push(...tupletResult.markups);
 
 				break;
 			}
