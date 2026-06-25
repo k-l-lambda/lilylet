@@ -82,6 +82,76 @@ harder — handle or document.)
 double-emitting tempo words already consumed as a tempo `ContextChange`.
 Note `Placement` is an enum, not a bare string literal — map it explicitly.
 
+### 6. UTF-16 / BOM source files fail to parse (highest-impact, 16% of real exports)
+MuseScore/Finale/Sibelius routinely export `.xml` as **UTF-16 LE with a BOM**.
+Reading bytes as UTF-8 yields mojibake and "expected score-partwise, got
+undefined". **Fix:** `readXmlString(string | Uint8Array)` sniffs BOM (UTF-16
+LE/BE, UTF-8), falls back to the prolog's declared `encoding=`, and strips a
+leading U+FEFF (xmldom rejects it before `<?xml`). `decode()` accepts bytes;
+`decodeFile()` reads raw bytes, not `'utf-8'`. Always batch-audit a real corpus
+for encoding before trusting marking counts — 23/149 sampled files were UTF-16.
+
+### 7. Rests silently consume (and discard) pending directions
+The measure loop fetched `pendingMarks.get(voice)` and **deleted** it for *every*
+note — including rests, which have no `marks` field. A pedal/hairpin **stop** that
+lands just before rests (`<pedal stop/>` then rests fill the voice — extremely
+common in piano LH) was dropped, and the end-of-measure flush had nothing left to
+flush. **Fix:** `const marks = note.isRest ? [] : pendingMarks.get(voice)`; only
+`delete` when not a rest, so the stop survives to the next real note / the flush.
+This is the dominant pedal-stop loss (recovered pedals to ≥ source corpus-wide).
+
+### 8. Tuplets don't propagate inner-note fingerings / markups (extends #4)
+`tupletEventToMEI`'s `TupletEventResult` collected slurs/dynamics/pedals/fermatas
+but **not** `fingerings` or `markups`, so every `<fing>`/`<dir>` on a tuplet-inner
+note vanished — and in étude-style scores nearly all fingerings are inside tuplets
+(fingering went 8828→10761 of 10763 once fixed). **Fix:** add both arrays to
+`TupletEventResult`, collect in the inner-note loop, merge at the consumer.
+Rest-fermatas inside tuplets need the same plumbing (see #10).
+
+### 9. Scalar mark fields — recurring trap (extends #3)
+Beyond `pedal`, the same scalar-vs-array bug hit **fingering** and **dynamics**:
+- decoder `MusicXmlNote.fingering: number` kept only the first of several
+  `<fingering>` on a chord note (one per member); a `1-5` clamp also dropped valid
+  `0`/substitution fingerings. → `fingerings: number[]`, clamp `0-9`.
+- encoder `NoteEventResult.dynamic?: string` emitted only the first of stacked
+  dynamics on one note. → add `dynamics: string[]`, iterate at every consumer.
+Audit *every* per-note marking for this; the rest/flush fixes make stacking MORE
+likely by piling marks onto one note.
+
+### 10. Fermata over a rest (held silence / grand pause)
+A fermata frequently sits on a rest, not a note — and `notationsToMarks` was only
+run for pitched notes, so ~3 of every 4 fermatas (which live on rests) were lost.
+**Fix:** add optional `RestEvent.marks`; decoder attaches the rest's fermata
+notation; `restEventToMEI` returns a `fermata` flag keyed to the emitted
+rest/mRest id; both the layer loop and tuplet inner-rest loop push
+`<fermata startid=...>`. MEI-path only — the lilypond serializer/parser are left
+untouched (no roundtrip case exercises rest marks yet).
+
+### 11. Ottava span start/stop split across staves
+`<octave-shift>` start and stop both name the same `<staff>`, but the stop usually
+trails a `<backup>`, so the *next note* the decoder saw was on the OTHER staff —
+start and stop landed in different MEI layers and the encoder couldn't pair them
+(span dropped). **Fix:** tag `pendingContextChanges` with `direction.staff`; an
+ottava change only flushes onto a note on the **same staff** (tempo flushes
+anywhere), with an end-of-measure flush onto a matching-staff voice. Ottava went
+132→164 of 166. Residual losses are cross-measure span-carry cases in the encoder
+(harder; the per-measure `pendingOctave` continuation state is fragile).
+
+### Not yet implemented: glissando / slide
+`<glissando>`/`<slide>` (a note-to-note spanner → MEI `<gliss startid endid>`) is
+entirely absent from types/decoder/encoder — a clean feature gap, not a loss bug.
+~2% of files use it. Mirror the slur spanner (track start/stop by `number`).
+
+## Corpus batch auditing
+The high-value bugs above were ALL found by auditing a real score corpus
+(`~/data/scores/fmenu`, 6292 piano `.xml`) against **source-XML ground truth**, not
+the unit cases. A throwaway `tests/batch-xml-audit.local.ts` (gitignored `*.local.*`)
+decodes a sampled file list, tallies each loss-prone marking source→lilylet (verovio
+optional/FYI), and prints per-marking totals + the worst-dropper files. Key metric
+discipline: combine `<dir>`+`<tempo>` when checking `<words>` (tempo words split off
+correctly), and treat `arpeg` (per-note source vs per-chord MEI) and `<note>` counts
+(source counts `<note><rest/></note>`) as representation, confirmed by `ours == verovio`.
+
 ## Verification checklist
 
 - `npm run test:mei` — 200 cases, verovio must still load every produced MEI (a
