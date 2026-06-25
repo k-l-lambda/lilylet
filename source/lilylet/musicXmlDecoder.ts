@@ -1434,7 +1434,37 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 /**
  * Decode MusicXML string to LilyletDoc
  */
-export const decode = (xmlString: string): LilyletDoc => {
+/**
+ * Decode raw MusicXML bytes (or a string) into a clean UTF-8/UTF-16-correct
+ * JS string. MuseScore/Finale/Sibelius frequently export `.xml` as UTF-16 LE
+ * with a BOM; reading those as UTF-8 yields mojibake and a failed parse.
+ *
+ * Detection order: byte-order mark → declared `encoding="..."` in the XML
+ * prolog → default UTF-8. A leading BOM is always stripped (xmldom chokes on a
+ * U+FEFF before `<?xml`).
+ */
+export const readXmlString = (input: string | Uint8Array): string => {
+	if (typeof input === 'string')
+		return input.charCodeAt(0) === 0xFEFF ? input.slice(1) : input;
+
+	const bytes = input;
+	if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE)
+		return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+	if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF)
+		return new TextDecoder('utf-16be').decode(bytes.subarray(2));
+	if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF)
+		return new TextDecoder('utf-8').decode(bytes.subarray(3));
+
+	// No BOM: peek the prolog (as latin1 so every byte maps 1:1) for a declared encoding.
+	const head = new TextDecoder('latin1').decode(bytes.subarray(0, 256));
+	const enc = /encoding\s*=\s*['"]([^'"]+)['"]/i.exec(head)?.[1]?.toLowerCase();
+	if (enc && /utf-?16/.test(enc))
+		return new TextDecoder('utf-16le').decode(bytes); // BOM-less UTF-16 → assume LE (Windows)
+	return new TextDecoder('utf-8').decode(bytes);
+};
+
+export const decode = (input: string | Uint8Array): LilyletDoc => {
+	const xmlString = readXmlString(input);
 	const parser = new DOMParser();
 	const doc = parser.parseFromString(xmlString, 'application/xml');
 
@@ -1528,8 +1558,8 @@ export const decode = (xmlString: string): LilyletDoc => {
  */
 export const decodeFile = async (filePath: string): Promise<LilyletDoc> => {
 	const fs = await import('fs/promises');
-	const content = await fs.readFile(filePath, 'utf-8');
-	return decode(content);
+	const buf = await fs.readFile(filePath); // raw bytes; readXmlString sniffs the encoding
+	return decode(buf);
 };
 
 export default {
