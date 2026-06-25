@@ -1137,6 +1137,13 @@ const convertMeasure = (
 					duration,
 				};
 
+				// A rest can host a fermata (grand pause / held silence). Convert it
+				// so the encoder can emit <fermata startid="#rest">; without this the
+				// 3-of-4 fermatas that sit on rests in typical piano scores are lost.
+				if (note.notations?.fermata) {
+					restEvent.marks = [{ markType: 'ornament', type: 'fermata' as any }];
+				}
+
 				// Grace notes don't advance time
 				const advanceDuration = note.isGrace ? 0 : note.duration.divisions;
 

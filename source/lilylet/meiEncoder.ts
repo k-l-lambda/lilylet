@@ -699,7 +699,7 @@ const noteEventToMEI = (
 
 
 // Convert RestEvent to MEI
-const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, crossStaff?: number): { xml: string; elementId: string } => {
+const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, crossStaff?: number): { xml: string; elementId: string; fermata?: 'normal' | 'short' } => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const restId = generateId('rest');
 	let attrs = `xml:id="${restId}" dur="${dur}"`;
@@ -707,6 +707,15 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0,
 
 	// Cross-staff attribute
 	if (crossStaff) attrs += ` staff="${crossStaff}"`;
+
+	// A rest may carry a fermata (held silence). Surface it so the layer loop can
+	// emit a <fermata> control event referencing this rest's id.
+	let fermata: 'normal' | 'short' | undefined;
+	if (event.marks) {
+		for (const mk of event.marks) {
+			if (mk.markType === 'ornament' && (mk as { type?: string }).type === 'fermata') fermata = 'normal';
+		}
+	}
 
 	// Pitched rest (positioned at specific pitch)
 	if (event.pitch) {
@@ -716,16 +725,16 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0,
 
 	// Space rest (invisible)
 	if (event.invisible) {
-		return { xml: `${indent}<space ${attrs} />\n`, elementId: restId };
+		return { xml: `${indent}<space ${attrs} />\n`, elementId: restId, fermata };
 	}
 
 	// Full measure rest
 	if (event.fullMeasure) {
 		const mRestId = generateId('mrest');
-		return { xml: `${indent}<mRest xml:id="${mRestId}" />\n`, elementId: mRestId };
+		return { xml: `${indent}<mRest xml:id="${mRestId}" />\n`, elementId: mRestId, fermata };
 	}
 
-	return { xml: `${indent}<rest ${attrs} />\n`, elementId: restId };
+	return { xml: `${indent}<rest ${attrs} />\n`, elementId: restId, fermata };
 };
 
 
@@ -846,7 +855,9 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			}
 		} else if (e.type === 'rest') {
 			const restIndent = beamOpen ? baseIndent + '    ' : baseIndent;
-			xml += restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift, measureAccidentals).xml;
+			const restResult = restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift, measureAccidentals);
+			xml += restResult.xml;
+			if (restResult.fermata) fermatas.push({ startid: restResult.elementId, shape: restResult.fermata === 'short' ? 'angular' : undefined });
 		} else if (e.type === 'context') {
 			const ctx = e as ContextChange;
 			if (ctx.clef && ctx.clef !== activeClef) {
@@ -1371,6 +1382,8 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				const restCrossStaff = currentStaff !== (voice.staff || 1) ? currentStaff : undefined;
 				const restResult = restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals, restCrossStaff);
 				xml += restResult.xml;
+				// Fermata over a rest (held silence) — emit as a control event on the rest.
+				if (restResult.fermata) fermatas.push({ startid: restResult.elementId, shape: restResult.fermata === 'short' ? 'angular' : undefined });
 				// A leading dynamic/markup attaches to the next event, which may be this rest
 				flushPendingMarkups(restResult.elementId);
 				flushPendingDynamics(restResult.elementId);

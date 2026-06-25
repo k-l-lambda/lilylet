@@ -223,6 +223,7 @@ export interface RestEvent {
 	invisible?: boolean;		// space rest (s)
 	fullMeasure?: boolean;	// full measure rest (R)
 	pitch?: Pitch;					// positioned rest (e.g., g'\rest)
+	marks?: Mark[];					// control-event marks a rest can host (e.g. fermata over a rest / grand pause)
 }
 
 export interface ContextChange {
