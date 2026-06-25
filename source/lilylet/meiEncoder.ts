@@ -412,6 +412,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 	dynamic?: string;
 	hairpin?: string;
 	pedal?: string;
+	pedals?: ('up' | 'down')[];
 	tremolo?: number;
 	fingerings: { finger: number; placement?: 'above' | 'below' }[];
 	navigation?: 'coda' | 'segno';
@@ -432,6 +433,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 		dynamic: undefined as string | undefined,
 		hairpin: undefined as string | undefined,
 		pedal: undefined as string | undefined,
+		pedals: [] as ('up' | 'down')[],
 		tremolo: undefined as number | undefined,
 		fingerings: [] as { finger: number; placement?: 'above' | 'below' }[],
 		navigation: undefined as 'coda' | 'segno' | undefined,
@@ -481,15 +483,20 @@ const extractMarkOptions = (marks?: Mark[]): {
 					result.hairpin = 'crescStart';
 				} else if (mark.type === HairpinType.diminuendoStart) {
 					result.hairpin = 'dimStart';
-				} else if (mark.type === HairpinType.crescendoEnd || mark.type === HairpinType.diminuendoEnd) {
-					result.hairpin = 'end';
+				} else if (mark.type === HairpinType.crescendoEnd) {
+					result.hairpin = 'crescEnd';
+				} else if (mark.type === HairpinType.diminuendoEnd) {
+					result.hairpin = 'dimEnd';
 				}
 				break;
 			case 'pedal':
+				// A note can carry more than one pedal mark (a pedal "bounce": an up
+				// to release the previous pedal and an immediate down to re-pedal on
+				// the same note), so collect ALL of them rather than keep one scalar.
 				if (mark.type === PedalType.sustainOn) {
-					result.pedal = 'down';
+					result.pedals.push('down');
 				} else if (mark.type === PedalType.sustainOff) {
-					result.pedal = 'up';
+					result.pedals.push('up');
 				}
 				break;
 			case 'tie':
@@ -544,6 +551,7 @@ interface NoteEventResult {
 	elementId: string;
 	hairpin?: string;
 	pedal?: string;
+	pedals?: ('up' | 'down')[];
 	hasTieStart: boolean;
 	pitches: Pitch[];
 	arpeggio: boolean;
@@ -610,6 +618,7 @@ const noteEventToMEI = (
 			elementId: noteId,
 			hairpin: markOptions.hairpin,
 			pedal: markOptions.pedal,
+			pedals: markOptions.pedals,
 			hasTieStart: markOptions.tieStart,
 			pitches: event.pitches,
 			arpeggio: markOptions.arpeggio,
@@ -671,6 +680,7 @@ const noteEventToMEI = (
 		elementId: chordId,
 		hairpin: markOptions.hairpin,
 		pedal: markOptions.pedal,
+		pedals: markOptions.pedals,
 		hasTieStart: markOptions.tieStart,
 		pitches: event.pitches,
 		arpeggio: markOptions.arpeggio,
@@ -731,6 +741,7 @@ interface TupletEventResult {
 	mordents: MordentRef[];
 	turns: TurnRef[];
 	arpeggios: ArpegRef[];
+	pedals: PedalMark[];  // pedal marks on notes inside the tuplet (independent events)
 	endingClef?: string;  // Updated clef name if changed inside the tuplet
 }
 
@@ -774,6 +785,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	const mordents: MordentRef[] = [];
 	const turns: TurnRef[] = [];
 	const arpeggios: ArpegRef[] = [];
+	const pedals: PedalMark[] = [];
 
 	// Handle internal beam groups: if notes have manual beam marks, respect them
 	const hasInternalBeams = !inParentBeam && tupletHasInternalBeams(event);
@@ -814,6 +826,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			if (result.mordent) mordents.push({ startid: result.elementId, form: result.mordent === 'upper' ? 'upper' : undefined });
 			if (result.turn) turns.push({ startid: result.elementId });
 			if (result.arpeggio) arpeggios.push({ plist: result.elementId });
+			if (result.pedals) for (const dir of result.pedals) pedals.push({ startId: result.elementId, dir });
 
 			// Close beam if this note ends a beam group
 			if (hasInternalBeams && markOptions.beamEnd && beamOpen) {
@@ -844,7 +857,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	}
 
 	xml += `${indent}</tuplet>\n`;
-	return { xml, firstNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios, endingClef };
+	return { xml, firstNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios, pedals, endingClef };
 };
 
 
@@ -1081,9 +1094,13 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	// Track current clef to only emit changes
 	let currentClef: Clef | undefined = initialClef;
 
-	// Track hairpin spans
+	// Track hairpin spans. Use a stack of open hairpins (not a single slot): the
+	// flattened layer stream can interleave overlapping/cross-staff hairpins
+	// (e.g. a crescendo starting before the previous one ended), and a single slot
+	// would silently overwrite the earlier one. Seed with any hairpin still open
+	// from the previous measure (cross-measure carry).
 	const hairpins: HairpinSpan[] = [];
-	let currentHairpin: { form: 'cres' | 'dim'; startId: string } | null = initialHairpin;
+	const openHairpins: { form: 'cres' | 'dim'; startId: string }[] = initialHairpin ? [initialHairpin] : [];
 
 	// Track pedal marks (each is independent, not paired spans)
 	const pedals: PedalMark[] = [];
@@ -1256,24 +1273,32 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 
 				// Track hairpin spans
 				if (result.hairpin === 'crescStart') {
-					currentHairpin = { form: 'cres', startId: result.elementId };
+					openHairpins.push({ form: 'cres', startId: result.elementId });
 				} else if (result.hairpin === 'dimStart') {
-					currentHairpin = { form: 'dim', startId: result.elementId };
-				} else if (result.hairpin === 'end' && currentHairpin) {
+					openHairpins.push({ form: 'dim', startId: result.elementId });
+				} else if ((result.hairpin === 'crescEnd' || result.hairpin === 'dimEnd') && openHairpins.length > 0) {
+					const endForm: 'cres' | 'dim' = result.hairpin === 'crescEnd' ? 'cres' : 'dim';
+					// Close the most-recent open hairpin of the matching form; if none
+					// matches (interleaved/malformed input), fall back to the newest open.
+					let idx = -1;
+					for (let i = openHairpins.length - 1; i >= 0; i--) {
+						if (openHairpins[i].form === endForm) { idx = i; break; }
+					}
+					if (idx < 0) idx = openHairpins.length - 1;
+					const open = openHairpins.splice(idx, 1)[0];
 					hairpins.push({
-						form: currentHairpin.form,
-						startId: currentHairpin.startId,
+						form: open.form,
+						startId: open.startId,
 						endId: result.elementId,
 					});
-					currentHairpin = null;
 				}
 
-				// Track pedal marks (each is independent)
-				if (result.pedal === 'down' || result.pedal === 'up') {
-					pedals.push({
-						startId: result.elementId,
-						dir: result.pedal,
-					});
+				// Track pedal marks (each is independent; a note may carry several,
+				// e.g. an up+down pedal bounce at the same beat).
+				if (result.pedals) {
+					for (const dir of result.pedals) {
+						pedals.push({ startId: result.elementId, dir });
+					}
 				}
 
 				// Track slur spans - end must be processed before start
@@ -1383,6 +1408,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				mordents.push(...tupletResult.mordents);
 				turns.push(...tupletResult.turns);
 				arpeggios.push(...tupletResult.arpeggios);
+				pedals.push(...tupletResult.pedals);
 
 				break;
 			}
@@ -1524,8 +1550,24 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 		? { dis: currentOctave.dis, disPlace: currentOctave.disPlace, startId: currentOctave.startId, shift: currentOttavaShift, continued: true, emitted: currentOctave.emitted, endToken: currentOctave.endToken, endFallbackId: currentOctave.endFallbackId }
 		: null;
 
+	// Resolve hairpins still open at layer end. The cross-measure carry supports a
+	// single pending hairpin, so keep the OLDEST open span (bottom of stack — most
+	// likely to legitimately continue into the next measure) as pendingHairpin, and
+	// flush the rest here, ending them at the last note so they aren't dropped
+	// (MusicXML files routinely leave wedges unclosed). Without a last note id there
+	// is nothing to attach to, so those are unavoidably dropped.
+	let pendingHairpin: { form: 'cres' | 'dim'; startId: string } | null = null;
+	if (openHairpins.length > 0) {
+		pendingHairpin = openHairpins[0];
+		for (let i = 1; i < openHairpins.length; i++) {
+			if (lastNoteId) {
+				hairpins.push({ form: openHairpins[i].form, startId: openHairpins[i].startId, endId: lastNoteId });
+			}
+		}
+	}
+
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin: currentHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift, octaveEndReplacements };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift, octaveEndReplacements };
 };
 
 // Staff result type

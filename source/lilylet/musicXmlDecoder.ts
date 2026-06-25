@@ -25,6 +25,7 @@ import {
 	HairpinType,
 	PedalType,
 	NavigationMarkType,
+	Placement,
 	BarlineEvent,
 	HarmonyEvent,
 	TupletEvent,
@@ -1002,6 +1003,21 @@ const directionToMarks = (
 		marks.push({ markType: 'navigation', type: NavigationMarkType.segno });
 	}
 
+	// Words (text directions: "dolce", "espr.", "cresc.", "con forza", ...).
+	// Tempo words ("Allegro", "a tempo", ...) are consumed separately as a tempo
+	// ContextChange by directionToContextChange, so skip those here to avoid
+	// double-emitting; everything else becomes a markup mark → MEI <dir>. Metronome
+	// directions are tempo too, never markup.
+	if (direction.words && direction.words.length > 0 && !direction.metronome) {
+		const text = direction.words.map(w => w.text).join('').trim();
+		if (text && !isTempoWord(text)) {
+			const placement = direction.placement === 'above' ? Placement.above
+				: direction.placement === 'below' ? Placement.below
+				: undefined;
+			marks.push({ markType: 'markup', content: text, placement });
+		}
+	}
+
 	return marks;
 };
 
@@ -1261,6 +1277,40 @@ const convertMeasure = (
 				harmonies.push({ type: 'harmony', text });
 			}
 		}
+	}
+
+	// Flush leftover pending marks. Post-positioned directions — hairpin/pedal
+	// stops, and any direction after the last note of its voice (common after a
+	// <backup> in piano scores) — never reached a following note in the loop above.
+	// They belong on the note they trail, so attach them to the last NoteEvent of
+	// the voice. pendingMarks is per-measure, so without this they would be lost
+	// at the next measure (the pedal/hairpin "stop" loss). Rests carry no marks, so
+	// search backward for the last actual note; fall back across voices if needed.
+	if (pendingMarks.size > 0) {
+		const allVoices = voiceTracker.getVoices();
+		const findLastNote = (voiceNum: number): NoteEvent | undefined => {
+			const vs = allVoices.get(voiceNum);
+			if (!vs) return undefined;
+			for (let i = vs.events.length - 1; i >= 0; i--) {
+				const ev = vs.events[i];
+				if (ev.type === 'note') return ev as NoteEvent;
+			}
+			return undefined;
+		};
+		for (const [voiceNum, marks] of pendingMarks) {
+			if (marks.length === 0) continue;
+			let target = findLastNote(voiceNum);
+			// Voice had no note (e.g. direction-only or rest-only): attach to the
+			// last note of any voice so the marking is not silently dropped.
+			if (!target) {
+				for (const vn of allVoices.keys()) {
+					target = findLastNote(vn);
+					if (target) break;
+				}
+			}
+			if (target) target.marks = [...(target.marks || []), ...marks];
+		}
+		pendingMarks.clear();
 	}
 
 	// Build voice map from tracker
