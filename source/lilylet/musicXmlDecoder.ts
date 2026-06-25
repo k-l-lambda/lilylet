@@ -1052,8 +1052,13 @@ const convertMeasure = (
 
 	// Pending marks from directions (to attach to next note), per voice
 	const pendingMarks: Map<number, Mark[]> = new Map();
-	// Pending context changes (tempo, ottava) to insert before next note
-	const pendingContextChanges: ContextChange[] = [];
+	// Pending context changes (tempo, ottava) to insert before next note. Each may
+	// carry a target staff: an ottava (<octave-shift>) start and its stop both name
+	// the same <staff>, but in piano scores the stop direction often follows a
+	// <backup> so the *next note* is on the other staff. Routing the change to a
+	// note on its own staff keeps the 8va span's start and end in the same MEI
+	// layer (otherwise the encoder can't pair them and drops the span).
+	const pendingContextChanges: { ctx: ContextChange; staff?: number }[] = [];
 	let currentVoice = 1;  // Track current voice for directions
 
 	// Process all children in order
@@ -1106,12 +1111,20 @@ const convertMeasure = (
 				tupletTracker.startTuplet(tupletNotation.number);
 			}
 
-			// Add any pending context changes before the note (tempo, ottava)
+			// Add any pending context changes before the note (tempo, ottava).
+			// A staff-tagged change (ottava) only flushes onto a note on the SAME
+			// staff so its 8va span stays in one layer; others (tempo) flush anywhere.
 			if (pendingContextChanges.length > 0) {
-				for (const ctx of pendingContextChanges) {
-					voiceTracker.addEvent(voiceNum, ctx, 0, staffNum);
+				const remaining: { ctx: ContextChange; staff?: number }[] = [];
+				for (const pc of pendingContextChanges) {
+					if (pc.staff === undefined || pc.staff === staffNum) {
+						voiceTracker.addEvent(voiceNum, pc.ctx, 0, staffNum);
+					} else {
+						remaining.push(pc);  // wait for a note on the matching staff
+					}
 				}
-				pendingContextChanges.length = 0;  // Clear
+				pendingContextChanges.length = 0;
+				pendingContextChanges.push(...remaining);
 			}
 
 			// Get pending marks for this voice. Rests can't hold marks (RestEvent has
@@ -1256,7 +1269,9 @@ const convertMeasure = (
 			// Handle context changes (tempo, ottava)
 			const contextChange = directionToContextChange(direction, ottavaTracker);
 			if (contextChange) {
-				pendingContextChanges.push(contextChange);
+				// Tag ottava changes with their staff so they reach the right layer.
+				const staff = contextChange.ottava !== undefined ? direction.staff : undefined;
+				pendingContextChanges.push({ ctx: contextChange, staff });
 			}
 
 			// Handle marks (dynamics, hairpins, etc.)
@@ -1325,6 +1340,22 @@ const convertMeasure = (
 			if (target) target.marks = [...(target.marks || []), ...marks];
 		}
 		pendingMarks.clear();
+	}
+
+	// Flush leftover staff-tagged context changes (ottava) whose matching-staff note
+	// never appeared this measure: append to a voice on the target staff so the span
+	// continues into / closes in the right layer rather than being dropped.
+	if (pendingContextChanges.length > 0) {
+		const voices = voiceTracker.getVoices();
+		for (const pc of pendingContextChanges) {
+			let voiceNum: number | undefined;
+			for (const [vn, vs] of voices) {
+				if (vs.staff === pc.staff) { voiceNum = vn; break; }
+			}
+			if (voiceNum === undefined) voiceNum = voices.keys().next().value;
+			if (voiceNum !== undefined) voiceTracker.addEvent(voiceNum, pc.ctx, 0, pc.staff);
+		}
+		pendingContextChanges.length = 0;
 	}
 
 	// Build voice map from tracker
