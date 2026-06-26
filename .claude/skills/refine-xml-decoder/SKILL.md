@@ -189,15 +189,41 @@ Two forms: `<rest measure="yes">`, and the convention of a `type="whole"` rest w
 `parseNote`, set `RestEvent.fullMeasure`; encoders emit `<mRest>`/`R` and timing comes
 from the meter. Tick-mismatch files 1436→442.
 
-### 14. Multi-voice measure block dropped (OPEN — serious, ~14 files)
-In some piano scores a contiguous run of measures decodes to ZERO notes (e.g.
-库劳 Op.20 m15-28, 云雀 14 measures). Trigger: a measure with a transient extra
-voice (voices 1,2,3 where 3→staff 2) appears to corrupt the per-measure
-`VoiceTracker` state, cascading note loss into following measures. This is the
-`PITCH multiset` audit's headline (25 files, always `missing>0 extra=0` — notes
-lost, never wrong). Root cause not yet isolated; cross-staff voice handling is
-delicate (per memory, the `voice.staff` update in `getOrCreateVoice` is load-bearing
-— chopin48 breaks without it). Needs a dedicated session.
+### 14. Unclosed / nested tuplet swallows the rest of the piece (FIXED — was the "multi-voice block drop")
+The `PITCH multiset` audit's headline (25 files, always `missing>0 extra=0`): a
+CONTIGUOUS RUN of measures decoded to ZERO notes (库劳 Op.20 m15→end, 云雀 −583,
+Op.740 −393, 说散就散 −84). The earlier guess ("transient extra voice corrupts
+`VoiceTracker`") was WRONG — the trigger is just nearby, not the cause. **Real root
+cause:** `TupletTracker` is created once per *part* (`convertPart`) and NEVER reset
+per measure, but a tuplet's `stop` notation can be **missing from the source** (库劳
+m15 has `<tuplet type="start" number="1">` and no matching stop anywhere in the
+file). With no stop, `activeTuplets` stays non-empty forever, `isActive()` is
+permanently true, and every following note in the loop is diverted into the zombie
+tuplet via `addEvent` instead of `voiceTracker.addEvent` — so it never reaches a
+voice's event list. The drop cascades to the end of the piece. A second, milder bug:
+`addEvent` pushed each note into ALL active tuplets regardless of voice, and into
+every enclosing tuplet when nested — so a voice-1 tuplet ate voice-2 notes, and
+nested `start#1 start#2 stop#1 stop#2` emitted each note twice (`extra>0`: K.466 +6,
+Op.740 +2, 28.旋律 +2).
+**Fix (3 parts, all in `TupletTracker`):**
+1. **Bind each tuplet to its voice/staff** (`startTuplet(number, voice, staff)`);
+   make `isActive(voice)` and `addEvent(event, voice)` voice-scoped so a tuplet only
+   captures notes of its own voice.
+2. **Force-close at the bar line** — `flushAll()` at measure end emits every
+   still-open tuplet onto its owning voice (a tuplet is a within-measure time
+   modification and cannot span a bar; a missing stop is then bounded to one measure,
+   not the whole piece). Call it BEFORE the `pendingMarks` flush so trailing marks
+   still find the tuplet's notes as the voice's last events.
+3. **Innermost-only** — `addEvent` pushes to the single most-recently-started
+   same-voice tuplet (the doc model's flat `TupletEvent` can't hold a nested
+   TupletEvent, so adding to every enclosing tuplet double-counts).
+Result: pitch-loss files 25→16, clean files 6014→6027, tick-diff 273→260, and tick
+diffs on the affected files collapsed (库劳 15→0, K.466 3→0, Op.740 3→0, 28.旋律
+55→2). Residual pitch diffs are single-digit source-defect remnants (a measure with
+genuinely unbalanced in-measure tuplet start/stop — ~3/420 sampled files).
+**Diagnostic that cracked it:** `tests/measure-pitch.local.ts` — per-measure pitched-
+note count source-vs-doc, printing the voice/staff signature at each drop; then a
+one-off DOM walk tallying `<tuplet type>` per measure exposed the unmatched start.
 
 ### 15. `<forward>` gaps not filled (FIXED)
 20% of the corpus (1269 files, 18883 forwards) uses `<forward>`. lilylet's doc model
