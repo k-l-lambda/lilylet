@@ -1050,6 +1050,38 @@ interface MeasureConversionResult {
 }
 
 /**
+ * Decompose a tick gap (from <forward>) into invisible spacer rests.
+ *
+ * lilylet's doc model is a flat per-voice event sequence with no absolute tick
+ * anchor (currentPosition is unused for placement), so a <forward> that skips
+ * time inside a voice must be materialised as filler or the following notes slide
+ * earlier and the bar decodes short. Invisible rests (`s` / MEI <space>) are the
+ * right carrier. The gap may not be a single note value (e.g. 1.5 quarters), so
+ * emit a greedy sequence of power-of-two (optionally dotted) spacers.
+ */
+const forwardGapToRests = (gapTicks: number, divisions: number): RestEvent[] => {
+	const rests: RestEvent[] = [];
+	let remaining = gapTicks;
+	const quarterTicks = divisions; // ticks per quarter note
+	// Largest representable spacer first; division 1=whole..128. dotted adds half.
+	const candidates: { division: number; dots: number; q: number }[] = [];
+	for (const division of [1, 2, 4, 8, 16, 32, 64, 128]) {
+		const baseQ = 4 / division;           // quarter notes for this value
+		candidates.push({ division, dots: 0, q: baseQ });
+		candidates.push({ division, dots: 1, q: baseQ * 1.5 });
+	}
+	candidates.sort((a, b) => b.q - a.q);
+	let guard = 0;
+	while (remaining > 0.0001 && guard++ < 64) {
+		const c = candidates.find(c => c.q * quarterTicks <= remaining + 0.0001);
+		if (!c) break;
+		rests.push({ type: 'rest', duration: { division: c.division, dots: c.dots }, invisible: true });
+		remaining -= c.q * quarterTicks;
+	}
+	return rests;
+};
+
+/**
  * Convert a MusicXML measure to Lilylet events, grouped by voice
  */
 const convertMeasure = (
@@ -1067,6 +1099,10 @@ const convertMeasure = (
 
 	// Pending marks from directions (to attach to next note), per voice
 	const pendingMarks: Map<number, Mark[]> = new Map();
+	// Accumulated <forward> ticks waiting for the next note, whose <voice> tells us
+	// which voice the gap belongs to. Flushed as invisible rests before that note,
+	// or onto currentVoice at a <backup>/measure end (a trailing gap in this voice).
+	let pendingForward = 0;
 	// Pending context changes (tempo, ottava) to insert before next note. Each may
 	// carry a target staff: an ottava (<octave-shift>) start and its stop both name
 	// the same <staff>, but in piano scores the stop direction often follows a
@@ -1119,6 +1155,17 @@ const convertMeasure = (
 			// Ensure voice exists with correct staff tracking (needed for cross-staff tuplets
 			// where notes go to tupletTracker but voice must be initialized for staff detection)
 			voiceTracker.getOrCreateVoice(voiceNum, staffNum);
+
+			// Flush an accumulated <forward> gap as invisible rests into THIS note's
+			// voice (the forward had no voice of its own; it belongs to the voice that
+			// follows). Skip while inside a tuplet — a forward there is unusual and the
+			// tuplet tracker owns timing.
+			if (pendingForward > 0 && !tupletTracker.isActive()) {
+				for (const r of forwardGapToRests(pendingForward, voiceTracker.getDivisions())) {
+					voiceTracker.addEvent(voiceNum, r, 0, staffNum);
+				}
+			}
+			pendingForward = 0;
 
 			// Check for tuplet start BEFORE processing the note
 			const tupletNotation = note.notations?.tuplet;
@@ -1304,11 +1351,17 @@ const convertMeasure = (
 				pendingMarks.set(currentVoice, [...existing, ...marks]);
 			}
 		} else if (tagName === 'backup') {
+			// A <forward> with no note after it (before this backup) is cursor
+			// positioning, not a content gap — drop it rather than materialise filler
+			// (the common `backup N / forward N` measure-end idiom would otherwise
+			// double the bar). Only note→forward→note gaps become invisible rests.
+			pendingForward = 0;
 			const duration = getElementInt(child, 'duration') || 0;
 			voiceTracker.backup(duration);
 		} else if (tagName === 'forward') {
 			const duration = getElementInt(child, 'duration') || 0;
 			voiceTracker.forward(duration);
+			pendingForward += duration;  // materialised as invisible rests only if a note follows in-voice
 		} else if (tagName === 'barline') {
 			const barlineData = parseBarline(child);
 			const style = convertBarlineStyle(barlineData.barStyle, barlineData.repeat?.direction);
@@ -1329,6 +1382,11 @@ const convertMeasure = (
 			}
 		}
 	}
+
+	// A <forward> at the very end of the measure with no following note is cursor
+	// positioning (e.g. the `backup N / forward N` idiom), not a content gap — drop
+	// it. Only forwards consumed by a following note become invisible spacer rests.
+	pendingForward = 0;
 
 	// Flush leftover pending marks. Post-positioned directions — hairpin/pedal
 	// stops, and any direction after the last note of its voice (common after a
