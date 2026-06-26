@@ -40,6 +40,7 @@
     "test:decoder": "tsx ./tests/lilypondDecoder.ts",
     "test:abc": "tsx ./tests/abc-decoder.ts",
     "test:roundtrip": "tsx ./tests/lilypond-roundtrip.ts",
+    "test:lyl-roundtrip": "tsx ./tests/lyl-roundtrip.ts",
     "test:abc-svg": "tsx ./tests/abc-abcjs-svg.ts",
     "train:bpe": "tsx ./tools/trainBpeTokenizer.ts",
     "build:manual-tokenizer": "tsx ./tools/buildManualTokenizer.ts",

@@ -1,0 +1,8 @@
+% issue: multi-voice shared-staff clef change. Voice on staff 2 changes to
+% treble while a sibling voice on staff 2 has no clef; the .lyl serializer must
+% not re-emit the stale carried-in bass clef onto the clef-less sibling.
+\staff "1" \clef "treble" \time 2/4 c''4 c'' \\
+\staff "2" \clef "bass" c4 c | %1
+\staff "1" c''4 c'' \\
+\staff "2" \clef "treble" \stemUp c'4 c' \\
+\staff "2" \stemDown c4 c | %2

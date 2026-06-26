@@ -242,6 +242,65 @@ cursor movement, NOT a content gap. Materialising it doubles the bar. So `pendin
 must be DROPPED at `<backup>` and measure end, and only flushed when a real note
 consumes it. Tick mismatches 442→273 files (96% fully clean).
 
+## Clef / staff POSITION consistency — the two-route diff that isolates the SERIALIZER
+The MEI clef COUNT (in musicxml-mei-diff) is categorized `layout` and rarely flags,
+but clef *position* and *staff attribution* can still be corrupted by the `.lyl` text
+round-trip. Audit it with a different two-route diff:
+- Route A: `xml → decode → doc → meiEncoder` (MEI directly).
+- Route B: `xml → decode → doc → serializeLilyletDoc → parseCode → doc2 → meiEncoder`.
+Route B inserts a full `.lyl` serialize+parse. Comparing clef position signatures
+(`m<measure>/s<staff>@<eventIdx>:<shape><line>`, staffDef = index -1) isolates loss to
+the **serializer/parser**, not the decoder/encoder (both routes share the encoder).
+Tool: `tests/clef-consistency.local.ts` (`--all` / `--limit N` / file args). On the
+6292-file corpus this went 360-ish → 12 → 2 as the bugs below were fixed.
+
+### Serializer/parser asymmetry — the parser's staff default is the contract
+The parser (`lilylet.jison` `voice()`) assigns every voice with NO leading `\staff`
+directive to **staff 1**, unconditionally — it does NOT carry staff across voices or
+measures. The serializer, however, tracks a cross-measure `currentStaff` carry and a
+per-staff `emittedClefs`/`allStaffClefs` map. Three concrete round-trip corruptions
+came from the serializer trusting its own state instead of the parser's flat default
+(all in `serializeVoice`/`serializeTupletEvent` in `source/lilylet/serializer.ts`):
+1. **Stale clef restated onto a clef-less sibling voice.** Staff 2 carries bass; a
+   later measure's voice A (staff 2) changes to treble, sibling voice B (staff 2) has
+   no clef of its own → the `?? allStaffClefs[staff]` fallback re-emitted the stale
+   carried-in bass. **Fix:** the carry fallback may only ESTABLISH a staff whose clef
+   was never emitted (`emittedClefs[staff] === undefined`); never restate one already
+   shown this serialization (it would revert the sibling's change). Same guard at both
+   mid-voice staff-switch sites (`ctx.staff` change and `note.staff` change).
+2. **Whole measure on staff 2 dropped its `\staff` anchor.** A measure whose voices
+   are all staff 2 (so per-measure `partIsGrandStaff` is false) after a prior staff-2
+   measure: `effectiveInitialStaff == currentStaff == 2`, so no `\staff` emitted → the
+   parser defaulted the voice to staff 1 and its leading clef rode along. **Fix:** emit
+   `\staff "N"` whenever `effectiveInitialStaff !== 1` (the parser's default), even when
+   the cross-measure carry matches it.
+3. **Single-voice cross-staff: leading clef rode to the wrong staff.** Voice home-staff
+   1 with a leading bass clef but first NOTE on staff 2 (`note.staff`): serializer wrote
+   `\clef "bass" \staff "2" …`, and on re-parse the first `\staff "2"` was read as the
+   LEADING staff (binding home to 2), dragging the clef to staff 2. **Fix:** scan the
+   first musical event's effective staff (`firstMusicalStaff`, honouring `note.staff`,
+   independent of the leading-clef scan which a clef stops early); if it differs from
+   the home staff, force a `\staff "<home>"` anchor up front.
+4. **Clef/ottava change INSIDE a tuplet was silently dropped.** `serializeTupletEvent`
+   handled only `staff` and `stemDirection` context events in its inner loop (and as an
+   `else-if` chain, so a compound staff+clef event lost the clef). **Fix:** emit each
+   present component (`staff`, `clef`, `ottava`, `stemDirection`) independently. This
+   also fixed an ottava-cross-measure unit case.
+
+**Guard test:** `tests/lyl-roundtrip.ts` (`npm run test:lyl-roundtrip`) — runs
+`parseCode → serializeLilyletDoc → parseCode` over all unit-cases and asserts the MEI
+clef position set is identical. This is DISTINCT from `lilypond-roundtrip.ts`, which
+round-trips through the LilyPond encoder/decoder and so preserves clefs via LilyPond's
+own explicit context model — it canNOT catch `.lyl` serializer bugs (verified: all 4
+cases above pass the lilypond path even pre-fix). Unit cases added:
+`clefs-multivoice-shared-staff-change`, `clefs-whole-measure-staff2-change`,
+`clefs-cross-staff-leading-clef` (each breaks pre-fix, stable post-fix). Compare via
+MEI, not raw doc context events, so benign redundant clef restatements (encoder-deduped)
+don't false-flag. Residual 2/6292: a voice whose home staff is 1 but whose FIRST event
+is a pure `\staff "2"` context switch — inexpressible as "home 1 then immediately 2"
+without `\staff "1" \staff "2"`; clef counts still match (A=B=src), only the event-index
+annotation drifts. Acceptable; do not over-engineer.
+
 ## Corpus batch auditing
 The high-value bugs above were ALL found by auditing a real score corpus
 (`~/data/scores/fmenu`, 6292 piano `.xml`) against **source-XML ground truth**, not
@@ -257,6 +316,9 @@ correctly), and treat `arpeg` (per-note source vs per-chord MEI) and `<note>` co
 - `npm run test:mei` — 200 cases, verovio must still load every produced MEI (a
   malformed span fails this).
 - `npm run test` (parser), `npm run test:roundtrip` (lilypond), `gpt-review-issues`.
+- `npm run test:lyl-roundtrip` — `.lyl` serialize→parse clef/staff position stability
+  (guards the serializer bugs above; a serializer change touching `\staff`/`\clef`
+  emission MUST keep this at 0 failed).
 - `npm run test:mei-hashes` — intentional output changes show as mismatches; confirm
   the diff is **additive** (more markings, `<note>` count unchanged) before running
   `npx tsx tests/computeMeiHashes.ts --update`.

@@ -483,9 +483,20 @@ const serializeTupletEvent = (
 			prevDuration = (e as RestEvent).duration;
 		} else if (e.type === 'context') {
 			const ctx = e as ContextChange;
+			// A context event inside a tuplet may carry several components at once
+			// (e.g. staff + clef). Emit each present one — previously only staff and
+			// stemDirection were handled, so a clef/ottava change inside a tuplet was
+			// silently dropped on serialization.
 			if (ctx.staff != null) {
 				parts.push(' \\staff "' + ctx.staff + '"');
-			} else if (ctx.stemDirection != null) {
+			}
+			if (ctx.clef != null) {
+				parts.push(' \\clef "' + (CLEF_MAP[ctx.clef] ?? ctx.clef) + '"');
+			}
+			if (ctx.ottava != null) {
+				parts.push(' \\ottava #' + ctx.ottava);
+			}
+			if (ctx.stemDirection != null) {
 				if (ctx.stemDirection === StemDirection.up) parts.push(' \\stemUp');
 				else if (ctx.stemDirection === StemDirection.down) parts.push(' \\stemDown');
 				else if (ctx.stemDirection === StemDirection.auto) parts.push(' \\stemNeutral');
@@ -654,6 +665,28 @@ const serializeVoice = (
 	// context{staff} events before this index are skipped in the main loop.
 	let effectiveInitialStaff = voice.staff;
 	let leadStaffScanEnd = 0;
+	// Staff of the first MUSICAL event (note/rest/...), honouring an explicit
+	// note.staff. If it differs from the home staff, the first inline staff switch
+	// would emit a `\staff "X"` that the parser mistakes for the LEADING staff (it
+	// binds home to the first `\staff` before any music), relocating the voice and
+	// any leading clef. We then force an explicit home-staff anchor up front. This
+	// scan is independent of leadStaffScanEnd because a leading clef/key stops that
+	// scan before the first note is reached.
+	let firstMusicalStaff: number | null = null;
+	{
+		let scanStaff = voice.staff;
+		for (const e of voice.events) {
+			if (e.type === 'context') {
+				const ctx = e as ContextChange;
+				if (ctx.staff != null) scanStaff = ctx.staff;
+				continue;
+			}
+			if (e.type === 'pitchReset') continue;
+			if (e.type === 'note') firstMusicalStaff = (e as NoteEvent).staff ?? scanStaff;
+			else firstMusicalStaff = scanStaff;
+			break;
+		}
+	}
 	for (let i = 0; i < voice.events.length; i++) {
 		const e = voice.events[i];
 		if (e.type === 'pitchReset') { leadStaffScanEnd = i + 1; continue; }
@@ -678,10 +711,19 @@ const serializeVoice = (
 		break;
 	}
 
-	// Output staff command if voice staff differs from current parser staff,
-	// or always output if it's a grand staff score for clarity.
-	// Use effectiveInitialStaff so carry-over replaces the default emission.
-	if (isGrandStaff || effectiveInitialStaff !== currentStaff) {
+	// Output staff command if the voice's initial staff is not what the PARSER will
+	// assume. The parser (lilylet.jison voice()) assigns every voice with no leading
+	// `\staff` directive to staff 1 unconditionally — it does NOT carry staff across
+	// voices or measures. So we must emit `\staff "N"` whenever effectiveInitialStaff
+	// is not 1, even if the cross-measure carry (currentStaff) happens to match it
+	// (e.g. a whole measure sitting on staff 2 after a prior staff-2 measure — without
+	// this, the round-trip would silently relocate that voice, and its leading clef,
+	// to staff 1). Also emit when it differs from the carry (resets after grand staff)
+	// or always in a grand-staff part for clarity. Finally, force an anchor when the
+	// first note switches staff via note.staff (otherwise that inline `\staff` would
+	// be read as the leading staff and rebind the voice's home).
+	const firstNoteSwitches = firstMusicalStaff != null && firstMusicalStaff !== effectiveInitialStaff;
+	if (isGrandStaff || effectiveInitialStaff !== 1 || effectiveInitialStaff !== currentStaff || firstNoteSwitches) {
 		parts.push('\\staff "' + effectiveInitialStaff + '"');
 	}
 
@@ -710,7 +752,17 @@ const serializeVoice = (
 	// Prefer this voice's leading clef (a clef before any music); fall back to the
 	// carry-in clef from previous measures. A clef that first appears mid-voice is NOT
 	// hoisted here — it is emitted inline at its position.
-	const voiceClef = findVoiceClef(voice) ?? allStaffClefs?.[voice.staff];
+	//
+	// The carry-in fallback (`allStaffClefs[staff]`) is the clef state at the START of
+	// the measure and is NOT updated mid-measure, whereas `emittedClefs` IS. So a voice
+	// with no clef of its own must only use the fallback to ESTABLISH a staff that has
+	// not been emitted yet — never to "restate" it once any sibling voice has already
+	// emitted/changed this staff's clef this measure, because the fallback would then be
+	// stale and would wrongly revert that sibling's change (e.g. v1 moves staff 2 to
+	// treble, then v2 with no clef must not re-emit the carried-in bass).
+	const ownClef = findVoiceClef(voice);
+	const carryClef = allStaffClefs?.[voice.staff];
+	const voiceClef = ownClef ?? (emittedClefs?.[voice.staff] === undefined ? carryClef : undefined);
 	const clefAlreadyEmitted = voiceClef && emittedClefs?.[voice.staff] === voiceClef;
 	if (voiceClef && !clefAlreadyEmitted) {
 		parts.push('\\clef "' + (CLEF_MAP[voiceClef] ?? voiceClef) + '"');
@@ -734,7 +786,8 @@ const serializeVoice = (
 				activeStaff = ctx.staff;
 				parts.push('\\staff "' + activeStaff + '"');
 				// Emit target staff clef if the event carries one or allStaffClefs knows it
-				const ctxClef = ctx.clef || allStaffClefs?.[activeStaff];
+				const ctxClef = ctx.clef ||
+					(emittedClefs?.[activeStaff] === undefined ? allStaffClefs?.[activeStaff] : undefined);
 				if (ctxClef && emittedClefs?.[activeStaff] !== ctxClef) {
 					parts.push('\\clef "' + (CLEF_MAP[ctxClef] ?? ctxClef) + '"');
 					if (emittedClefs) emittedClefs[activeStaff] = ctxClef;
@@ -763,7 +816,8 @@ const serializeVoice = (
 				activeStaff = effectiveStaff;
 				parts.push('\\staff "' + activeStaff + '"');
 				// Emit the target staff's clef if it differs from what was last emitted for this staff
-				const targetClef = allStaffClefs?.[activeStaff];
+				const targetClef =
+					emittedClefs?.[activeStaff] === undefined ? allStaffClefs?.[activeStaff] : undefined;
 				if (targetClef && emittedClefs?.[activeStaff] !== targetClef) {
 					parts.push('\\clef "' + (CLEF_MAP[targetClef] ?? targetClef) + '"');
 					if (emittedClefs) emittedClefs[activeStaff] = targetClef;

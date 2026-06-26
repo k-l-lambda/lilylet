@@ -1,0 +1,8 @@
+% issue: a whole measure sitting entirely on staff 2 (after a prior staff-2
+% voice) with a genuine clef change. The .lyl serializer must emit an explicit
+% \staff "2" anchor even though the cross-measure carry already equals 2 — the
+% parser defaults a directive-less voice to staff 1, so without the anchor the
+% voice and its clef would be relocated to staff 1 on re-parse.
+\staff "1" \clef "treble" \time 2/4 c''4 c'' \\
+\staff "2" \clef "bass" c4 c | %1
+\staff "2" \clef "treble" c'4 c' | %2

@@ -1,0 +1,8 @@
+% issue: single-voice cross-staff with a leading clef. The voice's home staff is
+% 1 with a leading bass clef, but its first note switches to staff 2. The .lyl
+% serializer must emit a \staff "1" home anchor before the clef, otherwise the
+% first inline \staff "2" is read as the leading staff and the bass clef is
+% relocated from staff 1 to staff 2 on re-parse.
+\staff "1" \clef "treble" \time 2/4 c''4 c'' \\
+\staff "2" \clef "bass" c4 c | %1
+\staff "1" \clef "bass" \staff "2" \stemUp c4 \staff "1" \stemDown c | %2
