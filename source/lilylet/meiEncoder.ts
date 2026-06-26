@@ -29,6 +29,7 @@ import {
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { gmProgramOf } from "./gmInstruments";
+import { parseMeasureLayout, expandMeasureLayout } from "./measureLayout";
 
 
 // MEI key signatures: positive = sharps, negative = flats
@@ -1902,8 +1903,9 @@ const BARLINE_TO_MEI: Record<string, string> = {
 
 // Encode a measure
 // encodeMeasure accepts mutable tieState, slurState, hairpinState, ottavaState and clefState that persist across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}): string => {
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}, measureIds?: string[]): string => {
 	const measureId = generateId("measure");
+	if (measureIds) measureIds.push(measureId);
 	let staffContent = '';  // Build staff content first, then add measure tag with barline
 	const allHairpins: HairpinSpan[] = [];
 	const allPedals: PedalMark[] = [];
@@ -2736,6 +2738,11 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += `${indent}${indent}${indent}${indent}<score xml:id="${generateId("score")}">\n`;
 	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol, doc.metadata?.staves, doc.metadata?.instruments);
 	mei += `${indent}${indent}${indent}${indent}${indent}<section xml:id="${generateId("section")}">\n`;
+	// Splice point for an <expansion> element (must be the FIRST child of
+	// <section>, but its plist needs the measure ids collected during the loop
+	// below — so remember where to insert it and build it afterwards).
+	const expansionInsertPos = mei.length;
+	const measureIds: string[] = [];
 
 	// Track tie state across measures for cross-measure ties
 	const tieState: TieState = {};
@@ -2846,8 +2853,36 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 				mei += `${sd}</scoreDef>\n`;
 			}
 		}
-		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements);
+		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds);
 	});
+
+	// Emit an <expansion> describing playback order from the measure-layout
+	// directive ([measures "..."]). Verovio's expand="…" consumes its plist to
+	// unfold repeats for MIDI/time-map output. Inserted as the first child of
+	// <section>; ids were collected in the measure loop above.
+	if (doc.metadata?.measureLayout) {
+		try {
+			const layout = parseMeasureLayout(doc.metadata.measureLayout);
+			const order = expandMeasureLayout(layout);
+			const refs: string[] = [];
+			for (const idx of order) {
+				const id = measureIds[idx - 1];   // 1-based index into notated measures
+				if (id === undefined) {
+					console.warn(`[measures] index ${idx} out of range (only ${measureIds.length} measures); skipping`);
+					continue;
+				}
+				refs.push(`#${id}`);
+			}
+			if (refs.length > 0) {
+				const expIndent = `${indent}${indent}${indent}${indent}${indent}${indent}`;
+				const expXml = `${expIndent}<expansion xml:id="${generateId("expansion")}" plist="${refs.join(" ")}" />\n`;
+				mei = mei.slice(0, expansionInsertPos) + expXml + mei.slice(expansionInsertPos);
+			}
+		}
+		catch (err) {
+			console.warn(`[measures] failed to parse "${doc.metadata.measureLayout}": ${(err as Error).message}`);
+		}
+	}
 
 	mei += `${indent}${indent}${indent}${indent}${indent}</section>\n`;
 	mei += `${indent}${indent}${indent}${indent}</score>\n`;
