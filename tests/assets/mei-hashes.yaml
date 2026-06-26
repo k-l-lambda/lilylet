@@ -69,7 +69,7 @@ cross-staves-simple-notes.lyl: 19f46ec626ffdc4ad5ab8192104aa67e
 cross-staves-tuplet-mix.lyl: 4f5e23057a948188387d88f657650ef9
 demo-BWV114.lyl: eada4560485dbba721b45b62c9181286
 demo-BWV610.lyl: 3df60b66823417a2b6a00cb9b06ad913
-demo-chopin-10-3.lyl: 8c563c369c7b8a1649e5dcc9ab5f0509
+demo-chopin-10-3.lyl: 2c83233845357fe0604feb4ac2358119
 demo-chopin48-1.lyl: f409ea6c55d512e48ab852622f02c94d
 demo-score-0e0a7b.lyl: 3b7ab8647a9d674ba3fc76d4c0200dc0
 dots-double-dot.lyl: aa040772f2976039ef287924440b16bc
@@ -146,6 +146,8 @@ octaves-lower-octave.lyl: 07edfd96621b1b1b7a5aa0fed55e6a75
 octaves-ottava-cross-measure.lyl: 4bf4a16393f45a8caae68e91587c8408
 octaves-ottava-cross-measure2.lyl: 6ff94eb79fe80d74901f5184bbfcb106
 octaves-ottava-down.lyl: 2d5ae5107edfb3ceeeb22d4abca3a471
+octaves-ottava-over-tuplet.lyl: d457c30b15a05b90ad68e33b58b40c7e
+octaves-ottava-sequential-cross-measure.lyl: 908c2b3655cd165f0551743de5b2ceb9
 octaves-ottava-up.lyl: 7fbb6515d846ca6ec794afc995ae1643
 partial-correct.lyl: 591e36dc8dcdd78cc67c93786cb4339f
 partial-dotted.lyl: 52622b1edc1a3af7226717688dbbdde3

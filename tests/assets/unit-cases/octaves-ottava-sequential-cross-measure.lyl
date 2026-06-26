@@ -1,0 +1,12 @@
+% Three SEQUENTIAL cross-measure ottava spans (each opens in one bar, closes at the
+% start of the next). Regression guard for the encoder bug where a stop landing at a
+% measure's START (no note yet in the layer) was skipped — the span "stayed alive",
+% carried forward, and the next same-value \ottava #1 was folded in as a continuation,
+% collapsing all three spans into one (corpus: 哈农 No.57 18→8). Must emit 3 distinct
+% <octave> spans, each ending on the last note of its opening measure.
+\staff "1" \clef "treble" \ottava #1 c'8 d' e' f' g' a' b' c'' |
+\ottava #0 c'8 d' e' f' g' a' b' c'' |
+\ottava #1 c'8 d' e' f' g' a' b' c'' |
+\ottava #0 c'8 d' e' f' g' a' b' c'' |
+\ottava #1 c'8 d' e' f' g' a' b' c'' |
+\ottava #0 c'8 d' e' f' g' a' b' c'' |

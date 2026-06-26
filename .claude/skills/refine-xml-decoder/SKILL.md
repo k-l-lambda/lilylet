@@ -254,7 +254,54 @@ the **serializer/parser**, not the decoder/encoder (both routes share the encode
 Tool: `tests/clef-consistency.local.ts` (`--all` / `--limit N` / file args). On the
 6292-file corpus this went 360-ish → 12 → 2 as the bugs below were fixed.
 
-### Serializer/parser asymmetry — the parser's staff default is the contract
+### 16. Ottava span anchoring — encoder drops spans over tuplets/rests & collapses sequential cross-measure spans (FIXED)
+Pattern #11 fixed the DECODER-side ottava pairing (start/stop split across staves).
+A later cross-engine audit (`tests/ottava-audit.local.ts`, source `<octave-shift
+type="up|down">` start count as ground truth — **verovio matches it exactly**,
+1151/1151 on a 300-file sample, so verovio is faithful here) showed lilylet still at
+892/1151 (−259, 96 files). A doc-model trace (`ottava-trace.local.ts`) put the loss
+ENTIRELY in the **encoder** (decoder retained every start+stop), in two bugs:
+- **(a) tuplets/rests never anchored a span.** The open/extend/close logic lived
+  ONLY in `encodeLayer`'s `case 'note'`. An 8va covering a tuplet run (ubiquitous in
+  etudes) or sitting over rests never opened `currentOctave`, so the whole `<octave>`
+  vanished (车尔尼 Op.299 No.26 10→0, Op.849 No.20 7→0). **Fix:** extract three
+  closures — `applyPendingOttavaShift()` (pitch shift before encoding),
+  `extendOttavaEnd(lastId)` (resolve a carried span's deferred endToken), and
+  `applyOttavaAnchor(firstId)` (open/continue the span) — and call them from the
+  rest and tuplet cases too. Tuplets must expose a `lastNoteId` (not just
+  `firstNoteId`) on `TupletEventResult` so the span ends on the tuplet's LAST inner
+  note; anchor opens on the FIRST. Recovered +114 spans (→1006).
+- **(b) sequential cross-measure spans collapsed into one.** When a `\ottava #0`
+  stop lands at the START of the next measure (no note yet in that layer),
+  `lastNoteId` is null, so the close was skipped → the carried span "stayed alive",
+  re-carried, and the next same-value `\ottava #1` was folded in as a *continuation*,
+  merging N spans into one (哈农 No.57 18→8). **Fix:** add a branch — when the stop
+  arrives with `currentOctave.emitted` true (already emitted+carried from a prior
+  measure), just clear the slot and mark `ottavaExplicitlyClosed`; do NOT rewrite the
+  endToken (it was already resolved to the correct last note by `extendOttavaEnd` as
+  the span ran through intermediate measures, or by the staff-carry `endFallbackId`).
+  **Trap:** an earlier version wrote `endFallbackId` here, but that's the OPENING
+  measure's last note — stale for a span that ran through intermediate bars; the m3
+  close then overwrote the correct m2 endpoint. The endToken is already correct;
+  leave it. Span endpoints verified note-by-index on a synthetic (3-measure span ends
+  at m2-last; 3 sequential spans each span one bar). Net 892→1043 of 1151.
+**Deferred residual (108 drops, same call as cross-voice slurs #12):**
+- **concurrent (51, 25 files):** two `<octave-shift>` distinguished by `number=` open
+  at once (often one per staff, both 8va-above so value-keying can't tell them apart).
+  The decoder discards `number` (keeps only `type,size`) and `ContextChange.ottava`
+  is a bare number with no span identity — and `\ottava #1` in the `.lyl` text has no
+  slot for one either. A real fix is a cross-cutting refactor of decoder + doc model +
+  grammar + serializer + encoder to a `number`-keyed multi-slot tracker — high-risk on
+  the hot path, rare notation, mostly −1/−2. Deferred.
+- **degenerate (28, 13 files):** a start immediately followed by a stop with NO event
+  between (狮王 −15: every bar is `[ott][ott=0]` before the notes). Malformed source —
+  **even verovio warns** "octave could not be closed". Don't force a count match (would
+  emit questionable zero-length spans); golden rule says don't chase verovio here.
+- **crossbar edge (29):** mixed bag of the above + multi-measure spans whose stop is
+  not at bar start. Handle case-by-case only if a single file dominates.
+Unit cases: `octaves-ottava-over-tuplet.lyl`, `octaves-ottava-sequential-cross-measure.lyl`.
+
+
 The parser (`lilylet.jison` `voice()`) assigns every voice with NO leading `\staff`
 directive to **staff 1**, unconditionally — it does NOT carry staff across voices or
 measures. The serializer, however, tracks a cross-measure `currentStaff` carry and a

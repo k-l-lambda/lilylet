@@ -1,0 +1,6 @@
+% Ottava span over a TUPLET run. Regression guard for the encoder bug where the
+% ottava open/close logic lived only in `case 'note'`, so a span covering a tuplet
+% (ubiquitous in etudes) was never opened and the whole <octave> vanished
+% (corpus: 车尔尼 Op.299 No.26 10→0, Op.849 No.20 7→0). The tuplet must anchor the
+% span on its first inner note and close it on its last.
+\staff "1" \clef "treble" \ottava #1 \times 2/3 { c''8 d'' e'' } \times 2/3 { f'' g'' a'' } \ottava #0 c'4 |

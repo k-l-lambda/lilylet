@@ -748,6 +748,7 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0,
 interface TupletEventResult {
 	xml: string;
 	firstNoteId: string | null;  // ID of first note in tuplet (for attaching pending markups)
+	lastNoteId: string | null;   // ID of last note/rest in tuplet (for closing/extending ottava spans)
 	slurStarts: string[];  // Note IDs that start slurs
 	slurEnds: string[];    // Note IDs that end slurs
 	dynamics: DynamRef[];
@@ -794,6 +795,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 	// Collect control event info from notes inside tuplet
 	let firstNoteId: string | null = null;
+	let lastNoteId: string | null = null;  // last note/rest id — anchors an ottava span end
 	const slurStarts: string[] = [];
 	const slurEnds: string[] = [];
 	const dynamics: DynamRef[] = [];
@@ -833,6 +835,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			xml += result.xml;
 
 			if (!firstNoteId) firstNoteId = result.elementId;
+			lastNoteId = result.elementId;
 
 			// Collect slur info
 			if (result.slurStart) slurStarts.push(result.elementId);
@@ -863,6 +866,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			const restIndent = beamOpen ? baseIndent + '    ' : baseIndent;
 			const restResult = restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift, measureAccidentals);
 			xml += restResult.xml;
+			lastNoteId = restResult.elementId;
 			if (restResult.fermata) fermatas.push({ startid: restResult.elementId, shape: restResult.fermata === 'short' ? 'angular' : undefined });
 		} else if (e.type === 'context') {
 			const ctx = e as ContextChange;
@@ -885,7 +889,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	}
 
 	xml += `${indent}</tuplet>\n`;
-	return { xml, firstNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios, pedals, fingerings, markups, endingClef };
+	return { xml, firstNoteId, lastNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios, pedals, fingerings, markups, endingClef };
 };
 
 
@@ -1143,6 +1147,39 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	let lastNoteId: string | null = null;  // Track last note id for ending ottava spans
 	let ottavaExplicitlyClosed: boolean = false;  // Track if ottava was explicitly closed by \ottava #0
 
+	// ── Ottava span anchoring (shared by note / rest / tuplet cases) ──
+	// Originally the open/extend/close logic lived ONLY in `case 'note'`, so an
+	// ottava span running over a tuplet run (ubiquitous in etudes) or over rests
+	// was never opened — the whole span vanished (No.26 10→0, No.20 7→0). These
+	// helpers let any event type anchor a span. Mirror the note-case ordering:
+	// the caller updates lastNoteId to the event's first emitted id, THEN calls
+	// these.
+	// Apply a pending ottava's pitch shift before the event's notes are encoded.
+	const applyPendingOttavaShift = (): void => {
+		if (pendingOttava !== null && pendingOttava !== 0) currentOttavaShift = pendingOttava;
+	};
+	// Extend a carried (endToken) span's end to this event's last emitted id.
+	const extendOttavaEnd = (lastId: string): void => {
+		if (currentOctave?.endToken) octaveEndReplacements[currentOctave.endToken] = lastId;
+	};
+	// Open the pending ottava span on `anchorId` (the event's FIRST emitted id),
+	// closing any open span of a different value first; or resolve a continued span.
+	const applyOttavaAnchor = (anchorId: string): void => {
+		if (pendingOttava !== null && pendingOttava !== 0) {
+			const dis: 8 | 15 = Math.abs(pendingOttava) === 2 ? 15 : 8;
+			const disPlace: 'above' | 'below' = pendingOttava > 0 ? 'above' : 'below';
+			if (currentOctave && (currentOctave.dis !== dis || currentOctave.disPlace !== disPlace)) {
+				octaves.push({ dis: currentOctave.dis, disPlace: currentOctave.disPlace, startId: currentOctave.startId, endId: anchorId });
+				currentOctave = null;
+			}
+			if (!currentOctave) currentOctave = { dis, disPlace, startId: anchorId };
+			pendingOttava = null;
+		} else if (currentOctave?.continued) {
+			if (!currentOctave.endToken) currentOctave.startId = anchorId;
+			currentOctave.continued = false;
+		}
+	};
+
 	// Track slur spans - slurs must be encoded as control events in MEI.
 	// A single slot can't hold the overlapping/concurrent slurs that piano writing
 	// produces (measured up to 3 open at once per voice); a new start while one was
@@ -1248,9 +1285,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				const tieEnd = pendingTiePitches.length > 0 && pitchesMatch(pendingTiePitches, noteEvent.pitches);
 
 				// If there's a pending ottava, apply it BEFORE encoding the note
-				if (pendingOttava !== null && pendingOttava !== 0) {
-					currentOttavaShift = pendingOttava;  // Apply the shift for this note
-				}
+				applyPendingOttavaShift();
 
 				// For cross-staff notation: set note's staff to currentStaff if different from voice.staff
 				const effectiveNoteEvent = currentStaff !== voice.staff
@@ -1260,9 +1295,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift, measureAccidentals);
 				xml += result.xml;
 				lastNoteId = result.elementId;
-				if (currentOctave?.endToken) {
-					octaveEndReplacements[currentOctave.endToken] = result.elementId;
-				}
+				extendOttavaEnd(result.elementId);
 
 				// Flush any pending markups onto this note
 				flushPendingMarkups(result.elementId);
@@ -1271,32 +1304,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				flushPendingDynamics(result.elementId);
 
 				// If there's a pending ottava, start the span on this note
-				if (pendingOttava !== null && pendingOttava !== 0) {
-					const dis: 8 | 15 = Math.abs(pendingOttava) === 2 ? 15 : 8;
-					const disPlace: 'above' | 'below' = pendingOttava > 0 ? 'above' : 'below';
-					// Close existing span first if it has a different value
-					if (currentOctave && (currentOctave.dis !== dis || currentOctave.disPlace !== disPlace)) {
-						if (lastNoteId) {
-							octaves.push({
-								dis: currentOctave.dis,
-								disPlace: currentOctave.disPlace,
-								startId: currentOctave.startId,
-								endId: lastNoteId,
-							});
-						}
-						currentOctave = null;
-					}
-					// Start new span if we don't already have one with the same value
-					if (!currentOctave) {
-						currentOctave = { dis, disPlace, startId: result.elementId };
-					}
-					pendingOttava = null;
-				} else if (currentOctave?.continued) {
-					if (!currentOctave.endToken) {
-						currentOctave.startId = result.elementId;
-					}
-					currentOctave.continued = false;
-				}
+				applyOttavaAnchor(result.elementId);
 
 				// Update pending tie pitches
 				if (result.hasTieStart) {
@@ -1394,22 +1402,37 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 			case 'rest': {
 				// For cross-staff notation: pass staff number if different from voice's home staff
 				const restCrossStaff = currentStaff !== (voice.staff || 1) ? currentStaff : undefined;
+				// A pending ottava shift applies to a rest's gestural octave too.
+				applyPendingOttavaShift();
 				const restResult = restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals, restCrossStaff);
 				xml += restResult.xml;
+				lastNoteId = restResult.elementId;
+				// An ottava span may open on, run through, or close at a rest (e.g. a
+				// span that starts just before LH rests). Anchor it like a note.
+				extendOttavaEnd(restResult.elementId);
+				applyOttavaAnchor(restResult.elementId);
 				// Fermata over a rest (held silence) — emit as a control event on the rest.
 				if (restResult.fermata) fermatas.push({ startid: restResult.elementId, shape: restResult.fermata === 'short' ? 'angular' : undefined });
 				// A leading dynamic/markup attaches to the next event, which may be this rest
 				flushPendingMarkups(restResult.elementId);
 				flushPendingDynamics(restResult.elementId);
-				lastNoteId = restResult.elementId;
 				break;
 			}
 			case 'tuplet':
 			case 'times': {
 				// Tuplet can be nested inside beam in MEI: <beam><tuplet>...</tuplet></beam>
 				// Pass beamElementOpen to tuplet so it knows not to create its own beam
+				// A pending ottava shift applies to the tuplet's notes' written octave.
+				applyPendingOttavaShift();
 				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen, measureAccidentals, currentClef);
 				xml += tupletResult.xml;
+
+				// An ottava span can open on, run through, or close at a tuplet (common
+				// in etudes where the 8va covers a whole tuplet run). Anchor the span on
+				// the tuplet's FIRST note and let its LAST note close/extend it — without
+				// this the entire span was dropped (start/close lived only in case 'note').
+				if (tupletResult.firstNoteId) applyOttavaAnchor(tupletResult.firstNoteId);
+				if (tupletResult.lastNoteId) extendOttavaEnd(tupletResult.lastNoteId);
 
 				// Propagate clef change from inside the tuplet to the parent tracker
 				if (tupletResult.endingClef) {
@@ -1420,7 +1443,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				if (tupletResult.firstNoteId) {
 					flushPendingMarkups(tupletResult.firstNoteId);
 					flushPendingDynamics(tupletResult.firstNoteId);
-					lastNoteId = tupletResult.firstNoteId;
+					lastNoteId = tupletResult.lastNoteId ?? tupletResult.firstNoteId;
 				}
 
 				// Process slur ends first (to close open slurs, LIFO), then starts.
@@ -1482,9 +1505,22 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 							}
 							currentOctave = null;
 							ottavaExplicitlyClosed = true;  // Mark that we explicitly closed the span
+						} else if (currentOctave && currentOctave.emitted) {
+							// Stop landed at measure START (no note yet in this layer) but the
+							// span was carried+emitted in a PREVIOUS measure: it genuinely ends
+							// here. Its deferred endToken was already resolved to the correct
+							// last note by extendOttavaEnd as the span ran through prior measures
+							// (or by the staff-level carry's endFallbackId), so DON'T rewrite it
+							// here — just clear the slot and mark closed, so a later same-value
+							// ottava opens a NEW span instead of folding into this one.
+							// Without this, sequential cross-measure spans collapse into one
+							// (No.57: 18 spans → 8).
+							currentOctave = null;
+							ottavaExplicitlyClosed = true;
 						}
-						// Note: if no lastNoteId (e.g., at measure start), keep currentOctave alive
-						// It may be continued by a subsequent ottava command with the same value
+						// Note: if no lastNoteId and not yet emitted (e.g., open+close at
+						// measure start with no notes), keep currentOctave alive — it may be
+						// continued by a subsequent ottava command with the same value.
 						currentOttavaShift = 0;  // Reset the shift (will be restored if continued)
 					} else {
 						// Check if this continues an existing span (same value)
