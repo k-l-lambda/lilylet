@@ -424,6 +424,12 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 	const isChord = hasElement(noteEl, 'chord');
 	const isRest = hasElement(noteEl, 'rest');
 	const isGrace = hasElement(noteEl, 'grace');
+	// <rest measure="yes"> is a whole-measure rest whose real duration is the
+	// measure length (e.g. 24 ticks in 3/4), not a literal whole note. Flag it so
+	// the decoder emits a full-measure rest instead of rounding the bare duration
+	// to a power-of-two division (which mis-sizes the bar — 3/4 → whole = +8 ticks).
+	const restEl = isRest ? noteEl.getElementsByTagName('rest')[0] : undefined;
+	const isMeasureRest = restEl ? getAttribute(restEl, 'measure') === 'yes' : false;
 
 	let pitch: MusicXmlPitch | undefined;
 	const pitchEl = noteEl.getElementsByTagName('pitch')[0];
@@ -490,6 +496,7 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 		isChord,
 		isRest,
 		isGrace,
+		isMeasureRest,
 		pitch,
 		duration: {
 			divisions: durationVal,
@@ -1150,6 +1157,13 @@ const convertMeasure = (
 					type: 'rest',
 					duration,
 				};
+
+				// Whole-measure rest: mark it so encoders emit <mRest>/R and downstream
+				// duration math uses the measure length, not the power-of-two rounding
+				// of the bare <duration> (which over/under-fills non-2^n meters like 3/4).
+				if (note.isMeasureRest) {
+					restEvent.fullMeasure = true;
+				}
 
 				// A rest can host a fermata (grand pause / held silence). Convert it
 				// so the encoder can emit <fermata startid="#rest">; without this the

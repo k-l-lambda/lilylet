@@ -69,6 +69,7 @@ export interface MusicXmlNote {
 	isChord: boolean;           // Has <chord/> tag
 	isRest: boolean;            // Has <rest/> tag
 	isGrace: boolean;           // Has <grace/> tag
+	isMeasureRest?: boolean;    // <rest measure="yes"> — fills the whole measure
 	pitch?: MusicXmlPitch;
 	duration: MusicXmlDuration;
 	voice: number;              // Voice number (1-based)
