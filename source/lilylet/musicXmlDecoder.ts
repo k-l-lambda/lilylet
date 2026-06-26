@@ -69,6 +69,7 @@ import {
 	createFraction,
 	TYPE_TO_DIVISION,
 } from './musicXmlUtils';
+import { measureLayoutFromPart } from './measureLayoutFromXml';
 
 // ============ Spanner Tracker ============
 
@@ -630,6 +631,25 @@ const parseDirection = (dirEl: Element): MusicXmlDirection => {
 	result.placement = getAttribute(dirEl, 'placement') as 'above' | 'below' | undefined;
 	result.staff = getElementInt(dirEl, 'staff');
 
+	// Navigation jumps live on the <sound> child of <direction> (a sibling of
+	// <direction-type>). Parse it first, before the no-direction-type early return,
+	// so a sound-only direction still contributes its jump semantics.
+	const soundEl = dirEl.getElementsByTagName('sound')[0];
+	if (soundEl) {
+		const sound: NonNullable<MusicXmlDirection['sound']> = {};
+		if (getAttribute(soundEl, 'dacapo') === 'yes') sound.dacapo = true;
+		if (getAttribute(soundEl, 'fine') === 'yes') sound.fine = true;
+		const dalsegno = getAttribute(soundEl, 'dalsegno');
+		if (dalsegno) sound.dalsegno = dalsegno;
+		const segno = getAttribute(soundEl, 'segno');
+		if (segno) sound.segno = segno;
+		const coda = getAttribute(soundEl, 'coda');
+		if (coda) sound.coda = coda;
+		const tocoda = getAttribute(soundEl, 'tocoda');
+		if (tocoda) sound.tocoda = tocoda;
+		if (Object.keys(sound).length > 0) result.sound = sound;
+	}
+
 	const dirTypeEl = dirEl.getElementsByTagName('direction-type')[0];
 	if (!dirTypeEl) {
 		return result;
@@ -722,7 +742,8 @@ const parseBarline = (barlineEl: Element): MusicXmlBarline => {
 	if (repeatEl) {
 		const direction = getAttribute(repeatEl, 'direction') as 'forward' | 'backward';
 		if (direction) {
-			result.repeat = { direction };
+			const times = getAttributeNumber(repeatEl, 'times');
+			result.repeat = times !== undefined ? { direction, times } : { direction };
 		}
 	}
 
@@ -1065,7 +1086,10 @@ const directionToMarks = (
 	// Tempo words ("Allegro", "a tempo", ...) are consumed separately as a tempo
 	// ContextChange by directionToContextChange, so skip those here to avoid
 	// double-emitting; everything else becomes a markup mark → MEI <dir>. Metronome
-	// directions are tempo too, never markup.
+	// directions are tempo too, never markup. Navigation text ("D.C. al Fine",
+	// "To Coda", "Fine", "D.S. al Coda") is NOT a tempo word, so it flows here as a
+	// markup glyph — the jump SEMANTICS are captured separately as measure-layout.
+	let emittedWords = false;
 	if (direction.words && direction.words.length > 0 && !direction.metronome) {
 		const text = direction.words.map(w => w.text).join('').trim();
 		if (text && !isTempoWord(text)) {
@@ -1073,6 +1097,27 @@ const directionToMarks = (
 				: direction.placement === 'below' ? Placement.below
 				: undefined;
 			marks.push({ markType: 'markup', content: text, placement });
+			emittedWords = true;
+		}
+	}
+
+	// A <sound> navigation with NO visible <words> (e.g. a bare <sound tocoda=>):
+	// synthesize the conventional glyph text so the score still shows the marking.
+	// Segno/coda GLYPHS (the symbols, via <direction-type><segno|coda>) are already
+	// emitted above as NavigationMark; only the textual D.C./D.S./Fine/To-Coda need
+	// synthesizing, and only when the engraver left them implicit.
+	if (!emittedWords && direction.sound && !direction.coda && !direction.segno) {
+		const s = direction.sound;
+		const label = s.dacapo ? (s.fine ? 'D.C. al Fine' : 'D.C.')
+			: s.dalsegno ? (s.fine ? 'D.S. al Fine' : 'D.S. al Coda')
+			: s.tocoda ? 'To Coda'
+			: s.fine ? 'Fine'
+			: undefined;
+		if (label) {
+			const placement = direction.placement === 'above' ? Placement.above
+				: direction.placement === 'below' ? Placement.below
+				: undefined;
+			marks.push({ markType: 'markup', content: label, placement });
 		}
 	}
 
@@ -1813,6 +1858,14 @@ export const decode = (input: string | Uint8Array): LilyletDoc => {
 	const result: LilyletDoc = {
 		measures: mergedMeasures,
 	};
+
+	// Derive the performance order (repeats / voltas / D.C. / D.S. / Coda / Fine)
+	// from the first part's barline + <sound> navigation markup → measure-layout
+	// string. The MEI encoder turns this into an <expansion> that verovio unfolds
+	// for MIDI. Repeat markup is part-global; the first part carries it. Never
+	// throws (returns undefined when there is nothing to unfold).
+	const measureLayout = measureLayoutFromPart(partEls[0]);
+	if (measureLayout) metadata.measureLayout = measureLayout;
 
 	if (Object.keys(metadata).length > 0) {
 		result.metadata = metadata;

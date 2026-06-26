@@ -36,6 +36,40 @@ import {
 	Placement,
 	Metadata,
 } from "./types";
+import { parseMeasureLayout, MeasureLayout } from "./measureLayout";
+
+
+// Walk a measure-layout AST, recording the FIRST measure index of each alternate
+// ending (1st/2nd house) → its ending number, for the `% volta N` serializer
+// comment convention. Only the alternates of a VoltaMLayout produce labels.
+const collectVoltaLabels = (layout: MeasureLayout, out: Map<number, number>): void => {
+	const firstIndexOf = (node: MeasureLayout): number | undefined => {
+		switch (node.kind) {
+		case "single": return node.measure;
+		case "block": return node.seq.length ? firstIndexOf(node.seq[0]) : undefined;
+		case "volta": return node.body.length ? firstIndexOf(node.body[0]) : undefined;
+		case "aba": return firstIndexOf(node.main);
+		}
+	};
+	const walk = (node: MeasureLayout): void => {
+		switch (node.kind) {
+		case "block": node.seq.forEach(walk); break;
+		case "aba": walk(node.main); node.rest.forEach(walk); break;
+		case "volta":
+			node.body.forEach(walk);
+			if (node.alternates) {
+				node.alternates.forEach((alt, ai) => {
+					const first = alt.length ? firstIndexOf(alt[0]) : undefined;
+					if (first !== undefined && !out.has(first)) out.set(first, ai + 1);
+					alt.forEach(walk);
+				});
+			}
+			break;
+		default: break;
+		}
+	};
+	walk(layout);
+};
 
 
 const PHONETS = "cdefgab";
@@ -1105,9 +1139,26 @@ export const serializeLilyletDoc = (doc: LilyletDoc): string => {
 		currentStaff = newStaff;
 	}
 
-	// Join measures with bar, measure number comment, and double newline
+	// Volta house-label comments (non-binding convention, like the `% n` measure
+	// index): if a measure-layout directive is present, mark the first measure of
+	// each alternate ending with a `% volta N` comment. Derived from the layout
+	// AST; purely cosmetic, never parsed back.
+	const voltaLabels = new Map<number, number>();  // 1-based measure index → ending number
+	if (doc.metadata?.measureLayout) {
+		try {
+			const layout = parseMeasureLayout(doc.metadata.measureLayout);
+			collectVoltaLabels(layout, voltaLabels);
+		} catch { /* ignore malformed layout */ }
+	}
+
+	// Join measures with bar, measure number comment, and double newline. A
+	// `% volta N` label (if any) is prepended on its own line before the measure.
 	const measuresOutput = measureStrs
-		.map((m, i) => m + ' | %' + (i + 1))
+		.map((m, i) => {
+			const label = voltaLabels.get(i + 1);
+			const prefix = label !== undefined ? '% volta ' + label + '\n' : '';
+			return prefix + m + ' | %' + (i + 1);
+		})
 		.join('\n\n');
 	parts.push(measuresOutput);
 

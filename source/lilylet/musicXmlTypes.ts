@@ -124,6 +124,17 @@ export interface MusicXmlDirection {
 	octaveShift?: MusicXmlOctaveShift;
 	coda?: boolean;
 	segno?: boolean;
+	// Navigation jumps from the <sound> sibling inside <direction>. Present when
+	// the score carries D.C./D.S./Coda/Fine playback semantics; drives the
+	// performance-order (measure-layout) derivation, not a notational glyph.
+	sound?: {
+		dacapo?: boolean;          // <sound dacapo="yes"> — da capo
+		dalsegno?: string;         // <sound dalsegno="N"> — dal segno (target segno id)
+		segno?: string;            // <sound segno="N"> — marks a segno point
+		coda?: string;             // <sound coda="N"> — marks a coda point
+		tocoda?: string;           // <sound tocoda="N"> — "to coda" jump
+		fine?: boolean;            // <sound fine="yes"> — Fine (stop point on D.C./D.S.)
+	};
 }
 
 // ============ Barline Types ============
@@ -133,6 +144,7 @@ export interface MusicXmlBarline {
 	barStyle?: string;          // regular, light-light, light-heavy, heavy-light, heavy-heavy, etc.
 	repeat?: {
 		direction: 'forward' | 'backward';
+		times?: number;          // <repeat times="N"> — repeat count (default 2 for backward)
 	};
 	ending?: {
 		type: 'start' | 'stop' | 'discontinue';

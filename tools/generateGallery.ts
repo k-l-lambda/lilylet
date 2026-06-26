@@ -34,6 +34,7 @@ const getCategory = (name: string): string => {
     if (name.startsWith('hairpins-')) return 'hairpins';
     if (name.startsWith('harmony-')) return 'harmony';
     if (name.startsWith('markup-')) return 'markup';
+    if (name.startsWith('measures-')) return 'measures';
     if (name.startsWith('key-signatures-')) return 'key-signatures';
     if (name.startsWith('multiple-')) return 'multiple';
     if (name.startsWith('navigation-')) return 'navigation';
