@@ -1038,7 +1038,7 @@ interface SlurSpan {
 
 // Tie state for cross-measure ties - maps staff:layer to pending pitches
 type TieState = Record<string, Pitch[]>;
-type SlurState = Record<string, string | null>;  // voice key -> pending slur startId
+type SlurState = Record<string, string[]>;  // voice key -> open slur startIds (stack, oldest first)
 type HairpinState = Record<string, { form: 'cres' | 'dim'; startId: string } | null>;  // voice key -> pending hairpin
 
 // Pending octave span for cross-measure continuation
@@ -1073,7 +1073,7 @@ interface LayerResult {
 	barlines: BarlineRef[];
 	markups: MarkupRef[];
 	pendingTiePitches: Pitch[];  // For cross-measure tie tracking
-	pendingSlur: string | null;  // For cross-measure slur tracking (startId)
+	pendingSlur: string[];  // For cross-measure slur tracking (all open slur startIds)
 	pendingHairpin: { form: 'cres' | 'dim'; startId: string } | null;  // For cross-measure hairpin tracking
 	pendingOctave: PendingOctave | null;  // For cross-measure ottava span tracking
 	ottavaExplicitlyClosed: boolean;  // True if ottava was closed by explicit \ottava #0 in this layer
@@ -1112,7 +1112,7 @@ const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TimesEve
 };
 
 // Encode a layer (voice)
-const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlur: string | null = null, initialHairpin: { form: 'cres' | 'dim'; startId: string } | null = null, initialOctave: PendingOctave | null = null): LayerResult => {
+const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlurs: string[] = [], initialHairpin: { form: 'cres' | 'dim'; startId: string } | null = null, initialOctave: PendingOctave | null = null): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -1143,9 +1143,15 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	let lastNoteId: string | null = null;  // Track last note id for ending ottava spans
 	let ottavaExplicitlyClosed: boolean = false;  // Track if ottava was explicitly closed by \ottava #0
 
-	// Track slur spans - slurs must be encoded as control events in MEI
+	// Track slur spans - slurs must be encoded as control events in MEI.
+	// A single slot can't hold the overlapping/concurrent slurs that piano writing
+	// produces (measured up to 3 open at once per voice); a new start while one was
+	// open overwrote it and the span was lost. Use a STACK and pair each end to the
+	// most-recent open slur (LIFO), matching the hairpin fix. `currentSlur` is kept
+	// as a view of the stack top for the existing cross-measure carry plumbing.
 	const slurs: SlurSpan[] = [];
-	let currentSlur: { startId: string } | null = initialSlur ? { startId: initialSlur } : null;
+	const openSlurs: { startId: string }[] = initialSlurs.map(startId => ({ startId }));
+	let currentSlur: { startId: string } | null = openSlurs.length ? openSlurs[openSlurs.length - 1] : null;
 
 	// Track arpeggio refs
 	const arpeggios: ArpegRef[] = [];
@@ -1330,17 +1336,19 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				}
 
 				// Track slur spans - end must be processed before start
-				// in case a note ends one slur and starts another
-				if (result.slurEnd && currentSlur) {
+				// in case a note ends one slur and starts another.
+				// Pair an end to the most-recent open slur (LIFO).
+				if (result.slurEnd && openSlurs.length > 0) {
+					const open = openSlurs.pop()!;
 					slurs.push({
-						startId: currentSlur.startId,
+						startId: open.startId,
 						endId: result.elementId,
 					});
-					currentSlur = null;
 				}
 				if (result.slurStart) {
-					currentSlur = { startId: result.elementId };
+					openSlurs.push({ startId: result.elementId });
 				}
+				currentSlur = openSlurs.length ? openSlurs[openSlurs.length - 1] : null;
 
 				// Track arpeggio refs
 				if (result.arpeggio) {
@@ -1415,21 +1423,22 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					lastNoteId = tupletResult.firstNoteId;
 				}
 
-				// Process slur ends first (to close any pending slurs from before this tuplet)
+				// Process slur ends first (to close open slurs, LIFO), then starts.
 				for (const endId of tupletResult.slurEnds) {
-					if (currentSlur) {
+					if (openSlurs.length > 0) {
+						const open = openSlurs.pop()!;
 						slurs.push({
-							startId: currentSlur.startId,
+							startId: open.startId,
 							endId: endId,
 						});
-						currentSlur = null;
 					}
 				}
 
 				// Then process slur starts (to open new slurs)
 				for (const startId of tupletResult.slurStarts) {
-					currentSlur = { startId };
+					openSlurs.push({ startId });
 				}
+				currentSlur = openSlurs.length ? openSlurs[openSlurs.length - 1] : null;
 
 				// Collect other control events from tuplet
 				dynamics.push(...tupletResult.dynamics);
@@ -1599,7 +1608,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: currentSlur?.startId || null, pendingHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift, octaveEndReplacements };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: openSlurs.map(s => s.startId), pendingHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift, octaveEndReplacements };
 };
 
 // Staff result type
@@ -1665,7 +1674,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			const layerN = vi + 1;
 			const tieKey = `${staffN}-${layerN}`;
 			const initialTies = tieState[tieKey] || [];
-			const initialSlur = slurState[tieKey] || null;
+			const initialSlur = slurState[tieKey] || [];
 			const initialHairpin = hairpinState[tieKey] || null;
 			const initialOctave = ottavaState[tieKey] || null;
 			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef, initialSlur, initialHairpin, initialOctave);
@@ -1691,9 +1700,9 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 				pendingTies[tieKey] = result.pendingTiePitches;
 			}
 			// Track pending slurs for this layer
-			if (result.pendingSlur) {
-				pendingSlurs[tieKey] = result.pendingSlur;
-			}
+			// Always record (even empty) so a measure that closed all its slurs
+			// clears the carried stack rather than leaving a stale open slur.
+			pendingSlurs[tieKey] = result.pendingSlur;
 			// Track pending hairpins for this layer
 			if (result.pendingHairpin) {
 				pendingHairpins[tieKey] = result.pendingHairpin;

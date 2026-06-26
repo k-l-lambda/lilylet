@@ -157,6 +157,7 @@ export interface Tie {
 export interface Slur {
 	markType: 'slur';
 	start: boolean;
+	number?: number;	// MusicXML slur number, for pairing cross-voice/overlapping slurs (encoder hint only)
 }
 
 export interface Beam {

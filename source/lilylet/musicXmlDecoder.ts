@@ -799,12 +799,13 @@ const notationsToMarks = (
 	if (notations.slurs) {
 		for (const slur of notations.slurs) {
 			if (slur.type === 'start') {
-				marks.push({ markType: 'slur', start: true });
+				marks.push({ markType: 'slur', start: true, number: slur.number });
 				spannerTracker.startSlur(slur.number);
 			} else if (slur.type === 'stop') {
-				if (spannerTracker.stopSlur(slur.number)) {
-					marks.push({ markType: 'slur', start: false });
-				}
+				// Carry the MusicXML number so the encoder can pair cross-voice slurs
+				// (start in one voice, stop in another — common in piano scores).
+				spannerTracker.stopSlur(slur.number);
+				marks.push({ markType: 'slur', start: false, number: slur.number });
 			}
 		}
 	}
