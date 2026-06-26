@@ -1166,6 +1166,15 @@ const convertMeasure = (
 	// layer (otherwise the encoder can't pair them and drops the span).
 	const pendingContextChanges: { ctx: ContextChange; staff?: number }[] = [];
 	let currentVoice = 1;  // Track current voice for directions
+	// Mid-measure clef support: a staff can change clef partway through a measure
+	// (common in scale/arpeggio études where the LH crosses up). Such a clef arrives
+	// in an <attributes> block AFTER notes on that staff. We must attach it inline at
+	// that point on the staff's currently-active voice, not collapse it into the
+	// measure-start `clefs` map (which keeps only one clef per staff and emits it at
+	// the bar start). Track the last voice that added a note on each staff, and which
+	// staves already have notes this measure.
+	const lastVoiceOnStaff: Map<number, number> = new Map();
+	const staffHasNotes: Set<number> = new Set();
 
 	// Process all children in order
 	for (const child of getChildElements(measureEl)) {
@@ -1197,7 +1206,30 @@ const convertMeasure = (
 				for (const clefEntry of attrs.clefs) {
 					const clef = convertClef(clefEntry.clef.sign, clefEntry.clef.line);
 					if (clef) {
-						clefs.set(clefEntry.staff, { type: 'context', clef });
+						const staff = clefEntry.staff;
+						if (staffHasNotes.has(staff)) {
+							// Mid-measure clef change: this staff already has notes in this
+							// measure, so the clef takes effect HERE, not at the bar start.
+							// Append it inline on the staff's currently-active voice via
+							// addEvent (which inserts a staff-switch context if that voice is
+							// currently positioned on another staff — e.g. a cross-staff
+							// voice — so the clef binds to `staff`, not the voice's current
+							// staff). Zero duration: a clef does not advance time.
+							const vNum = lastVoiceOnStaff.get(staff);
+							if (vNum !== undefined) {
+								// Tag the clef context with its staff explicitly. In a
+								// cross-staff voice (where notes interleave staves) a bare
+								// clef is ambiguous and is dropped/misplaced by the serializer;
+								// the explicit staff makes it self-describing (serializer emits
+								// `\staff "N" \clef ...`). addEvent still inserts a leading
+								// staff switch when the voice is currently on another staff.
+								voiceTracker.addEvent(vNum, { type: 'context', staff, clef } as ContextChange, 0, staff);
+							} else {
+								clefs.set(staff, { type: 'context', clef });
+							}
+						} else {
+							clefs.set(staff, { type: 'context', clef });
+						}
 					}
 				}
 			}
@@ -1206,6 +1238,10 @@ const convertMeasure = (
 			const voiceNum = note.voice;
 			const staffNum = note.staff || 1;
 			currentVoice = voiceNum;
+			// Record that this staff now has notes this measure and which voice is
+			// active on it, so a subsequent mid-measure <clef> attaches inline here.
+			staffHasNotes.add(staffNum);
+			lastVoiceOnStaff.set(staffNum, voiceNum);
 
 			// Ensure voice exists with correct staff tracking (needed for cross-staff tuplets
 			// where notes go to tupletTracker but voice must be initialized for staff detection)
@@ -1524,6 +1560,12 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 	let isFirstMeasure = true;
 	let lastVoiceStaff = 1;  // Track last known primary voice staff for empty measure fallback
 	const lastClefs: Map<number, ContextChange> = new Map();  // Track last clef per staff
+	// Initial clef per staff declared in the FIRST <attributes> block. A staff whose
+	// first voice does not appear until a later measure (e.g. an accompaniment staff
+	// silent for the opening bars) would otherwise lose its initial clef — it is only
+	// declared in measure 1's attributes, where that staff has no voice to attach it
+	// to. We hold these and flush each onto the staff's FIRST appearing voice.
+	const pendingInitialClefs: Map<number, ContextChange> = new Map();
 
 	const measureEls = getDirectChildren(partEl, 'measure');
 
@@ -1566,12 +1608,44 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 							lastClefs.set(voiceData.staff, clef);
 						}
 					}
+					pendingInitialClefs.delete(voiceData.staff);
+				} else if (pendingInitialClefs.has(voiceData.staff)) {
+					// This staff's clef was declared in an earlier measure where the staff
+					// had no voice to carry it (its first appearance is delayed, or it is
+					// an intermittently-empty cross-staff passage). This measure declares
+					// no clef of its own — emit the carried-forward pending clef if it
+					// differs from the clef last in effect for this staff.
+					const pending = pendingInitialClefs.get(voiceData.staff)!;
+					const lastClef = lastClefs.get(voiceData.staff);
+					const isSameClef = lastClef &&
+						(lastClef as ContextChange).clef === (pending as ContextChange).clef;
+					if (!isSameClef) {
+						events.push(pending);
+						lastClefs.set(voiceData.staff, pending);
+					}
+					pendingInitialClefs.delete(voiceData.staff);
 				}
 				staffsWithClef.add(voiceData.staff);
 			}
 
 			// Add voice events
 			events.push(...voiceData.events);
+
+			// A mid-measure clef change was appended inline to this voice's events (it
+			// does not pass through the measure-start `clefs` map). Scan for the LAST
+			// clef per staff in this voice and update lastClefs, so the next measure's
+			// dedup compares against the clef actually in effect — otherwise a later
+			// measure restating the pre-change clef would be wrongly suppressed.
+			{
+				let scanStaff = voiceData.staff;
+				for (const ev of voiceData.events) {
+					if (ev.type === 'context') {
+						const c = ev as ContextChange;
+						if (c.staff != null) scanStaff = c.staff;
+						if (c.clef) lastClefs.set(scanStaff, { type: 'context', clef: c.clef });
+					}
+				}
+			}
 
 			// Add harmonies and barline to first voice only
 			if (voiceNum === voiceNumbers[0]) {
@@ -1594,6 +1668,16 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 			voices.push({ staff: lastVoiceStaff, events: [] });
 		} else {
 			lastVoiceStaff = voices[0].staff || 1;
+		}
+
+		// Carry forward any clef declared this measure for a staff that had NO voice to
+		// attach it to (an intermittently-empty staff — e.g. cross-staff passages where
+		// the LH is written entirely on the upper staff for several bars). Remember it
+		// as pending so it is emitted when that staff next reappears; otherwise the clef
+		// (and any change it represents) is lost when this measure's `clefs` map is
+		// discarded. Generalizes the first-measure seeding above to every measure.
+		for (const [staff, clef] of clefs) {
+			if (!staffsWithClef.has(staff)) pendingInitialClefs.set(staff, clef);
 		}
 
 		const measure: Measure = {

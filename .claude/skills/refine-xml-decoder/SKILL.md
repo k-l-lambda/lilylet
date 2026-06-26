@@ -301,6 +301,54 @@ is a pure `\staff "2"` context switch — inexpressible as "home 1 then immediat
 without `\staff "1" \staff "2"`; clef counts still match (A=B=src), only the event-index
 annotation drifts. Acceptable; do not over-engineer.
 
+## Clef CROSS-ENGINE diff (verovio vs lilylet) — finds DECODER clef loss
+A second clef tool compares verovio's `xml→MEI` against lilylet's `xml→lyl→MEI`
+(`tests/clef-verovio-diff.local.ts`). UNLIKE the round-trip diff above, the two routes
+share NOTHING, so a divergence can come from anywhere — apply the golden rule and count
+clefs in the SOURCE XML, not trust verovio. Normalize two verovio quirks first or it
+floods with false positives: (a) verovio's initial clef is a `<clef>` CHILD of
+`<staffDef>` (lilylet uses the `clef.shape=` attribute) — treat both as the staff's
+initial clef; (b) verovio emits a SHAPELESS `<clef>` as a cautionary/system-break repeat
+— drop empty-shape clefs and collapse consecutive identical clefs, then compare the
+per-staff clef (shape,line) MULTISET. ~1011/6292 files error as verovio `loadData false`
+(verovio rejects them; not lilylet's fault). This diff surfaced three DECODER clef-loss
+bugs (all in `convertMeasure`/`convertPart`, fixed; corpus multiset-diff 360→93):
+
+### D1. Initial clef of a staff silent at the opening is lost
+A two-staff part where staff 2 has no notes until a later measure (accompaniment enters
+late): staff 2's bass clef is declared only in measure 1's `<attributes>`, but staff 2
+has no voice there to attach it to, so it was dropped and staff 2 defaulted to treble.
+**Fix:** `pendingInitialClefs` map — a clef declared for a staff with no voice this
+measure is held and flushed onto that staff's FIRST appearing voice (any later measure).
+
+### D2. Mid-measure clef change collapsed (the dominant gap)
+`clefs.set(staff, …)` keeps only ONE clef per staff per measure and emits it at the bar
+start. A clef that changes PARTWAY through a measure (scale/arpeggio études where the LH
+crosses up: source m1 staff2 = `F,G,F`) lost all but the last, and its position. **Fix:**
+track `staffHasNotes` + `lastVoiceOnStaff` per measure; when a clef arrives for a staff
+that already has notes this measure, append it INLINE via `voiceTracker.addEvent` at the
+current position instead of the measure-start map. Tag the inline clef with its `staff`
+(`{type:'context', staff, clef}`) — in a cross-staff voice a bare clef is ambiguous and
+the serializer drops/misplaces it; the explicit staff makes it self-describing. Also
+scan each built voice's events for the last clef per staff and update `lastClefs`, so the
+next measure's dedup compares against the post-change clef (else a later restatement is
+wrongly suppressed).
+
+### D3. Clef change in an intermittently-empty staff is lost
+Generalizes D1: any measure declaring a clef for a staff with no voice that bar (a
+cross-staff passage written entirely on the other staff for several bars) — carry the
+clef forward in `pendingInitialClefs` and emit it (if changed vs `lastClefs`) when the
+staff reappears. Without this, clef changes landing in empty-staff measures vanished.
+
+**Residual (~23/6292 round-trip, ~93/6292 vs verovio):** dense polyphonic / cross-staff
+scores (fugues, 练习曲) where a mid-measure clef sits in a voice-3-style cross-staff
+voice. The decoder now captures these clefs (route A gains them vs source), but the
+serializer/parser don't perfectly round-trip a compound `[staff,clef]` inside a voice
+that interleaves staves — off-by-1-2 clefs. Same hard cross-staff family as the deferred
+cross-voice slurs; the net is strongly positive (real source-confirmed recovery) and no
+unit-suite MEI hash changed. **Don't chase the last dense-polyphony clefs at the cost of
+the serializer's cross-staff stability.**
+
 ## Corpus batch auditing
 The high-value bugs above were ALL found by auditing a real score corpus
 (`~/data/scores/fmenu`, 6292 piano `.xml`) against **source-XML ground truth**, not
