@@ -199,11 +199,22 @@ lost, never wrong). Root cause not yet isolated; cross-staff voice handling is
 delicate (per memory, the `voice.staff` update in `getOrCreateVoice` is load-bearing
 — chopin48 breaks without it). Needs a dedicated session.
 
-### 15. `<forward>` gaps not filled (OPEN — ~some 11+ tick files)
-Notation that uses `<forward>` to skip positions between notes (e.g.
-`forward 2, note, note, forward 2, ...`) loses the skipped time: the decoder advances
-the voice position but inserts no rest, so the measure decodes short (src 16 → doc 8).
-`<forward>` should emit an invisible/spacer rest to preserve timing.
+### 15. `<forward>` gaps not filled (FIXED)
+20% of the corpus (1269 files, 18883 forwards) uses `<forward>`. lilylet's doc model
+is a flat per-voice event list with NO absolute tick anchor (`currentPosition` is
+maintained but never read for placement — it's dead), so a `<forward>` that skips
+time inside a voice vanished: following notes slid earlier and the bar decoded short
+(`forward2,note,note,forward2,…` → 8 ticks for a 16-tick bar). **Fix:** accumulate
+forward ticks in `pendingForward` and flush as invisible spacer rests
+(`RestEvent.invisible` → MEI `<space>` / lilypond `s`) into the NEXT note's voice —
+the forward has no `<voice>` of its own, so like `pendingMarks` it belongs to the
+voice that follows. Decompose arbitrary gaps into power-of-two (optionally dotted)
+spacers so non-2^n gaps (1.5/2.5/3 quarters) stay exact.
+**The trap that caused a regression:** a forward NOT followed by an in-voice note —
+the extremely common `backup N / forward N` measure-end positioning idiom — is
+cursor movement, NOT a content gap. Materialising it doubles the bar. So `pendingForward`
+must be DROPPED at `<backup>` and measure end, and only flushed when a real note
+consumes it. Tick mismatches 442→273 files (96% fully clean).
 
 ## Corpus batch auditing
 The high-value bugs above were ALL found by auditing a real score corpus
