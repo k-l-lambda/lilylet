@@ -137,10 +137,37 @@ anywhere), with an end-of-measure flush onto a matching-staff voice. Ottava went
 132→164 of 166. Residual losses are cross-measure span-carry cases in the encoder
 (harder; the per-measure `pendingOctave` continuation state is fragile).
 
+### 12. Slur span tracker — single slot + single-carry (same family as #2)
+The encoder held ONE open slur in `currentSlur`; a new start while one was open
+overwrote it (piano writing runs up to ~3 concurrent slurs per voice), and the
+cross-measure `SlurState` carried only ONE startId, so all-but-one open slur died
+at the bar line. **Fix:** `openSlurs` stack paired LIFO; `SlurState` carries the
+whole open-slur stack (`string[]`) per voice key, always recorded (even empty) so a
+fully-closed measure clears the carry. Same-voice concurrent + cross-measure slurs
+now pair; normal files stay exact (e.g. 6/6, 30/29).
+**Residual — cross-voice slurs (hard):** in dense piano scores a slur often starts
+in one `<voice>` and stops in another (paired by MusicXML `number`), e.g. Chopin
+Op.25 études have 362 such in one file. The layer-by-layer encoder pairs within one
+layer's stream, so these stay unpaired. They're RARE corpus-wide (~27 of 3700 in a
+299-file sample; total slur 99401 ≥ source 99342), so the safe stack fix above was
+shipped and the cross-voice pairing deferred — a true fix needs staff-level pairing
+by `number` (already carried into the `Slur` mark) across all layers, a high-risk
+refactor of the hottest marking path. **Do not chase a few hundred étude slurs at
+the cost of 99k working ones.**
+
 ### Not yet implemented: glissando / slide
 `<glissando>`/`<slide>` (a note-to-note spanner → MEI `<gliss startid endid>`) is
 entirely absent from types/decoder/encoder — a clean feature gap, not a loss bug.
-~2% of files use it. Mirror the slur spanner (track start/stop by `number`).
+~2% of files use it (662 spans corpus-wide). Mirror the slur spanner (track
+start/stop by `number`).
+
+### Counting caveat — source `<note>` is NOT the note total
+Full-corpus `notes` always shows lilylet "short" because MusicXML `<note>` counts
+**chord members** (`<chord/>`) and **rests** (`<note><rest/></note>`) as separate
+`<note>` elements, while MEI emits one `<note>` per chord pitch and `<rest>`
+separately. Confirm with `lilylet <note> == verovio <note>` (they match exactly) —
+it is representation, never loss. Likewise `arpeg` (per-note `<arpeggiate>` in source
+vs per-chord `<arpeg>` in MEI).
 
 ## Corpus batch auditing
 The high-value bugs above were ALL found by auditing a real score corpus
