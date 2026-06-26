@@ -46,6 +46,7 @@ const SCOPE_MAP: Record<string, string> = {
 	HEADER_INSTRUMENT_STAFF: "header",
 	HEADER_GENRE: "header",
 	HEADER_STAVES: "header",
+	HEADER_MEASURES: "header",
 	HEADER_AUTOBEAM: "header",
 
 	STRING: "string",

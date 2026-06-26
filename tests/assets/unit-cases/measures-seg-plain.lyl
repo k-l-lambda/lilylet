@@ -1,0 +1,6 @@
+% measure-layout (segment-wise, "s:"): leaves are segment LENGTHS, not indices.
+% Measures are auto-numbered left-to-right from 1. "s: 4" = one 4-measure segment.
+% Index-wise twin: "1, 2, 3, 4".
+% Performed order: 1 2 3 4
+[measures "s: 4"]
+c'1 | d'1 | e'1 | f'1 |

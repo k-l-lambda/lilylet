@@ -1,0 +1,5 @@
+% measure-layout (index-wise): simple volta — repeat block N times (no alternates).
+% 2*[1..4] plays measures 1-4 twice.  Segment-wise twin: "s: 2*[4]".
+% Performed order: 1 2 3 4 | 1 2 3 4
+[measures "2*[1..4]"]
+c'1 | d'1 | e'1 | f'1 |

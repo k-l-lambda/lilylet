@@ -1,0 +1,6 @@
+% measure-layout (index-wise): ABA / da-capo form <main, rest> plays main rest main.
+% <[1,2,3,4], [5,6,7,8]>: section A (1-4), section B (5-8), then A again (da capo).
+% Segment-wise twin: "s: <4 4>".
+% Performed order: 1 2 3 4 | 5 6 7 8 | 1 2 3 4
+[measures "<[1,2,3,4], [5,6,7,8]>"]
+c'1 | d'1 | e'1 | f'1 | g'1 | a'1 | b'1 | c''1 |

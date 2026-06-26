@@ -67,6 +67,7 @@ export const HIGHLIGHT_RULES: HighlightRule[] = [
 	{ re: /(?:\[instrument\b)/iy, scope: "header" },
 	{ re: /(?:\[genre\b)/iy, scope: "header" },
 	{ re: /(?:\[staves\b)/iy, scope: "header" },
+	{ re: /(?:\[measures\b)/iy, scope: "header" },
 	{ re: /(?:\[auto-beam\b)/iy, scope: "header" },
 	{ re: /(?:\])/iy, scope: "squareBracket" },
 	{ re: /(?:"[^"]*")/iy, scope: "string" },

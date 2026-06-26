@@ -250,6 +250,7 @@
 \[instrument					return 'HEADER_INSTRUMENT'
 \[genre							return 'HEADER_GENRE'
 \[staves						return 'HEADER_STAVES'
+\[measures						return 'HEADER_MEASURES'
 \[auto\-beam					return 'HEADER_AUTOBEAM'
 \]								return ']'
 
@@ -401,6 +402,7 @@ header
 	| HEADER_INSTRUMENT_STAFF STRING STRING ']'	-> instrumentStaff($1, $2.slice(1, -1), $3.slice(1, -1))
 	| HEADER_GENRE STRING ']'					-> ({ genre: $2.slice(1, -1) })
 	| HEADER_STAVES STRING ']'					-> ({ staves: $2.slice(1, -1) })
+	| HEADER_MEASURES STRING ']'				-> ({ measureLayout: $2.slice(1, -1) })
 	| HEADER_AUTOBEAM STRING ']'				-> ({ autoBeam: $2.slice(1, -1) })
 	;
 

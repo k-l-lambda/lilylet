@@ -1008,6 +1008,9 @@ const serializeMetadata = (metadata: Metadata): string => {
 	if (metadata.staves) {
 		lines.push('[staves "' + escapeString(metadata.staves) + '"]');
 	}
+	if (metadata.measureLayout) {
+		lines.push('[measures "' + escapeString(metadata.measureLayout) + '"]');
+	}
 	if (metadata.instruments) {
 		for (const [key, instr] of Object.entries(metadata.instruments)) {
 			let line = '[instrument-' + key + ' "' + escapeString(instr.name) + '"';

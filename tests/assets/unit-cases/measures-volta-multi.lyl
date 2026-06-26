@@ -1,0 +1,6 @@
+% measure-layout (index-wise): multi-pass volta — 3 passes, 3 alternate endings.
+% 3*[1,2]{3,4,5}: body 1-2 played 3 times; ending 3 after pass 1, ending 4 after
+% pass 2, ending 5 (last) after pass 3.  (Alternates cycle, last closes the repeat.)
+% Performed order: 1 2 | 3 | 1 2 | 4 | 1 2 | 5
+[measures "3*[1,2]{3,4,5}"]
+c'1 | d'1 | e'1 | f'1 | g'1 |

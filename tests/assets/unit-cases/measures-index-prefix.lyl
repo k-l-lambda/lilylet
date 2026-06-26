@@ -1,0 +1,5 @@
+% measure-layout: explicit "i:" index-wise prefix (the default mode, stated explicitly).
+% Equivalent to "1..4".
+% Performed order: 1 2 3 4
+[measures "i: 1..4"]
+c'1 | d'1 | e'1 | f'1 |

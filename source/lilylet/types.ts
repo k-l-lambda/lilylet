@@ -304,6 +304,10 @@ export interface Metadata {
 	instrument?: string;
 	genre?: string;
 	staves?: string;				// Raw staff-layout code, e.g. "<[v1-v2].va> {pl-pr} <b>"
+	// Raw measure-layout (performance/repeat order) DSL, lotus-style, e.g.
+	// "2*[1..8]{9,10}, 11..16" (index-wise) or "s: 4 <2 6> 2" (segment-wise).
+	// Stored verbatim; parsing/expansion to MEI <expansion> is a later phase.
+	measureLayout?: string;
 	// Per-staff / per-group instrument names, keyed by staff-layout group key (a single
 	// staff id like "1"/"v1", or a range like "1-2"/"pl-pr"). Declared via the
 	// [instrument-<key> "Name" "Short"] header. Maps to MEI <label>/<labelAbbr>.
