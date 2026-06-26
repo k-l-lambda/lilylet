@@ -424,12 +424,7 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 	const isChord = hasElement(noteEl, 'chord');
 	const isRest = hasElement(noteEl, 'rest');
 	const isGrace = hasElement(noteEl, 'grace');
-	// <rest measure="yes"> is a whole-measure rest whose real duration is the
-	// measure length (e.g. 24 ticks in 3/4), not a literal whole note. Flag it so
-	// the decoder emits a full-measure rest instead of rounding the bare duration
-	// to a power-of-two division (which mis-sizes the bar — 3/4 → whole = +8 ticks).
 	const restEl = isRest ? noteEl.getElementsByTagName('rest')[0] : undefined;
-	const isMeasureRest = restEl ? getAttribute(restEl, 'measure') === 'yes' : false;
 
 	let pitch: MusicXmlPitch | undefined;
 	const pitchEl = noteEl.getElementsByTagName('pitch')[0];
@@ -441,6 +436,18 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 	const durationVal = getElementInt(noteEl, 'duration') || 0;
 	const typeText = getElementText(noteEl, 'type');
 	const dotCount = getElements(noteEl, 'dot').length;
+
+	// Whole-measure rest detection. Two forms in the wild:
+	//  (a) <rest measure="yes"> — explicit.
+	//  (b) a `type="whole"` rest whose <duration> is NOT a whole note (e.g. 72 ticks
+	//      in 3/4 at divisions=24) — the conventional "centred whole rest = whole
+	//      bar" notation. In both cases the rest fills the measure, so flag it and
+	//      let encoders emit <mRest>/R instead of rounding the bare duration to a
+	//      power-of-two division (which over/under-fills non-2^n meters).
+	const isMeasureRest = !!restEl && (
+		getAttribute(restEl, 'measure') === 'yes' ||
+		(typeText === 'whole' && durationVal > 0 && durationVal !== divisions * 4)
+	);
 
 	// Time modification (tuplets)
 	let timeModification: { actualNotes: number; normalNotes: number } | undefined;
