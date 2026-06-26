@@ -169,6 +169,42 @@ separately. Confirm with `lilylet <note> == verovio <note>` (they match exactly)
 it is representation, never loss. Likewise `arpeg` (per-note `<arpeggiate>` in source
 vs per-chord `<arpeg>` in MEI).
 
+## Structural fidelity (measure count / pitch / tick) — `tests/structural-audit.local.ts`
+Beyond markings, audit the SKELETON against source XML: measure count, pitch
+multiset (MIDI semitones — enharmonic/notation-agnostic, so only genuinely wrong/
+missing notes flag), and per-measure tick totals. Corpus result after the fixes
+below: **measure count 0 mismatches, 93% files fully tick-clean.** Build the
+audit carefully — three of its own bugs masked real ones until fixed:
+- doc `phonet` is a **string** (`"e"`), not a 0-6 index — map letters.
+- **grace notes** carry a nominal duration but DON'T advance time — skip them in the
+  tick walk (lilylet flags them `grace:true`; counting them inflated 806 false hits).
+- **tuplet inner notes** carry plain durations; the ratio lives on `TupletEvent.ratio`
+  — apply it once at the tuplet level (don't expect `.tuplet` on each inner note).
+
+### 13. Whole-measure rest mis-sized (FIXED)
+Two forms: `<rest measure="yes">`, and the convention of a `type="whole"` rest whose
+`<duration>` ≠ a whole note (centred whole rest = whole bar, 210 corpus files).
+`convertDuration` rounded the bare duration to a power-of-two division → a whole rest
+(e.g. 96 ticks) in a 3/4 bar (72), over-filling by +24. **Fix:** detect both forms in
+`parseNote`, set `RestEvent.fullMeasure`; encoders emit `<mRest>`/`R` and timing comes
+from the meter. Tick-mismatch files 1436→442.
+
+### 14. Multi-voice measure block dropped (OPEN — serious, ~14 files)
+In some piano scores a contiguous run of measures decodes to ZERO notes (e.g.
+库劳 Op.20 m15-28, 云雀 14 measures). Trigger: a measure with a transient extra
+voice (voices 1,2,3 where 3→staff 2) appears to corrupt the per-measure
+`VoiceTracker` state, cascading note loss into following measures. This is the
+`PITCH multiset` audit's headline (25 files, always `missing>0 extra=0` — notes
+lost, never wrong). Root cause not yet isolated; cross-staff voice handling is
+delicate (per memory, the `voice.staff` update in `getOrCreateVoice` is load-bearing
+— chopin48 breaks without it). Needs a dedicated session.
+
+### 15. `<forward>` gaps not filled (OPEN — ~some 11+ tick files)
+Notation that uses `<forward>` to skip positions between notes (e.g.
+`forward 2, note, note, forward 2, ...`) loses the skipped time: the decoder advances
+the voice position but inserts no rest, so the measure decodes short (src 16 → doc 8).
+`<forward>` should emit an invisible/spacer rest to preserve timing.
+
 ## Corpus batch auditing
 The high-value bugs above were ALL found by auditing a real score corpus
 (`~/data/scores/fmenu`, 6292 piano `.xml`) against **source-XML ground truth**, not
