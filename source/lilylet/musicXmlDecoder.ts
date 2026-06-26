@@ -142,38 +142,53 @@ class SpannerTracker {
  * Collects notes between tuplet start and stop to create TupletEvent.
  */
 class TupletTracker {
-	// Map from tuplet number to collected events and ratio
+	// Map from tuplet number to collected events and ratio. Each tuplet is bound to
+	// the voice (and staff) it started in: a tuplet belongs to one voice, so events
+	// from OTHER voices must not be swallowed into it (multi-voice piano scores
+	// interleave voices, and a voice-1 tuplet would otherwise eat voice-2 notes).
 	private activeTuplets: Map<number, {
 		events: (NoteEvent | RestEvent)[];
 		ratio?: Fraction;
+		voice: number;
+		staff: number;
 	}> = new Map();
 
 	/**
-	 * Start a new tuplet group
+	 * Start a new tuplet group, bound to the voice/staff it starts in.
 	 */
-	startTuplet(number: number = 1): void {
-		this.activeTuplets.set(number, { events: [] });
+	startTuplet(number: number = 1, voice: number = 1, staff: number = 1): void {
+		this.activeTuplets.set(number, { events: [], voice, staff });
 	}
 
 	/**
-	 * Add an event to active tuplet(s)
-	 * Returns true if the event was added to at least one tuplet
+	 * Add an event to the innermost active tuplet of the SAME voice.
+	 * Returns true if the event was added.
+	 *
+	 * Nested tuplets share the doc model's flat TupletEvent (which can't hold a
+	 * nested TupletEvent), so an event must go to exactly ONE tuplet or it would be
+	 * emitted twice — once per enclosing tuplet — inflating the pitch count. We pick
+	 * the most-recently-started same-voice tuplet (the innermost): when the inner one
+	 * closes, later events fall back to the still-open outer one.
 	 */
-	addEvent(event: NoteEvent | RestEvent): boolean {
+	addEvent(event: NoteEvent | RestEvent, voice: number): boolean {
 		if (this.activeTuplets.size === 0) return false;
 
-		// Add to all active tuplets (in case of nested tuplets)
+		// Innermost = last-inserted entry for this voice (Map preserves insertion order).
+		let target: { events: (NoteEvent | RestEvent)[]; ratio?: Fraction; voice: number; staff: number } | undefined;
 		for (const [, tuplet] of this.activeTuplets) {
-			// Set ratio from first event's duration.tuplet
-			// convertDuration already stores Lilylet ratio semantics (normalNotes/actualNotes)
-			if (!tuplet.ratio && event.duration.tuplet) {
-				tuplet.ratio = { ...event.duration.tuplet };
-			}
-			// Store event without tuplet info in duration (it's handled at TupletEvent level)
-			const cleanEvent = { ...event, duration: { ...event.duration } };
-			delete cleanEvent.duration.tuplet;
-			tuplet.events.push(cleanEvent);
+			if (tuplet.voice === voice) target = tuplet;
 		}
+		if (!target) return false;
+
+		// Set ratio from first event's duration.tuplet
+		// convertDuration already stores Lilylet ratio semantics (normalNotes/actualNotes)
+		if (!target.ratio && event.duration.tuplet) {
+			target.ratio = { ...event.duration.tuplet };
+		}
+		// Store event without tuplet info in duration (it's handled at TupletEvent level)
+		const cleanEvent = { ...event, duration: { ...event.duration } };
+		delete cleanEvent.duration.tuplet;
+		target.events.push(cleanEvent);
 		return true;
 	}
 
@@ -200,10 +215,37 @@ class TupletTracker {
 	}
 
 	/**
-	 * Check if any tuplet is active
+	 * Check if a tuplet is active for the given voice. A tuplet only swallows notes
+	 * of its OWN voice, so the per-note "are we in a tuplet?" check must be scoped to
+	 * the note's voice — otherwise a voice-1 tuplet would divert voice-2 notes.
 	 */
-	isActive(): boolean {
-		return this.activeTuplets.size > 0;
+	isActive(voice?: number): boolean {
+		if (voice === undefined) return this.activeTuplets.size > 0;
+		for (const [, t] of this.activeTuplets) if (t.voice === voice) return true;
+		return false;
+	}
+
+	/**
+	 * Force-close every still-open tuplet and return them with their owning
+	 * voice/staff. Called at measure end: a tuplet is a within-measure time
+	 * modification and MUST NOT leak across the bar line. A source file missing a
+	 * <tuplet type="stop"> (corpus reality — e.g. 库劳 Op.20) would otherwise leave
+	 * the tuplet open forever, swallowing every following note in that voice for the
+	 * rest of the piece. Flushing here bounds the damage to the one measure.
+	 */
+	flushAll(): Array<{ event: TupletEvent; voice: number; staff: number }> {
+		const out: Array<{ event: TupletEvent; voice: number; staff: number }> = [];
+		for (const [, tuplet] of this.activeTuplets) {
+			if (tuplet.events.length === 0) continue;
+			const ratio = tuplet.ratio || { numerator: 2, denominator: 3 };
+			out.push({
+				event: { type: 'tuplet', ratio, events: tuplet.events },
+				voice: tuplet.voice,
+				staff: tuplet.staff,
+			});
+		}
+		this.activeTuplets.clear();
+		return out;
 	}
 
 	/**
@@ -1082,6 +1124,19 @@ const forwardGapToRests = (gapTicks: number, divisions: number): RestEvent[] => 
 };
 
 /**
+ * Total time a TupletEvent advances the voice, in voiceTracker duration units.
+ * Sum the inner note/rest values then apply the tuplet ratio (triplet etc.).
+ */
+const tupletAdvanceDuration = (tupletEvent: TupletEvent, divisions: number): number => {
+	let total = 0;
+	for (const evt of tupletEvent.events) {
+		const d = (evt as NoteEvent | RestEvent).duration;
+		if (d) total += (4 / d.division) * divisions;
+	}
+	return total * tupletEvent.ratio.numerator / tupletEvent.ratio.denominator;
+};
+
+/**
  * Convert a MusicXML measure to Lilylet events, grouped by voice
  */
 const convertMeasure = (
@@ -1160,7 +1215,7 @@ const convertMeasure = (
 			// voice (the forward had no voice of its own; it belongs to the voice that
 			// follows). Skip while inside a tuplet — a forward there is unusual and the
 			// tuplet tracker owns timing.
-			if (pendingForward > 0 && !tupletTracker.isActive()) {
+			if (pendingForward > 0 && !tupletTracker.isActive(voiceNum)) {
 				for (const r of forwardGapToRests(pendingForward, voiceTracker.getDivisions())) {
 					voiceTracker.addEvent(voiceNum, r, 0, staffNum);
 				}
@@ -1170,7 +1225,7 @@ const convertMeasure = (
 			// Check for tuplet start BEFORE processing the note
 			const tupletNotation = note.notations?.tuplet;
 			if (tupletNotation?.type === 'start') {
-				tupletTracker.startTuplet(tupletNotation.number);
+				tupletTracker.startTuplet(tupletNotation.number, voiceNum, staffNum);
 			}
 
 			// Add any pending context changes before the note (tempo, ottava).
@@ -1230,8 +1285,8 @@ const convertMeasure = (
 				const advanceDuration = note.isGrace ? 0 : note.duration.divisions;
 
 				// Check if we're in a tuplet
-				if (tupletTracker.isActive()) {
-					tupletTracker.addEvent(restEvent);
+				if (tupletTracker.isActive(voiceNum)) {
+					tupletTracker.addEvent(restEvent, voiceNum);
 				} else {
 					voiceTracker.addEvent(voiceNum, restEvent, advanceDuration, staffNum);
 				}
@@ -1308,8 +1363,8 @@ const convertMeasure = (
 				const advanceDuration = note.isGrace ? 0 : note.duration.divisions;
 
 				// Check if we're in a tuplet
-				if (tupletTracker.isActive()) {
-					tupletTracker.addEvent(noteEvent);
+				if (tupletTracker.isActive(voiceNum)) {
+					tupletTracker.addEvent(noteEvent, voiceNum);
 				} else {
 					voiceTracker.addEvent(voiceNum, noteEvent, advanceDuration, staffNum);
 				}
@@ -1319,16 +1374,7 @@ const convertMeasure = (
 			if (tupletNotation?.type === 'stop') {
 				const tupletEvent = tupletTracker.stopTuplet(tupletNotation.number);
 				if (tupletEvent) {
-					// Calculate total duration of tuplet for voiceTracker
-					let totalDuration = 0;
-					for (const evt of tupletEvent.events) {
-						if ((evt as NoteEvent | RestEvent).duration) {
-							// Convert division to duration units (quarter = 1)
-							totalDuration += (4 / (evt as NoteEvent | RestEvent).duration.division) * voiceTracker.getDivisions();
-						}
-					}
-					// Apply tuplet ratio to get actual duration
-					totalDuration = totalDuration * tupletEvent.ratio.numerator / tupletEvent.ratio.denominator;
+					const totalDuration = tupletAdvanceDuration(tupletEvent, voiceTracker.getDivisions());
 					voiceTracker.addEvent(voiceNum, tupletEvent, totalDuration, staffNum);
 				}
 			}
@@ -1387,6 +1433,19 @@ const convertMeasure = (
 	// positioning (e.g. the `backup N / forward N` idiom), not a content gap — drop
 	// it. Only forwards consumed by a following note become invisible spacer rests.
 	pendingForward = 0;
+
+	// Force-close any tuplet still open at the bar line. A tuplet is a within-measure
+	// time modification and cannot span a bar; a source file missing its
+	// <tuplet type="stop"> (corpus reality) would otherwise keep the tuplet open for
+	// the rest of the piece, diverting every following note in that voice into the
+	// zombie tuplet — the multi-voice block-drop bug (库劳 Op.20 m15→end empty).
+	// Flush each leftover tuplet onto its owning voice so the damage is bounded to
+	// this measure. Done before the pendingMarks flush so trailing marks still find
+	// the (now-emitted) tuplet's notes as the voice's last events.
+	for (const { event, voice, staff } of tupletTracker.flushAll()) {
+		const totalDuration = tupletAdvanceDuration(event, voiceTracker.getDivisions());
+		voiceTracker.addEvent(voice, event, totalDuration, staff);
+	}
 
 	// Flush leftover pending marks. Post-positioned directions — hairpin/pedal
 	// stops, and any direction after the last note of its voice (common after a
