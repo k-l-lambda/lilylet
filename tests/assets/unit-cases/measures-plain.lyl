@@ -1,4 +1,4 @@
 % measure-layout (index-wise): plain explicit indices, no repeats.
 % Performed order: 1 2 3 4
 [measures "1, 2, 3, 4"]
-c'1 | d'1 | e'1 | f'1 |
+c1 | d1 | e1 | f1 |

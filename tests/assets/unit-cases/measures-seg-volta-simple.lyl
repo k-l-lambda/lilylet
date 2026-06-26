@@ -2,4 +2,4 @@
 % repeated twice.  Index-wise twin: "2*[1..4]".
 % Performed order: 1 2 3 4 | 1 2 3 4
 [measures "s: 2*[4]"]
-c'1 | d'1 | e'1 | f'1 |
+c1 | d1 | e1 | f1 |
