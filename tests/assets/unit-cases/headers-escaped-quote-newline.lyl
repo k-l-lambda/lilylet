@@ -1,0 +1,7 @@
+% Regression repro: quoted metadata strings must support escaped quotes and escaped
+% control characters. A fresh grammar rebuild with a STRING lexer that stops at \"
+% will fail before unq() can decode this header.
+[title "A \"quoted\" title"]
+[composer "Line 1\nLine 2"]
+[lyricist "Tab\tSeparated"]
+c'4 |

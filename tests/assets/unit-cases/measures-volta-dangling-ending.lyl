@@ -1,0 +1,9 @@
+% Regression repro: a volta alternate references measure 4, but the score only has
+% three measures. The layout-level performed order is "1 2 3 1 2 4", yet only 3
+% measures are emitted, so the encoder must NOT emit a nested <ending> referencing
+% the missing measure 4 (that left a dangling <expansion> plist id). Expected: fall
+% back to the flat measure-level expansion, which warns-and-skips index 4, yielding
+% a valid MEI whose plist resolves to measures 1 2 3 1 2 (no dangling refs).
+% Performed order: 1 2 | 3 | 1 2 | 4
+[measures "2*[1..2]{3,4}"]
+c1 | d1 | e1 |

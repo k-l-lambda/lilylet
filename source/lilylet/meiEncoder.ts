@@ -2750,6 +2750,29 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	// whose plist references those segment ids. So when the layout decomposes into
 	// volta segments, emit that structure; otherwise keep the simpler flat path.
 	// See [[volta-rendering-gaps]] / [[lilylet-measure-layout]].
+	// Helper to check if a measure has any musical content
+	const measureHasContent = (measure: Measure): boolean => {
+		for (const part of measure.parts) {
+			for (const voice of part.voices) {
+				for (const event of voice.events) {
+					// Check for actual musical content (not just context changes or pitch resets)
+					if (event.type === 'note' || event.type === 'rest' ||
+						event.type === 'tuplet' || event.type === 'times' || event.type === 'tremolo') {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	};
+
+	// Filter out trailing empty measures (done before segment setup so the segment
+	// guard below knows the true emitted measure count).
+	let measures = doc.measures;
+	while (measures.length > 0 && !measureHasContent(measures[measures.length - 1])) {
+		measures = measures.slice(0, -1);
+	}
+
 	let segDecomp: ReturnType<typeof decomposeToSegments> = null;
 	const segOpenAt = new Map<number, string>();    // measure index → opening tag for its segment
 	const segCloseAt = new Map<number, string>();   // measure index → closing tag after it
@@ -2758,6 +2781,14 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		try {
 			segDecomp = decomposeToSegments(parseMeasureLayout(doc.metadata.measureLayout));
 		} catch { segDecomp = null; }
+	}
+	// A layout that references a measure beyond the emitted range (e.g. a volta
+	// alternate whose bar was a trailing empty measure that got trimmed) cannot be
+	// emitted as nested sections without a dangling <ending>/<section> id or an
+	// unbalanced wrapper. Drop to the flat measure-level expansion path, which
+	// already warns-and-skips out-of-range refs.
+	if (segDecomp && segDecomp.segments.some(seg => seg.measures.some(m => m > measures.length))) {
+		segDecomp = null;
 	}
 	if (segDecomp) {
 		const segIndent = `${indent}${indent}${indent}${indent}${indent}${indent}`;
@@ -2804,28 +2835,6 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 			const t = clefTransOf(clef);
 			transState[globalStaff] = `${t.diat},${t.semi}`;
 		}
-	}
-
-	// Helper to check if a measure has any musical content
-	const measureHasContent = (measure: Measure): boolean => {
-		for (const part of measure.parts) {
-			for (const voice of part.voices) {
-				for (const event of voice.events) {
-					// Check for actual musical content (not just context changes or pitch resets)
-					if (event.type === 'note' || event.type === 'rest' ||
-						event.type === 'tuplet' || event.type === 'times' || event.type === 'tremolo') {
-						return true;
-					}
-				}
-			}
-		}
-		return false;
-	};
-
-	// Filter out trailing empty measures
-	let measures = doc.measures;
-	while (measures.length > 0 && !measureHasContent(measures[measures.length - 1])) {
-		measures = measures.slice(0, -1);
 	}
 
 	// Encode measures

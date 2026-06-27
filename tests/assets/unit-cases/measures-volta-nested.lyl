@@ -1,0 +1,7 @@
+% Regression repro: nested voltas should either preserve inner house brackets or fall
+% back safely. Current decomposeToSegments flattens the inner volta into the outer
+% body segment, so the MEI has only the outer 1./2. endings; the inner endings for
+% measures 3 and 4 are lost visually even though the playback order is flattened.
+% Performed order: 1 2 3 4 | 5 | 1 2 3 4 | 6
+[measures "2*[2*[1,2]{3,4}]{5,6}"]
+c1 | d1 | e1 \bar ":|." | f1 | g1 \bar ":|." | a1 |

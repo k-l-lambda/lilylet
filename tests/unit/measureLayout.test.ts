@@ -161,7 +161,11 @@ console.log('\nMEI <expansion> plist length & resolution:');
 			else if (segMeasures.has(r)) flat.push(...segMeasures.get(r)!);
 			else { resolvable = false; break; }
 		}
-		const expected = oracle.map(idx => measureIds[idx - 1]);
+		// Expected measure-id order. An oracle index beyond the emitted measures
+		// (a layout that references a measure the score doesn't have — see
+		// measures-volta-dangling-ending) is skipped, mirroring the flat expansion
+		// path's warn-and-skip of out-of-range refs.
+		const expected = oracle.map(idx => measureIds[idx - 1]).filter((id): id is string => id !== undefined);
 		assert(resolvable && JSON.stringify(flat) === JSON.stringify(expected),
 			`${file}: plist (${refs.length} refs) flattens to oracle order (${oracle.length} measures)`);
 	}

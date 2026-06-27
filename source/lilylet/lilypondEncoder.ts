@@ -751,26 +751,30 @@ const encodeVoice = (
 const encodeMetadata = (metadata: Metadata): string => {
 	const entries: string[] = [];
 
+	// LilyPond strings escape backslash and double-quote with a backslash. An
+	// unescaped " (or \) inside a header value otherwise breaks the \header block.
+	const ly = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
 	if (metadata.title) {
-		entries.push(`  title = "${metadata.title}"`);
+		entries.push(`  title = "${ly(metadata.title)}"`);
 	}
 	if (metadata.subtitle) {
-		entries.push(`  subtitle = "${metadata.subtitle}"`);
+		entries.push(`  subtitle = "${ly(metadata.subtitle)}"`);
 	}
 	if (metadata.composer) {
-		entries.push(`  composer = "${metadata.composer}"`);
+		entries.push(`  composer = "${ly(metadata.composer)}"`);
 	}
 	if (metadata.arranger) {
-		entries.push(`  arranger = "${metadata.arranger}"`);
+		entries.push(`  arranger = "${ly(metadata.arranger)}"`);
 	}
 	if (metadata.lyricist) {
-		entries.push(`  poet = "${metadata.lyricist}"`);
+		entries.push(`  poet = "${ly(metadata.lyricist)}"`);
 	}
 	if (metadata.opus) {
-		entries.push(`  opus = "${metadata.opus}"`);
+		entries.push(`  opus = "${ly(metadata.opus)}"`);
 	}
 	if (metadata.instrument) {
-		entries.push(`  instrument = "${metadata.instrument}"`);
+		entries.push(`  instrument = "${ly(metadata.instrument)}"`);
 	}
 
 	entries.push('  tagline = ##f');

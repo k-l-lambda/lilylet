@@ -1,0 +1,8 @@
+% Regression repro: scoreDef changes inside a segment should not be emitted inside an
+% already-open section/ending container in a way that verovio ignores or misorders.
+% The time signature changes in the body segment after its first measure; current
+% nested segment emission opens the <section> before m1 and then writes a <scoreDef>
+% inside that section before m2.
+% Performed order: 1 2 3 | 4 | 1 2 3 | 5
+[measures "2*[1..3]{4,5}"]
+c1 | \time 3/4 d2. | e2. | f2. \bar ":|." | g2. |
