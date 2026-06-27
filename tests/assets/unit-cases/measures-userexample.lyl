@@ -3,4 +3,4 @@
 % then continue 11..16.
 % Performed order: 1 2 3 4 5 6 7 8 | 9 | 1 2 3 4 5 6 7 8 | 10 | 11 12 13 14 15 16
 [measures "2*[1..8]{9,10}, 11..16"]
-c1 | d1 | e1 | f1 | g1 | a1 | b1 | c1 | d1 | e1 | f1 | g1 | a1 | b1 | c1 | d1 |
+c1 | d1 | e1 | f1 | g1 | a1 | b1 | c1 | d1 \bar ":|." | e1 | f1 | g1 | a1 | b1 | c1 | d1 |

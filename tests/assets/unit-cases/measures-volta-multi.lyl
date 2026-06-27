@@ -3,4 +3,4 @@
 % pass 2, ending 5 (last) after pass 3.  (Alternates cycle, last closes the repeat.)
 % Performed order: 1 2 | 3 | 1 2 | 4 | 1 2 | 5
 [measures "3*[1,2]{3,4,5}"]
-c1 | d1 | e1 | f1 | g1 |
+c1 | d1 | e1 \bar ":|." | f1 \bar ":|." | g1 |

@@ -29,7 +29,7 @@ import {
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { gmProgramOf } from "./gmInstruments";
-import { parseMeasureLayout, expandMeasureLayout } from "./measureLayout";
+import { parseMeasureLayout, expandMeasureLayout, collectVoltaSpans } from "./measureLayout";
 
 
 // MEI key signatures: positive = sharps, negative = flats
@@ -2744,6 +2744,28 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	const expansionInsertPos = mei.length;
 	const measureIds: string[] = [];
 
+	// Volta (1st/2nd-ending) house brackets. The measure-layout directive already
+	// encodes which measures form each alternate; <expansion> replays them but does
+	// NOT draw the 1./2. brackets. So derive each alternate's contiguous measure
+	// span and wrap that run of <measure>s in an <ending n="N"> container (verovio's
+	// own MusicXML import does the same). Keyed by the 1-based measure index where
+	// an ending opens / closes.
+	const endingOpenAt = new Map<number, number>();   // measure index → ending number
+	const endingCloseAt = new Set<number>();           // measure index after which </ending> closes
+	if (doc.metadata?.measureLayout) {
+		try {
+			const spans = collectVoltaSpans(parseMeasureLayout(doc.metadata.measureLayout));
+			for (const s of spans) {
+				// Only wrap a contiguous ascending run (a house is always adjacent bars).
+				const lo = s.measures[0];
+				const hi = s.measures[s.measures.length - 1];
+				const contiguous = s.measures.every((m, k) => m === lo + k);
+				if (contiguous) { endingOpenAt.set(lo, s.number); endingCloseAt.add(hi); }
+			}
+		} catch { /* malformed layout → no house brackets, expansion path handles the rest */ }
+	}
+	let endingOpen = false;   // whether an <ending> is currently open in the output
+
 	// Track tie state across measures for cross-measure ties
 	const tieState: TieState = {};
 
@@ -2853,8 +2875,25 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 				mei += `${sd}</scoreDef>\n`;
 			}
 		}
-		mei += encodeMeasure(measure, mi + 1, `${indent}${indent}${indent}${indent}${indent}${indent}`, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds);
+		const mIndex = mi + 1;
+		const mIndent = `${indent}${indent}${indent}${indent}${indent}${indent}`;
+		// Open an <ending> house bracket if this measure starts an alternate.
+		const openNum = endingOpenAt.get(mIndex);
+		if (openNum !== undefined && !endingOpen) {
+			const lendsym = openNum === 1 ? ' lendsym="angledown"' : '';
+			mei += `${mIndent}<ending xml:id="${generateId('ending')}" n="${openNum}"${lendsym}>\n`;
+			endingOpen = true;
+		}
+		const measureIndent = endingOpen ? `${mIndent}${indent}` : mIndent;
+		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds);
+		// Close the <ending> after the measure that ends this alternate.
+		if (endingOpen && endingCloseAt.has(mIndex)) {
+			mei += `${mIndent}</ending>\n`;
+			endingOpen = false;
+		}
 	});
+	// Defensive: never leave an <ending> unclosed at the end of the section.
+	if (endingOpen) { mei += `${indent}${indent}${indent}${indent}${indent}${indent}</ending>\n`; endingOpen = false; }
 
 	// Emit an <expansion> describing playback order from the measure-layout
 	// directive ([measures "..."]). Verovio's expand="…" consumes its plist to

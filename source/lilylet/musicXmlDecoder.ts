@@ -1132,6 +1132,12 @@ interface MeasureConversionResult {
 	key?: KeySignature;
 	timeSig?: Fraction;
 	barline?: BarlineEvent;
+	// A `location="left"` repeat (e.g. forward-repeat `.|:`) belongs at the FRONT
+	// of this measure, but lilylet models a `\bar` as the END bar of its measure.
+	// So it is carried back onto the PREVIOUS measure's trailing barline by
+	// convertPart (dropped if this is the first measure — a leading `|:` at the
+	// very start of the piece is conventionally omitted).
+	leadingBarline?: BarlineEvent;
 	harmonies: HarmonyEvent[];
 	clefs: Map<number, ContextChange>;  // staff number → clef context
 }
@@ -1194,6 +1200,7 @@ const convertMeasure = (
 	let key: KeySignature | undefined;
 	let timeSig: Fraction | undefined;
 	let barline: BarlineEvent | undefined;
+	let leadingBarline: BarlineEvent | undefined;
 	const harmonies: HarmonyEvent[] = [];
 	const clefs: Map<number, ContextChange> = new Map();
 
@@ -1493,7 +1500,14 @@ const convertMeasure = (
 			const barlineData = parseBarline(child);
 			const style = convertBarlineStyle(barlineData.barStyle, barlineData.repeat?.direction);
 			if (style && style !== '|') {
-				barline = { type: 'barline', style };
+				// A `location="left"` barline (forward repeat at the measure front)
+				// is carried back onto the previous measure's end bar by convertPart;
+				// everything else is this measure's own trailing end bar.
+				if (barlineData.location === 'left') {
+					leadingBarline = { type: 'barline', style };
+				} else {
+					barline = { type: 'barline', style };
+				}
 			}
 		} else if (tagName === 'harmony') {
 			const harmonyData = parseHarmony(child);
@@ -1587,7 +1601,7 @@ const convertMeasure = (
 		});
 	}
 
-	return { voiceMap, key, timeSig, barline, harmonies, clefs };
+	return { voiceMap, key, timeSig, barline, leadingBarline, harmonies, clefs };
 };
 
 /**
@@ -1616,7 +1630,19 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 
 	for (const measureEl of measureEls) {
 		voiceTracker.reset();
-		const { voiceMap, key, timeSig, barline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker, tupletTracker);
+		const { voiceMap, key, timeSig, barline, leadingBarline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker, tupletTracker);
+
+		// A forward-repeat (or any `location="left"`) barline belongs at the END of
+		// the PREVIOUS measure in lilylet's "\bar = current measure's end bar" model.
+		// Append it to the previous measure's first voice; if this is the first
+		// measure there is no previous one, so a leading repeat at the very start of
+		// the piece is conventionally dropped.
+		if (leadingBarline && measures.length > 0) {
+			const prevVoices = measures[measures.length - 1].parts[0]?.voices;
+			if (prevVoices && prevVoices.length > 0) {
+				prevVoices[0].events.push(leadingBarline);
+			}
+		}
 
 		// Update running key/time
 		if (key) lastKey = key;

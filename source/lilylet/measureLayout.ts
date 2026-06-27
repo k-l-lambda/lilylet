@@ -370,6 +370,48 @@ export const expandMeasureLayout = (layout: MeasureLayout, type: LayoutType = La
 	expand(layout, type);
 
 
+// ── Volta-ending spans ─────────────────────────────────────────────────────
+// Every measure index covered by an alternate of a VoltaMLayout, tagged with its
+// 1-based ending number. Used by the MEI encoder to wrap the right run of
+// <measure>s in an <ending n="N"> container so verovio draws the 1./2. brackets.
+// (The notated/play ORDER is still driven by <expansion>; this only supplies the
+// visual house brackets, which expansion alone does not produce.)
+export interface VoltaEndingSpan { number: number; measures: number[]; }
+
+export const collectVoltaSpans = (layout: MeasureLayout): VoltaEndingSpan[] => {
+	const spans: VoltaEndingSpan[] = [];
+	// Indices a node covers in notation order (each measure once, ascending).
+	const indicesOf = (node: MeasureLayout): number[] => {
+		switch (node.kind) {
+		case "single": return [node.measure];
+		case "block": return ([] as number[]).concat(...node.seq.map(indicesOf));
+		case "volta": return ([] as number[]).concat(...node.body.map(indicesOf),
+			...(node.alternates ? node.alternates.flat().map(indicesOf).flat() : []));
+		case "aba": return ([] as number[]).concat(indicesOf(node.main), ...node.rest.map(indicesOf));
+		}
+	};
+	const walk = (node: MeasureLayout): void => {
+		switch (node.kind) {
+		case "block": node.seq.forEach(walk); break;
+		case "aba": walk(node.main); node.rest.forEach(walk); break;
+		case "volta":
+			node.body.forEach(walk);
+			if (node.alternates) {
+				node.alternates.forEach((alt, ai) => {
+					const measures = ([] as number[]).concat(...alt.map(indicesOf)).sort((a, b) => a - b);
+					if (measures.length) spans.push({ number: ai + 1, measures });
+					alt.forEach(walk);
+				});
+			}
+			break;
+		default: break;
+		}
+	};
+	walk(layout);
+	return spans;
+};
+
+
 // ── Serializer ───────────────────────────────────────────────────────────
 // Canonical index-wise form, collapsing runs of ≥3 consecutive singles into
 // "A..B" ranges (lotus's seqToCode).

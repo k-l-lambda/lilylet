@@ -3,4 +3,4 @@
 % 2nd ending 7.  Segment-wise twin: "s: 2*[4]{2 1}".
 % Performed order: 1 2 3 4 | 5 6 | 1 2 3 4 | 7
 [measures "2*[1..4]{[5,6], 7}"]
-c1 | d1 | e1 | f1 | g1 | a1 | b1 |
+c1 | d1 | e1 | f1 | g1 | a1 \bar ":|." | b1 |

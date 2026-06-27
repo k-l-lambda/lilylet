@@ -233,6 +233,7 @@ const html = `<!DOCTYPE html>
         <button class="filter-btn" data-filter="hairpins">Hairpins</button>
         <button class="filter-btn" data-filter="harmony">Harmony</button>
         <button class="filter-btn" data-filter="markup">Markup</button>
+        <button class="filter-btn" data-filter="measures">Measures</button>
         <button class="filter-btn" data-filter="key-signatures">Key Signatures</button>
         <button class="filter-btn" data-filter="multiple">Multiple</button>
         <button class="filter-btn" data-filter="navigation">Navigation</button>
