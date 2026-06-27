@@ -157,24 +157,33 @@ const simulate = (infos: MeasureRepeatInfo[]): number[] => {
 
 const rangeCode = (a: number, b: number): string => a === b ? `${a}` : flatToCode(Array.from({ length: b - a + 1 }, (_, k) => a + k));
 
-const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null => {
-	const hasNav = infos.some(i => i.dacapo || i.dalsegno || i.tocoda || i.fine || i.segno || i.coda);
-	if (hasNav) return null;   // navigation jumps → flat fallback (DSL can't compactly express)
+// Render the repeat/volta structure over measures [lo..hi] (no navigation),
+// or null if it isn't a single clean repeat/volta span. Shared by the plain
+// path and the da-capo ABA wrapper.
+const renderRepeatSpan = (infos: MeasureRepeatInfo[], lo: number, hi: number): string | null => {
+	const span = infos.filter(i => i.index >= lo && i.index <= hi);
+	const repeatEnds = span.filter(i => i.repeatEnd);
+	if (repeatEnds.length > 1) return null;          // >1 repeat span → caller falls back to flat
 
-	const repeatEnds = infos.filter(i => i.repeatEnd);
-	if (repeatEnds.length !== 1) return null;   // 0 or >1 repeat spans → flat
+	if (repeatEnds.length === 0) {
+		// no repeat at all in this span: a plain ascending run (only valid if the
+		// caller still wants a structured wrapper around it)
+		const hasEnding = span.some(i => i.endingStart !== undefined);
+		if (hasEnding) return null;
+		return rangeCode(lo, hi);
+	}
+
 	const endInfo = repeatEnds[0];
-	const startIdx = infos.find(i => i.repeatStart)?.index ?? 1;
+	const startIdx = span.find(i => i.repeatStart)?.index ?? lo;
 	const times = endInfo.repeatTimes ?? 2;
-
-	const endingStarts = infos.filter(i => i.endingStart !== undefined).map(i => i.index).sort((a, b) => a - b);
+	const endingStarts = span.filter(i => i.endingStart !== undefined).map(i => i.index).sort((a, b) => a - b);
 
 	if (endingStarts.length === 0) {
 		// plain repeat: pre, T*[start..end], post
 		const parts: string[] = [];
-		if (startIdx > 1) parts.push(rangeCode(1, startIdx - 1));
+		if (startIdx > lo) parts.push(rangeCode(lo, startIdx - 1));
 		parts.push(`${times}*[${rangeCode(startIdx, endInfo.index)}]`);
-		if (endInfo.index < total) parts.push(rangeCode(endInfo.index + 1, total));
+		if (endInfo.index < hi) parts.push(rangeCode(endInfo.index + 1, hi));
 		return parts.join(", ");
 	}
 
@@ -183,8 +192,66 @@ const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null
 	const firstEnding = endingStarts[0];
 	const bodyEnd = firstEnding - 1;
 	if (bodyEnd < startIdx) return null;
-	// each ending span runs from its start to the measure before the next ending
-	// start (last ending: to its endingStop, recorded on a measure).
+	const endings: number[][] = [];
+	for (let e = 0; e < endingStarts.length; e++) {
+		const s = endingStarts[e];
+		const nextS = endingStarts[e + 1];
+		let stop: number;
+		if (nextS !== undefined) stop = nextS - 1;
+		else {
+			const stopInfo = span.find(info => info.index >= s && info.endingStop !== undefined);
+			stop = stopInfo ? stopInfo.index : s;
+		}
+		endings.push(Array.from({ length: stop - s + 1 }, (_, k) => s + k));
+	}
+	const lastStop = endings[endings.length - 1][endings[endings.length - 1].length - 1];
+
+	const parts: string[] = [];
+	if (startIdx > lo) parts.push(rangeCode(lo, startIdx - 1));
+	const altCode = endings.map(sp => sp.length > 1 ? `[${flatToCode(sp)}]` : `${sp[0]}`).join(", ");
+	parts.push(`${times}*[${rangeCode(startIdx, bodyEnd)}]{${altCode}}`);
+	if (lastStop < hi) parts.push(rangeCode(lastStop + 1, hi));
+	return parts.join(", ");
+};
+
+const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null => {
+	const dacapo = infos.find(i => i.dacapo);
+	const dalsegno = infos.some(i => i.dalsegno);
+	const tocoda = infos.some(i => i.tocoda);
+
+	// D.C. (da capo → return to measure 1) over an inner repeat/volta maps cleanly
+	// to ABA <main, rest>: the trailing A' re-expansion uses LayoutType.Once (body
+	// once + the LAST alternate), which is exactly the "over-volta" convention —
+	// on the da-capo pass internal volta repeats are dropped, only the final
+	// pass-through plays, stopping at Fine. D.S. (segno ≠ measure 1) and To-Coda
+	// truncation can't be expressed this way → flat fallback.
+	if (dacapo && !dalsegno && !tocoda) {
+		// D.C. over a volta → ABA <main, rest>; Once re-expansion gives the
+		// over-volta replay (body + last ending, no inner repeat). Plain D.C. al
+		// Fine without a volta can't bound A' at an arbitrary Fine → flat fallback.
+		return buildDaCapoABA(infos, dacapo.index);
+	}
+	if (dalsegno || tocoda || infos.some(i => i.fine || i.segno || i.coda)) return null;
+
+	// No navigation: a single plain repeat/volta over the whole piece.
+	return renderRepeatSpan(infos, 1, total);
+};
+
+// Construct the ABA form <main, rest> for a D.C. case. main = the volta/repeat
+// structure; rest = the post-volta tail before the D.C. measure. The Once
+// re-expansion of main supplies the da-capo replay (body + last ending), giving
+// the over-volta semantics. Returns null when the shape doesn't fit (no volta,
+// or no tail to form the ABA "rest") → caller uses the flat fallback.
+const buildDaCapoABA = (infos: MeasureRepeatInfo[], dcIdx: number): string | null => {
+	const endingStarts = infos.filter(i => i.index <= dcIdx && i.endingStart !== undefined).map(i => i.index).sort((a, b) => a - b);
+	if (endingStarts.length === 0) return null;   // plain D.C. al Fine (no volta) → flat
+	// body+endings up to the last ending stop; the rest (tail) runs to dcIdx.
+	const repeatEnd = infos.find(i => i.index <= dcIdx && i.repeatEnd);
+	const startIdx = infos.find(i => i.index <= dcIdx && i.repeatStart)?.index ?? 1;
+	const times = repeatEnd?.repeatTimes ?? 2;
+	const bodyEnd = endingStarts[0] - 1;
+	if (bodyEnd < startIdx) return null;
+
 	const endings: number[][] = [];
 	for (let e = 0; e < endingStarts.length; e++) {
 		const s = endingStarts[e];
@@ -198,13 +265,15 @@ const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null
 		endings.push(Array.from({ length: stop - s + 1 }, (_, k) => s + k));
 	}
 	const lastStop = endings[endings.length - 1][endings[endings.length - 1].length - 1];
+	const altCode = endings.map(sp => sp.length > 1 ? `[${flatToCode(sp)}]` : `${sp[0]}`).join(", ");
+	const voltaCode = `${times}*[${rangeCode(startIdx, bodyEnd)}]{${altCode}}`;
 
-	const parts: string[] = [];
-	if (startIdx > 1) parts.push(rangeCode(1, startIdx - 1));
-	const altCode = endings.map(span => span.length > 1 ? `[${flatToCode(span)}]` : `${span[0]}`).join(", ");
-	parts.push(`${times}*[${rangeCode(startIdx, bodyEnd)}]{${altCode}}`);
-	if (lastStop < total) parts.push(rangeCode(lastStop + 1, total));
-	return parts.join(", ");
+	const pre = startIdx > 1 ? rangeCode(1, startIdx - 1) + ", " : "";
+	const main = pre ? `[${pre}${voltaCode}]` : voltaCode;
+	// rest = the tail from after the last ending to the D.C. measure
+	if (lastStop >= dcIdx) return null;   // no tail to form the ABA "rest"
+	const rest = rangeCode(lastStop + 1, dcIdx);
+	return `<${main}, ${rest}>`;
 };
 
 
