@@ -412,6 +412,98 @@ export const collectVoltaSpans = (layout: MeasureLayout): VoltaEndingSpan[] => {
 };
 
 
+// ── Segment decomposition (for MEI nested sections + section-level expansion) ──
+// Verovio draws volta house brackets only from <ending> containers, and only
+// plays an <expansion> correctly when the plist references SECTION/ENDING ids
+// (not bare measures) over a properly nested structure. So decompose the layout
+// into contiguous measure groups — a "section" for plain runs and volta bodies,
+// an "ending" for each volta alternate — and a performance order over those
+// segment ids (a body segment id repeats once per pass). Returns null when the
+// layout has no voltas (caller uses the simpler flat measure-level expansion) or
+// can't be cleanly decomposed (non-contiguous segment → fall back to flat).
+
+export interface LayoutSegment { id: string; kind: "section" | "ending"; endingNumber?: number; measures: number[]; }
+export interface SegmentDecomposition { segments: LayoutSegment[]; order: string[]; }
+
+export const decomposeToSegments = (layout: MeasureLayout): SegmentDecomposition | null => {
+	const segments: LayoutSegment[] = [];
+	let hasEnding = false;
+	let counter = 0;
+	const newId = (k: string) => `seg-${k}-${counter++}`;
+
+	// Indices a node covers in notation order (each measure once, ascending).
+	const indicesOf = (node: MeasureLayout): number[] => {
+		switch (node.kind) {
+		case "single": return [node.measure];
+		case "block": return ([] as number[]).concat(...node.seq.map(indicesOf));
+		case "volta": return ([] as number[]).concat(...node.body.map(indicesOf),
+			...(node.alternates ? ([] as number[]).concat(...node.alternates.map(a => ([] as number[]).concat(...a.map(indicesOf)))) : []));
+		case "aba": return ([] as number[]).concat(indicesOf(node.main), ...node.rest.map(indicesOf));
+		}
+	};
+	const contiguousAsc = (xs: number[]): boolean => xs.length > 0 && xs.every((v, i) => i === 0 || v === xs[i - 1] + 1);
+
+	// Accumulate a run of plain (non-volta/non-aba) measures into one section,
+	// flushing whenever a structural node (volta/aba) interrupts the run.
+	let run: number[] = [];
+	const flushRun = (): void => {
+		if (run.length === 0) return;
+		if (!contiguousAsc(run)) throw new Error("non-contiguous section run");
+		segments.push({ id: newId("sec"), kind: "section", measures: run });
+		run = [];
+	};
+
+	// Emit segments for a node in document order. Plain singles/blocks extend the
+	// current run; a volta flushes the run then emits body-section + ending(s); an
+	// aba flushes then recurses into main and rest (so the replayed main is its own
+	// segment run). Throws on any non-contiguous group → caller falls back to flat.
+	const emit = (node: MeasureLayout): void => {
+		switch (node.kind) {
+		case "single": run.push(node.measure); break;
+		case "block": node.seq.forEach(emit); break;
+		case "aba": flushRun(); emit(node.main); flushRun(); node.rest.forEach(emit); flushRun(); break;
+		case "volta": {
+			flushRun();
+			const body = indicesOf({ kind: "block", seq: node.body });
+			if (!contiguousAsc(body)) throw new Error("non-contiguous volta body");
+			segments.push({ id: newId("body"), kind: "section", measures: body });
+			if (node.alternates) {
+				hasEnding = true;
+				node.alternates.forEach((alt, ai) => {
+					const m = indicesOf({ kind: "block", seq: alt });
+					if (!contiguousAsc(m)) throw new Error("non-contiguous ending");
+					segments.push({ id: newId("end"), kind: "ending", endingNumber: ai + 1, measures: m });
+				});
+			}
+			break;
+		}
+		}
+	};
+
+	try { emit(layout); flushRun(); } catch { return null; }
+	if (!hasEnding) return null;   // no voltas → flat measure-level path is fine
+
+	// Map each measure index to the segment whose `measures` contains it. A volta
+	// body measure belongs to its body section; alternate measures to their ending.
+	const segOfMeasure = new Map<number, string>();
+	for (const s of segments) for (const m of s.measures) if (!segOfMeasure.has(m)) segOfMeasure.set(m, s.id);
+
+	// Performance order over segment ids: walk the flat Full expansion and collapse
+	// consecutive measures that map to the same segment into one segment ref. This
+	// reproduces the exact playback order (body repeats → body id appears twice,
+	// ABA replay → main segment id reappears), keyed off the proven expander.
+	const flat = expandMeasureLayout(layout, LayoutType.Full);
+	const order: string[] = [];
+	for (const m of flat) {
+		const id = segOfMeasure.get(m);
+		if (id === undefined) return null;   // a played measure isn't in any segment → bail to flat
+		if (order.length === 0 || order[order.length - 1] !== id) order.push(id);
+		else if (segments.find(s => s.id === id)!.measures[0] === m) order.push(id);  // same seg restarting (repeat) → new ref
+	}
+	return { segments, order };
+};
+
+
 // ── Serializer ───────────────────────────────────────────────────────────
 // Canonical index-wise form, collapsing runs of ≥3 consecutive singles into
 // "A..B" ranges (lotus's seqToCode).

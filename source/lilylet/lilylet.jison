@@ -130,6 +130,13 @@
 	const dynamicEvent = (type) => ({ type: 'dynamic', dynamicType: type });
 	const markupMark = (content) => ({ markType: 'markup', content });
 
+	// Strip the surrounding quotes from a STRING token and unescape the control
+	// sequences the serializer emits (escapeString): \n \r \t \" \\ . A single
+	// left-to-right pass over each \x pair avoids the sequential-replace bug where
+	// an escaped backslash (\\) followed by n would be misread as a newline.
+	const UNESCAPE = { n: '\n', r: '\r', t: '\t', '"': '"', '\\': '\\' };
+	const unq = (s) => s.slice(1, -1).replace(/\\(.)/g, (m, c) => (c in UNESCAPE ? UNESCAPE[c] : m));
+
 	// Build an { instruments: { <key>: { name, shortName? } } } fragment from a
 	// `[instrument-<key>` header token. <key> is a staff-layout group key — a single
 	// staff id ("1", "v1", "b") or a range ("1-2", "pl-pr") — taken verbatim after the
@@ -391,16 +398,16 @@ headers
 	;
 
 header
-	: HEADER_TITLE STRING ']'					-> ({ title: $2.slice(1, -1) })
-	| HEADER_SUBTITLE STRING ']'				-> ({ subtitle: $2.slice(1, -1) })
-	| HEADER_COMPOSER STRING ']'				-> ({ composer: $2.slice(1, -1) })
-	| HEADER_ARRANGER STRING ']'				-> ({ arranger: $2.slice(1, -1) })
-	| HEADER_LYRICIST STRING ']'				-> ({ lyricist: $2.slice(1, -1) })
-	| HEADER_OPUS STRING ']'					-> ({ opus: $2.slice(1, -1) })
-	| HEADER_INSTRUMENT STRING ']'				-> ({ instrument: $2.slice(1, -1) })
-	| HEADER_INSTRUMENT_STAFF STRING ']'		-> instrumentStaff($1, $2.slice(1, -1))
-	| HEADER_INSTRUMENT_STAFF STRING STRING ']'	-> instrumentStaff($1, $2.slice(1, -1), $3.slice(1, -1))
-	| HEADER_GENRE STRING ']'					-> ({ genre: $2.slice(1, -1) })
+	: HEADER_TITLE STRING ']'					-> ({ title: unq($2) })
+	| HEADER_SUBTITLE STRING ']'				-> ({ subtitle: unq($2) })
+	| HEADER_COMPOSER STRING ']'				-> ({ composer: unq($2) })
+	| HEADER_ARRANGER STRING ']'				-> ({ arranger: unq($2) })
+	| HEADER_LYRICIST STRING ']'				-> ({ lyricist: unq($2) })
+	| HEADER_OPUS STRING ']'					-> ({ opus: unq($2) })
+	| HEADER_INSTRUMENT STRING ']'				-> ({ instrument: unq($2) })
+	| HEADER_INSTRUMENT_STAFF STRING ']'		-> instrumentStaff($1, unq($2))
+	| HEADER_INSTRUMENT_STAFF STRING STRING ']'	-> instrumentStaff($1, unq($2), unq($3))
+	| HEADER_GENRE STRING ']'					-> ({ genre: unq($2) })
 	| HEADER_STAVES STRING ']'					-> ({ staves: $2.slice(1, -1) })
 	| HEADER_MEASURES STRING ']'				-> ({ measureLayout: $2.slice(1, -1) })
 	| HEADER_AUTOBEAM STRING ']'				-> ({ autoBeam: $2.slice(1, -1) })
@@ -486,9 +493,9 @@ harmony_event
 	;
 
 markup_event
-	: CMD_MARKUP STRING							-> markupEvent($2.slice(1, -1))
-	| '^' CMD_MARKUP STRING						-> markupEvent($3.slice(1, -1), 'above')
-	| '_' CMD_MARKUP STRING						-> markupEvent($3.slice(1, -1), 'below')
+	: CMD_MARKUP STRING							-> markupEvent(unq($2))
+	| '^' CMD_MARKUP STRING						-> markupEvent(unq($3), 'above')
+	| '_' CMD_MARKUP STRING						-> markupEvent(unq($3), 'below')
 	;
 
 dynamic_event
@@ -606,8 +613,8 @@ partial_cmd
 	;
 
 tempo_cmd
-	: CMD_TEMPO STRING duration '=' NUMBER		-> ({ text: $2.slice(1, -1), beat: $3, bpm: Number($5) })
-	| CMD_TEMPO STRING							-> ({ text: $2.slice(1, -1) })
+	: CMD_TEMPO STRING duration '=' NUMBER		-> ({ text: unq($2), beat: $3, bpm: Number($5) })
+	| CMD_TEMPO STRING							-> ({ text: unq($2) })
 	| CMD_TEMPO duration '=' NUMBER				-> ({ beat: $2, bpm: Number($4) })
 	;
 
@@ -769,5 +776,5 @@ navigation_mark
 	;
 
 markup_mark
-	: CMD_MARKUP STRING							-> markupMark($2.slice(1, -1))
+	: CMD_MARKUP STRING							-> markupMark(unq($2))
 	;

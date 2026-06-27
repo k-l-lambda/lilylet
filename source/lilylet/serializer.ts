@@ -631,7 +631,7 @@ const serializeEvent = (
 		case 'markup': {
 			const mk = event as MarkupEvent;
 			const prefix = mk.placement === 'above' ? '^' : mk.placement === 'below' ? '_' : '';
-			return { str: `${prefix}\\markup "${mk.content}"`, newEnv: env };
+			return { str: `${prefix}\\markup "${escapeString(mk.content)}"`, newEnv: env };
 		}
 		case 'dynamic': {
 			const dynStr = DYNAMIC_MAP[(event as DynamicEvent).dynamicType];
@@ -1011,7 +1011,12 @@ const serializeMeasure = (
 
 // Escape string for serialization (quotes and backslashes)
 const escapeString = (str: string): string => {
-	return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+	return str
+		.replace(/\\/g, '\\\\')
+		.replace(/"/g, '\\"')
+		.replace(/\n/g, '\\n')
+		.replace(/\r/g, '\\r')
+		.replace(/\t/g, '\\t');
 };
 
 // Serialize metadata

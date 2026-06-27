@@ -123,6 +123,11 @@ console.log('\nSerializer round-trip (expansion stable through serialize→repar
 }
 
 // ─── End-to-end: MEI <expansion plist> matches the expanded order ───────────
+// Two valid plist forms (see meiEncoder): a flat measure-level plist (one ref per
+// played bar) when there are no voltas, or a SECTION/ENDING segment-level plist
+// (a body segment id repeats per pass) when voltas are present — the form verovio
+// needs to play voltas while also drawing the house brackets. Either way, the plist
+// flattened back to measure ids must equal the oracle performed order.
 console.log('\nMEI <expansion> plist length & resolution:');
 {
 	const files = fs.readdirSync(UNIT_DIR).filter(f => /^measures-.*\.lyl$/.test(f)).sort();
@@ -134,11 +139,31 @@ console.log('\nMEI <expansion> plist length & resolution:');
 		const plistM = mei.match(/<expansion[^>]*plist="([^"]*)"/);
 		if (!plistM) { assert(false, `${file}: no <expansion> emitted`); continue; }
 		const refs = plistM[1].split(' ').map(s => s.replace(/^#/, ''));
-		const allResolve = refs.every(r => measureIds.includes(r));
-		// plist must equal the expanded order mapped through the measure ids
-		const expectedRefs = oracle.map(idx => measureIds[idx - 1]);
-		assert(refs.length === oracle.length && allResolve && JSON.stringify(refs) === JSON.stringify(expectedRefs),
-			`${file}: plist has ${refs.length} refs = oracle order, all resolve to emitted measures`);
+
+		// Map every segment id (<section>/<ending>) to the measure ids it contains,
+		// in document order, by scanning the MEI nesting.
+		const segMeasures = new Map<string, string[]>();
+		{
+			const open: string[] = [];
+			const re = /<(section|ending)\b[^>]*xml:id="([^"]*)"|<measure xml:id="([^"]*)"|<\/(section|ending)>/g;
+			let m: RegExpExecArray | null;
+			while ((m = re.exec(mei))) {
+				if (m[2]) { open.push(m[2]); if (!segMeasures.has(m[2])) segMeasures.set(m[2], []); }
+				else if (m[3]) { for (const sid of open) segMeasures.get(sid)!.push(m[3]); }
+				else if (m[4]) { open.pop(); }
+			}
+		}
+		// Flatten the plist: a measure ref → itself; a segment ref → its measure ids.
+		const flat: string[] = [];
+		let resolvable = true;
+		for (const r of refs) {
+			if (measureIds.includes(r)) flat.push(r);
+			else if (segMeasures.has(r)) flat.push(...segMeasures.get(r)!);
+			else { resolvable = false; break; }
+		}
+		const expected = oracle.map(idx => measureIds[idx - 1]);
+		assert(resolvable && JSON.stringify(flat) === JSON.stringify(expected),
+			`${file}: plist (${refs.length} refs) flattens to oracle order (${oracle.length} measures)`);
 	}
 }
 

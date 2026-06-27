@@ -29,7 +29,7 @@ import {
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { gmProgramOf } from "./gmInstruments";
-import { parseMeasureLayout, expandMeasureLayout, collectVoltaSpans } from "./measureLayout";
+import { parseMeasureLayout, expandMeasureLayout, decomposeToSegments } from "./measureLayout";
 
 
 // MEI key signatures: positive = sharps, negative = flats
@@ -2744,27 +2744,37 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	const expansionInsertPos = mei.length;
 	const measureIds: string[] = [];
 
-	// Volta (1st/2nd-ending) house brackets. The measure-layout directive already
-	// encodes which measures form each alternate; <expansion> replays them but does
-	// NOT draw the 1./2. brackets. So derive each alternate's contiguous measure
-	// span and wrap that run of <measure>s in an <ending n="N"> container (verovio's
-	// own MusicXML import does the same). Keyed by the 1-based measure index where
-	// an ending opens / closes.
-	const endingOpenAt = new Map<number, number>();   // measure index → ending number
-	const endingCloseAt = new Set<number>();           // measure index after which </ending> closes
+	// Volta playback + house brackets. A flat measure-level <expansion> conflicts
+	// with <ending> wrappers in verovio (it then drops the volta measures). Verovio
+	// instead wants nested <section>/<ending> groups with a SECTION-LEVEL expansion
+	// whose plist references those segment ids. So when the layout decomposes into
+	// volta segments, emit that structure; otherwise keep the simpler flat path.
+	// See [[volta-rendering-gaps]] / [[lilylet-measure-layout]].
+	let segDecomp: ReturnType<typeof decomposeToSegments> = null;
+	const segOpenAt = new Map<number, string>();    // measure index → opening tag for its segment
+	const segCloseAt = new Map<number, string>();   // measure index → closing tag after it
+	const segIdById = new Map<string, string>();    // layout segment id → emitted xml:id
 	if (doc.metadata?.measureLayout) {
 		try {
-			const spans = collectVoltaSpans(parseMeasureLayout(doc.metadata.measureLayout));
-			for (const s of spans) {
-				// Only wrap a contiguous ascending run (a house is always adjacent bars).
-				const lo = s.measures[0];
-				const hi = s.measures[s.measures.length - 1];
-				const contiguous = s.measures.every((m, k) => m === lo + k);
-				if (contiguous) { endingOpenAt.set(lo, s.number); endingCloseAt.add(hi); }
-			}
-		} catch { /* malformed layout → no house brackets, expansion path handles the rest */ }
+			segDecomp = decomposeToSegments(parseMeasureLayout(doc.metadata.measureLayout));
+		} catch { segDecomp = null; }
 	}
-	let endingOpen = false;   // whether an <ending> is currently open in the output
+	if (segDecomp) {
+		const segIndent = `${indent}${indent}${indent}${indent}${indent}${indent}`;
+		for (const seg of segDecomp.segments) {
+			const xmlId = generateId(seg.kind === "ending" ? "ending" : "section");
+			segIdById.set(seg.id, xmlId);
+			const lo = seg.measures[0];
+			const hi = seg.measures[seg.measures.length - 1];
+			if (seg.kind === "ending") {
+				const lendsym = seg.endingNumber === 1 ? ' lendsym="angledown"' : '';
+				segOpenAt.set(lo, `${segIndent}<ending xml:id="${xmlId}" n="${seg.endingNumber}"${lendsym}>\n`);
+			} else {
+				segOpenAt.set(lo, `${segIndent}<section xml:id="${xmlId}">\n`);
+			}
+			segCloseAt.set(hi, `${segIndent}</${seg.kind === "ending" ? "ending" : "section"}>\n`);
+		}
+	}
 
 	// Track tie state across measures for cross-measure ties
 	const tieState: TieState = {};
@@ -2877,29 +2887,32 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		}
 		const mIndex = mi + 1;
 		const mIndent = `${indent}${indent}${indent}${indent}${indent}${indent}`;
-		// Open an <ending> house bracket if this measure starts an alternate.
-		const openNum = endingOpenAt.get(mIndex);
-		if (openNum !== undefined && !endingOpen) {
-			const lendsym = openNum === 1 ? ' lendsym="angledown"' : '';
-			mei += `${mIndent}<ending xml:id="${generateId('ending')}" n="${openNum}"${lendsym}>\n`;
-			endingOpen = true;
-		}
-		const measureIndent = endingOpen ? `${mIndent}${indent}` : mIndent;
+		// When the layout decomposes into volta segments, wrap each measure run in
+		// its <section>/<ending> container (opened/closed by measure index).
+		const openTag = segOpenAt.get(mIndex);
+		if (openTag) mei += openTag;
+		const measureIndent = segDecomp ? `${mIndent}${indent}` : mIndent;
 		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds);
-		// Close the <ending> after the measure that ends this alternate.
-		if (endingOpen && endingCloseAt.has(mIndex)) {
-			mei += `${mIndent}</ending>\n`;
-			endingOpen = false;
-		}
+		const closeTag = segCloseAt.get(mIndex);
+		if (closeTag) mei += closeTag;
 	});
-	// Defensive: never leave an <ending> unclosed at the end of the section.
-	if (endingOpen) { mei += `${indent}${indent}${indent}${indent}${indent}${indent}</ending>\n`; endingOpen = false; }
 
 	// Emit an <expansion> describing playback order from the measure-layout
-	// directive ([measures "..."]). Verovio's expand="…" consumes its plist to
-	// unfold repeats for MIDI/time-map output. Inserted as the first child of
-	// <section>; ids were collected in the measure loop above.
-	if (doc.metadata?.measureLayout) {
+	// directive ([measures "..."]). Verovio consumes its plist to unfold repeats
+	// for MIDI/time-map output. Inserted as the first child of <section>.
+	//   - voltas present (segDecomp): plist references the SECTION/ENDING segment
+	//     ids in performed order (a body segment id repeats per pass). This is the
+	//     only form verovio plays correctly alongside <ending> house brackets.
+	//   - otherwise: the simpler flat measure-level plist (one ref per played bar).
+	if (segDecomp) {
+		const refs = segDecomp.order.map(segId => segIdById.get(segId)).filter((x): x is string => x !== undefined).map(id => `#${id}`);
+		if (refs.length > 0) {
+			const expIndent = `${indent}${indent}${indent}${indent}${indent}${indent}`;
+			const expXml = `${expIndent}<expansion xml:id="${generateId("expansion")}" plist="${refs.join(" ")}" />\n`;
+			mei = mei.slice(0, expansionInsertPos) + expXml + mei.slice(expansionInsertPos);
+		}
+	}
+	else if (doc.metadata?.measureLayout) {
 		try {
 			const layout = parseMeasureLayout(doc.metadata.measureLayout);
 			const order = expandMeasureLayout(layout);
