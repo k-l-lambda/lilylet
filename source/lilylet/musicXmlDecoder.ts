@@ -811,6 +811,21 @@ const parseMetadata = (doc: Document): Metadata => {
 		metadata.title = movementTitleEl.textContent.trim();
 	}
 
+	// Subtitle: MusicXML has no <subtitle> element — it lives in a page <credit>
+	// tagged <credit-type>subtitle</credit-type>, with the text in <credit-words>.
+	const creditEls = doc.getElementsByTagName('credit');
+	for (let i = 0; i < creditEls.length; i++) {
+		const credit = creditEls[i];
+		const typeEl = credit.getElementsByTagName('credit-type')[0];
+		if (typeEl?.textContent?.trim().toLowerCase() === 'subtitle') {
+			const words = Array.from(credit.getElementsByTagName('credit-words'))
+				.map(w => w.textContent?.trim() || '')
+				.filter(Boolean)
+				.join(' ');
+			if (words) { metadata.subtitle = words; break; }
+		}
+	}
+
 	// Identification (composer, arranger, lyricist)
 	const identificationEl = doc.getElementsByTagName('identification')[0];
 	if (identificationEl) {
