@@ -301,6 +301,16 @@ const serializeMarks = (marks: Mark[]): string => {
 			case 'fingering':
 				parts.push('-' + mark.finger);
 				break;
+			case 'markup': {
+				// Text direction attached to a note (e.g. ^\markup "cantabile").
+				// Placement: above → ^, below → _, unspecified → - (default).
+				const prefix = mark.placement === 'above' ? '^' : mark.placement === 'below' ? '_' : '-';
+				parts.push(prefix + '\\markup "' + escapeString(mark.content) + '"');
+				break;
+			}
+			case 'navigation':
+				parts.push(mark.type === 'coda' ? '\\coda' : '\\segno');
+				break;
 		}
 	}
 

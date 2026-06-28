@@ -1099,14 +1099,21 @@ const directionToMarks = (
 
 	// Words (text directions: "dolce", "espr.", "cresc.", "con forza", ...).
 	// Tempo words ("Allegro", "a tempo", ...) are consumed separately as a tempo
-	// ContextChange by directionToContextChange, so skip those here to avoid
-	// double-emitting; everything else becomes a markup mark → MEI <dir>. Metronome
-	// directions are tempo too, never markup. Navigation text ("D.C. al Fine",
-	// "To Coda", "Fine", "D.S. al Coda") is NOT a tempo word, so it flows here as a
-	// markup glyph — the jump SEMANTICS are captured separately as measure-layout.
+	// ContextChange by directionToContextChange (which takes words[0]), so skip that
+	// one here to avoid double-emitting; the REST become a markup mark → MEI <dir>.
+	// A single <direction> often carries a tempo word AND an expressive/translation
+	// word together (e.g. <words>Moderato</words><words>中板</words>) — only the tempo
+	// word is consumed; the rest must still surface as markup. Metronome directions
+	// are tempo too, never markup. Navigation text ("D.C. al Fine", "To Coda",
+	// "Fine", "D.S. al Coda") is NOT a tempo word, so it flows here as a markup glyph
+	// — the jump SEMANTICS are captured separately as measure-layout.
 	let emittedWords = false;
 	if (direction.words && direction.words.length > 0 && !direction.metronome) {
-		const text = direction.words.map(w => w.text).join('').trim();
+		// If words[0] was consumed as the tempo text, drop it and keep the remainder;
+		// otherwise the whole run is one expressive phrase, joined as today.
+		const firstIsTempo = isTempoWord(direction.words[0].text.trim());
+		const rest = firstIsTempo ? direction.words.slice(1) : direction.words;
+		const text = rest.map(w => w.text).join('').trim();
 		if (text && !isTempoWord(text)) {
 			const placement = direction.placement === 'above' ? Placement.above
 				: direction.placement === 'below' ? Placement.below

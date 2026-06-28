@@ -1,0 +1,8 @@
+% Regression: a note-attached \markup text direction must survive serialization.
+% Before the fix, serializeMarks had no 'markup' case so ^/_\markup on a note was
+% silently dropped (the .lyl lost "cantabile"/"dim. e rit."/Chinese tempo glosses
+% seen in e.g. fmenu/46.d小调交响曲). Tempo words become \tempo separately; the
+% expressive/translation words remain as markup marks.
+\time 3/4
+c'4^\markup "中板" d'4_\markup "cantabile" e'4 |
+f'4 g'4_\markup "dim. e rit." a'4 |
