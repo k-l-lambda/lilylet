@@ -166,6 +166,7 @@ const ORNAMENT_MAP: Record<string, string> = {
 	fermata: '\\fermata',
 	shortFermata: '\\shortfermata',
 	arpeggio: '\\arpeggio',
+	breath: '\\breathe',
 };
 
 
@@ -310,6 +311,9 @@ const serializeMarks = (marks: Mark[]): string => {
 			}
 			case 'navigation':
 				parts.push(mark.type === 'coda' ? '\\coda' : '\\segno');
+				break;
+			case 'glissando':
+				parts.push('\\glissando');
 				break;
 		}
 	}

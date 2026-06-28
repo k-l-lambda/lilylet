@@ -15,7 +15,9 @@ accidentals-sharp-accidental.lyl: 193d8f71a9d3648c40f251cf26b6832a
 accidentals-with-key.lyl: 38e57aa5cd9e6ea12d799143255eedd7
 articulations-accent.lyl: 5594ee1caf2d8c02afe7f7b2aa97ee9f
 articulations-arpeggio.lyl: 2a2bf7ecc0c33077d5c0dfe71e2ac3be
+articulations-breath.lyl: 26446bfb004a6fff45e7024e15c5b25d
 articulations-fermata.lyl: 15c453dff8fe3b0b888196888a42e3ec
+articulations-glissando.lyl: f7295921e4d84b9e0e5ebc0bc86ba976
 articulations-marcato.lyl: 843d3500a5f473d5c5a2e57fac8ff0d9
 articulations-mordent.lyl: e4b4de29343d9488414af31830b25d21
 articulations-multiple-articulations.lyl: 5f91f9565e8b69992ebacf0ea8a887fc
@@ -125,6 +127,7 @@ markup-basic.lyl: 68637870a5e7d80a674f4e513f3ad5b9
 markup-below.lyl: 4cbbd06925a07acbaed46e5264c6b4b0
 markup-inside-tuplet.lyl: 52dbcdf4983111b874a5dd5c41c7e5fc
 markup-note-attached.lyl: 17f4e27d627fd44fe163c42f3fe5f518
+markup-rehearsal.lyl: b4c22ff77bc5767a4a1ecaf938a0fbea
 measures-aba.lyl: 08b4ccb98a436421fe2bf5d7317502ac
 measures-block.lyl: 08b4ccb98a436421fe2bf5d7317502ac
 measures-dacapo-coda.lyl: 8aeedebc613dadfeac414264602cc071

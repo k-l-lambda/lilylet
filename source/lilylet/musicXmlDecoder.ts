@@ -25,6 +25,7 @@ import {
 	HairpinType,
 	PedalType,
 	NavigationMarkType,
+	OrnamentType,
 	Placement,
 	BarlineEvent,
 	HarmonyEvent,
@@ -457,6 +458,14 @@ const parseNotations = (notationsEl: Element): MusicXmlNotations => {
 		};
 	}
 
+	// Glissando / slide — both are note-to-note slide lines. Only the START note
+	// carries the mark (LilyPond \glissando auto-connects to the next note), so we
+	// record presence of any start; stops are ignored.
+	const slideEls = [...getElements(notationsEl, 'glissando'), ...getElements(notationsEl, 'slide')];
+	if (slideEls.some(el => getAttribute(el, 'type') === 'start')) {
+		result.glissando = true;
+	}
+
 	return result;
 };
 
@@ -726,6 +735,17 @@ const parseDirection = (dirEl: Element): MusicXmlDirection => {
 		result.segno = true;
 	}
 
+	// Rehearsal mark (<direction-type><rehearsal>A</rehearsal>). May be split into
+	// multiple <rehearsal> (e.g. "A" + a Chinese gloss "段"); join them. Collected
+	// from the whole direction so it is found regardless of which direction-type it
+	// sits in. Surfaced as text → markup by directionToMarks (per the text-as-markup
+	// convention; LilyPond's musicxml2ly emits \mark \markup { \box { … } }).
+	const rehearsalEls = Array.from(dirEl.getElementsByTagName('rehearsal'));
+	if (rehearsalEls.length > 0) {
+		const text = rehearsalEls.map(el => el.textContent?.trim() || '').filter(Boolean).join(' ');
+		if (text) result.rehearsal = text;
+	}
+
 	return result;
 };
 
@@ -905,6 +925,12 @@ const notationsToMarks = (
 	// Articulations
 	if (notations.articulations) {
 		for (const artName of notations.articulations) {
+			// breath-mark is a NoDirection articulation in MusicXML but maps to
+			// LilyPond's \breathe — model it as the breath ornament.
+			if (artName === 'breath-mark') {
+				marks.push({ markType: 'ornament', type: OrnamentType.breath });
+				continue;
+			}
 			const artType = convertArticulation(artName);
 			if (artType) {
 				marks.push({ markType: 'articulation', type: artType });
@@ -930,6 +956,11 @@ const notationsToMarks = (
 	// Arpeggiate
 	if (notations.arpeggiate) {
 		marks.push({ markType: 'ornament', type: 'arpeggio' as any });
+	}
+
+	// Glissando / slide (start note only)
+	if (notations.glissando) {
+		marks.push({ markType: 'glissando' });
 	}
 
 	return marks;
@@ -1095,6 +1126,14 @@ const directionToMarks = (
 	// Segno
 	if (direction.segno) {
 		marks.push({ markType: 'navigation', type: NavigationMarkType.segno });
+	}
+
+	// Rehearsal mark → markup (text-as-markup convention; LilyPond uses \mark).
+	if (direction.rehearsal) {
+		const placement = direction.placement === 'above' ? Placement.above
+			: direction.placement === 'below' ? Placement.below
+			: undefined;
+		marks.push({ markType: 'markup', content: direction.rehearsal, placement });
 	}
 
 	// Words (text directions: "dolce", "espr.", "cresc.", "con forza", ...).

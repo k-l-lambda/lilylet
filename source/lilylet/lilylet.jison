@@ -129,6 +129,7 @@
 	const markupEvent = (content, placement) => ({ type: 'markup', content, placement: placement || undefined });
 	const dynamicEvent = (type) => ({ type: 'dynamic', dynamicType: type });
 	const markupMark = (content) => ({ markType: 'markup', content });
+	const glissando = () => ({ markType: 'glissando' });
 
 	// Strip the surrounding quotes from a STRING token and unescape the control
 	// sequences the serializer emits (escapeString): \n \r \t \" \\ . A single
@@ -261,7 +262,7 @@
 \[auto\-beam					return 'HEADER_AUTOBEAM'
 \]								return ']'
 
-\"[^"]*\"						return 'STRING'
+\"([^\"\\]|\\.)*\"					return 'STRING'
 
 "\\clef"						return 'CMD_CLEF'
 "\\key"							return 'CMD_KEY'
@@ -310,6 +311,8 @@
 "\\fermata"						return 'ORN_FERMATA'
 "\\shortfermata"				return 'ORN_SHORTFERMATA'
 "\\arpeggio"					return 'ORN_ARPEGGIO'
+"\\breathe"						return 'ORN_BREATHE'
+"\\glissando"					return 'CMD_GLISSANDO'
 
 "\\ppp"							return 'DYN_PPP'
 "\\pp"							return 'DYN_PP'
@@ -677,6 +680,7 @@ post_event
 	| fingering_number
 	| navigation_mark
 	| markup_mark
+	| glissando_mark
 	;
 
 rest_mark
@@ -711,6 +715,7 @@ ornament_mark
 	| ORN_FERMATA								-> ornament('fermata')
 	| ORN_SHORTFERMATA							-> ornament('shortFermata')
 	| ORN_ARPEGGIO								-> ornament('arpeggio')
+	| ORN_BREATHE								-> ornament('breath')
 	;
 
 dynamic_mark
@@ -777,4 +782,8 @@ navigation_mark
 
 markup_mark
 	: CMD_MARKUP STRING							-> markupMark(unq($2))
+	;
+
+glissando_mark
+	: CMD_GLISSANDO								-> glissando()
 	;

@@ -419,6 +419,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 	fingerings: { finger: number; placement?: 'above' | 'below' }[];
 	navigation?: 'coda' | 'segno';
 	markups: { content: string; placement?: 'above' | 'below' }[];
+	breath: boolean;
+	glissando: boolean;
 } => {
 	const result = {
 		artics: [] as { type: string; placement?: 'above' | 'below' }[],
@@ -441,6 +443,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 		fingerings: [] as { finger: number; placement?: 'above' | 'below' }[],
 		navigation: undefined as 'coda' | 'segno' | undefined,
 		markups: [] as { content: string; placement?: 'above' | 'below' }[],
+		breath: false,
+		glissando: false,
 	};
 
 	if (!marks) return result;
@@ -472,6 +476,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 					result.mordent = 'lower';
 				} else if (mark.type === OrnamentType.prall) {
 					result.mordent = 'upper';
+				} else if (mark.type === OrnamentType.breath) {
+					result.breath = true;
 				}
 				break;
 			case 'dynamic': {
@@ -537,6 +543,9 @@ const extractMarkOptions = (marks?: Mark[]): {
 					placement: (mark as { placement?: 'above' | 'below' }).placement,
 				});
 				break;
+			case 'glissando':
+				result.glissando = true;
+				break;
 		}
 
 		// Tremolo (special case - from parser internal mark)
@@ -570,6 +579,8 @@ interface NoteEventResult {
 	fingerings: { finger: number; placement?: 'above' | 'below' }[];
 	navigation?: 'coda' | 'segno';
 	markups: { content: string; placement?: 'above' | 'below' }[];
+	breath: boolean;
+	glissando: boolean;
 }
 
 // Convert NoteEvent to MEI
@@ -638,6 +649,8 @@ const noteEventToMEI = (
 			fingerings: markOptions.fingerings,
 			navigation: markOptions.navigation,
 			markups: markOptions.markups,
+			breath: markOptions.breath,
+			glissando: markOptions.glissando,
 		};
 	}
 
@@ -701,6 +714,8 @@ const noteEventToMEI = (
 		fingerings: markOptions.fingerings,
 		navigation: markOptions.navigation,
 		markups: markOptions.markups,
+		breath: markOptions.breath,
+		glissando: markOptions.glissando,
 	};
 };
 
@@ -996,6 +1011,15 @@ interface TrillRef {
 	startid: string;
 }
 
+interface BreathRef {
+	startid: string;   // the note the breath follows
+}
+
+interface GlissRef {
+	startid: string;
+	endid: string;
+}
+
 interface MordentRef {
 	startid: string;
 	form?: 'upper';  // prall = upper mordent
@@ -1044,6 +1068,7 @@ interface SlurSpan {
 // Tie state for cross-measure ties - maps staff:layer to pending pitches
 type TieState = Record<string, Pitch[]>;
 type SlurState = Record<string, string[]>;  // voice key -> open slur startIds (stack, oldest first)
+type GlissState = Record<string, string | null>;  // voice key -> pending glissando start id (awaiting next-measure target)
 type HairpinState = Record<string, { form: 'cres' | 'dim'; startId: string } | null>;  // voice key -> pending hairpin
 
 // Pending octave span for cross-measure continuation
@@ -1069,6 +1094,8 @@ interface LayerResult {
 	arpeggios: ArpegRef[];
 	fermatas: FermataRef[];
 	trills: TrillRef[];
+	breaths: BreathRef[];
+	glissandos: GlissRef[];
 	mordents: MordentRef[];
 	turns: TurnRef[];
 	dynamics: DynamRef[];
@@ -1079,6 +1106,7 @@ interface LayerResult {
 	markups: MarkupRef[];
 	pendingTiePitches: Pitch[];  // For cross-measure tie tracking
 	pendingSlur: string[];  // For cross-measure slur tracking (all open slur startIds)
+	pendingGliss: string | null;  // For cross-measure glissando (start note awaiting its target in the next measure)
 	pendingHairpin: { form: 'cres' | 'dim'; startId: string } | null;  // For cross-measure hairpin tracking
 	pendingOctave: PendingOctave | null;  // For cross-measure ottava span tracking
 	ottavaExplicitlyClosed: boolean;  // True if ottava was closed by explicit \ottava #0 in this layer
@@ -1117,7 +1145,7 @@ const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TimesEve
 };
 
 // Encode a layer (voice)
-const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlurs: string[] = [], initialHairpin: { form: 'cres' | 'dim'; startId: string } | null = null, initialOctave: PendingOctave | null = null): LayerResult => {
+const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlurs: string[] = [], initialHairpin: { form: 'cres' | 'dim'; startId: string } | null = null, initialOctave: PendingOctave | null = null, initialGliss: string | null = null): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -1197,6 +1225,12 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	// Track ornament refs
 	const fermatas: FermataRef[] = [];
 	const trills: TrillRef[] = [];
+	const breaths: BreathRef[] = [];
+	// Glissando: a note-to-note slide. Record the start note id and close it on the
+	// NEXT encoded note (endid), mirroring slur start→end pairing. A trailing
+	// glissando with no following note in the layer is dropped (no target).
+	const glissandos: GlissRef[] = [];
+	let pendingGlissStart: string | null = initialGliss;
 	const mordents: MordentRef[] = [];
 	const turns: TurnRef[] = [];
 	const dynamics: DynamRef[] = [];
@@ -1373,6 +1407,19 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				}
 				if (result.trill) {
 					trills.push({ startid: result.elementId });
+				}
+				// Breath mark follows this note.
+				if (result.breath) {
+					breaths.push({ startid: result.elementId });
+				}
+				// Glissando: close a pending start onto this note, then open a new one
+				// if this note itself carries a glissando.
+				if (pendingGlissStart) {
+					glissandos.push({ startid: pendingGlissStart, endid: result.elementId });
+					pendingGlissStart = null;
+				}
+				if (result.glissando) {
+					pendingGlissStart = result.elementId;
 				}
 				if (result.mordent) {
 					mordents.push({
@@ -1645,7 +1692,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	}
 
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: openSlurs.map(s => s.startId), pendingHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift, octaveEndReplacements };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, breaths, glissandos, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: openSlurs.map(s => s.startId), pendingGliss: pendingGlissStart, pendingHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift, octaveEndReplacements };
 };
 
 // Staff result type
@@ -1658,6 +1705,8 @@ interface StaffResult {
 	arpeggios: ArpegRef[];
 	fermatas: FermataRef[];
 	trills: TrillRef[];
+	breaths: BreathRef[];
+	glissandos: GlissRef[];
 	mordents: MordentRef[];
 	turns: TurnRef[];
 	dynamics: DynamRef[];
@@ -1668,6 +1717,7 @@ interface StaffResult {
 	markups: MarkupRef[];
 	pendingTies: TieState;  // For cross-measure tie tracking
 	pendingSlurs: SlurState;  // For cross-measure slur tracking
+	pendingGlisses: GlissState;  // For cross-measure glissando tracking
 	pendingHairpins: HairpinState;  // For cross-measure hairpin tracking
 	pendingOctaves: OttavaState;  // For cross-measure ottava span tracking
 	ottavaExplicitlyClosed: Record<string, boolean>;  // Track which layers had ottava explicitly closed
@@ -1677,7 +1727,7 @@ interface StaffResult {
 }
 
 // Encode a staff
-const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, slurState: SlurState = {}, hairpinState: HairpinState = {}, ottavaState: OttavaState = {}, keyFifths: number = 0, initialClef?: Clef): StaffResult => {
+const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, slurState: SlurState = {}, hairpinState: HairpinState = {}, ottavaState: OttavaState = {}, keyFifths: number = 0, initialClef?: Clef, glissState: GlissState = {}): StaffResult => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -1687,6 +1737,8 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const allArpeggios: ArpegRef[] = [];
 	const allFermatas: FermataRef[] = [];
 	const allTrills: TrillRef[] = [];
+	const allBreaths: BreathRef[] = [];
+	const allGlissandos: GlissRef[] = [];
 	const allMordents: MordentRef[] = [];
 	const allTurns: TurnRef[] = [];
 	const allDynamics: DynamRef[] = [];
@@ -1697,6 +1749,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const allMarkups: MarkupRef[] = [];
 	const pendingTies: TieState = {};
 	const pendingSlurs: SlurState = {};
+	const pendingGlisses: GlissState = {};
 	const pendingHairpins: HairpinState = {};
 	const pendingOctaves: OttavaState = {};
 	const ottavaExplicitlyClosed: Record<string, boolean> = {};
@@ -1714,7 +1767,8 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			const initialSlur = slurState[tieKey] || [];
 			const initialHairpin = hairpinState[tieKey] || null;
 			const initialOctave = ottavaState[tieKey] || null;
-			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef, initialSlur, initialHairpin, initialOctave);
+			const initialGliss = glissState[tieKey] || null;
+			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef, initialSlur, initialHairpin, initialOctave, initialGliss);
 			xml += result.xml;
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
@@ -1723,6 +1777,8 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			allArpeggios.push(...result.arpeggios);
 			allFermatas.push(...result.fermatas);
 			allTrills.push(...result.trills);
+			allBreaths.push(...result.breaths);
+			allGlissandos.push(...result.glissandos);
 			allMordents.push(...result.mordents);
 			allTurns.push(...result.turns);
 			allDynamics.push(...result.dynamics);
@@ -1740,6 +1796,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			// Always record (even empty) so a measure that closed all its slurs
 			// clears the carried stack rather than leaving a stale open slur.
 			pendingSlurs[tieKey] = result.pendingSlur;
+			pendingGlisses[tieKey] = result.pendingGliss;
 			// Track pending hairpins for this layer
 			if (result.pendingHairpin) {
 				pendingHairpins[tieKey] = result.pendingHairpin;
@@ -1771,6 +1828,8 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		arpeggios: allArpeggios,
 		fermatas: allFermatas,
 		trills: allTrills,
+		breaths: allBreaths,
+		glissandos: allGlissandos,
 		mordents: allMordents,
 		turns: allTurns,
 		dynamics: allDynamics,
@@ -1781,6 +1840,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		markups: allMarkups,
 		pendingTies,
 		pendingSlurs,
+		pendingGlisses,
 		pendingHairpins,
 		pendingOctaves,
 		ottavaExplicitlyClosed,
@@ -1903,7 +1963,7 @@ const BARLINE_TO_MEI: Record<string, string> = {
 
 // Encode a measure
 // encodeMeasure accepts mutable tieState, slurState, hairpinState, ottavaState and clefState that persist across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}, measureIds?: string[]): string => {
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}, measureIds?: string[], glissState: GlissState = {}): string => {
 	const measureId = generateId("measure");
 	if (measureIds) measureIds.push(measureId);
 	let staffContent = '';  // Build staff content first, then add measure tag with barline
@@ -1914,6 +1974,8 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	const allArpeggios: ArpegRef[] = [];
 	const allFermatas: FermataRef[] = [];
 	const allTrills: TrillRef[] = [];
+	const allBreaths: BreathRef[] = [];
+	const allGlissandos: GlissRef[] = [];
 	const allMordents: MordentRef[] = [];
 	const allTurns: TurnRef[] = [];
 	const allDynamics: DynamRef[] = [];
@@ -1963,7 +2025,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	for (let si = 1; si <= totalStaves; si++) {
 		const voices = voicesByStaff[si] || [];
 		const initialClef = clefState[si];
-		const result = encodeStaff(voices, si, indent + '    ', tieState, slurState, hairpinState, ottavaState, keyFifths, initialClef);
+		const result = encodeStaff(voices, si, indent + '    ', tieState, slurState, hairpinState, ottavaState, keyFifths, initialClef, glissState);
 		staffContent += result.xml;
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
@@ -1972,6 +2034,8 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		allArpeggios.push(...result.arpeggios);
 		allFermatas.push(...result.fermatas);
 		allTrills.push(...result.trills);
+		allBreaths.push(...result.breaths);
+		allGlissandos.push(...result.glissandos);
 		allMordents.push(...result.mordents);
 		allTurns.push(...result.turns);
 		allDynamics.push(...result.dynamics);
@@ -1985,6 +2049,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		Object.assign(tieState, result.pendingTies);
 		// Update slur state with pending slurs from this staff
 		Object.assign(slurState, result.pendingSlurs);
+		Object.assign(glissState, result.pendingGlisses);
 		// Update hairpin state with pending hairpins from this staff
 		Object.assign(hairpinState, result.pendingHairpins);
 		// Update ottava state with pending octaves from this staff.
@@ -2064,6 +2129,16 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	// Generate trill control events
 	for (const tr of allTrills) {
 		staffContent += `${indent}    <trill xml:id="${generateId('trill')}" startid="#${tr.startid}" />\n`;
+	}
+
+	// Generate breath marks (the breath follows its startid note)
+	for (const br of allBreaths) {
+		staffContent += `${indent}    <breath xml:id="${generateId('breath')}" startid="#${br.startid}" />\n`;
+	}
+
+	// Generate glissando spans (note-to-note slide)
+	for (const gl of allGlissandos) {
+		staffContent += `${indent}    <gliss xml:id="${generateId('gliss')}" startid="#${gl.startid}" endid="#${gl.endid}" />\n`;
 	}
 
 	// Generate mordent control events
@@ -2812,6 +2887,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 
 	// Track slur state across measures for cross-measure slurs
 	const slurState: SlurState = {};
+	const glissState: GlissState = {};
 
 	// Track hairpin state across measures for cross-measure hairpins
 	const hairpinState: HairpinState = {};
@@ -2901,7 +2977,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		const openTag = segOpenAt.get(mIndex);
 		if (openTag) mei += openTag;
 		const measureIndent = segDecomp ? `${mIndent}${indent}` : mIndent;
-		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds);
+		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds, glissState);
 		const closeTag = segCloseAt.get(mIndex);
 		if (closeTag) mei += closeTag;
 	});

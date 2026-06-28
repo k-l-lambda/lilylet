@@ -63,6 +63,9 @@ export interface MusicXmlNotations {
 	arpeggiate?: boolean;
 	tremolo?: { type: 'single' | 'start' | 'stop'; value: number };
 	tuplet?: { type: 'start' | 'stop'; number: number };
+	// Glissando / slide spanner: only the start matters for lilylet (LilyPond emits
+	// \glissando on the start note; the line auto-connects to the next note).
+	glissando?: boolean;
 }
 
 export interface MusicXmlNote {
@@ -121,6 +124,7 @@ export interface MusicXmlDirection {
 	pedal?: MusicXmlPedal;
 	metronome?: MusicXmlMetronome;
 	words?: MusicXmlWords[];
+	rehearsal?: string;         // <direction-type><rehearsal> text (e.g. "A", "段")
 	octaveShift?: MusicXmlOctaveShift;
 	coda?: boolean;
 	segno?: boolean;

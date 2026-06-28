@@ -47,6 +47,7 @@ export enum OrnamentType {
 	fermata = 'fermata',
 	shortFermata = 'shortFermata',
 	arpeggio = 'arpeggio',
+	breath = 'breath',	// breath mark (\breathe) — MusicXML <breath-mark>
 }
 
 export enum DynamicType {
@@ -187,7 +188,15 @@ export interface MarkupMark {
 	placement?: Placement;
 }
 
-export type Mark = Articulation | Ornament | Dynamic | Hairpin | Tie | Slur | Beam | Pedal | Fingering | NavigationMark | MarkupMark;
+// Glissando / slide: a note-to-note slide line. Mirrors LilyPond's \glissando,
+// which is emitted only on the START note (the line auto-connects to the next
+// note), so this is a single mark — no start/stop pairing. MusicXML <glissando>
+// and <slide> both decode to this.
+export interface Glissando {
+	markType: 'glissando';
+}
+
+export type Mark = Articulation | Ornament | Dynamic | Hairpin | Tie | Slur | Beam | Pedal | Fingering | NavigationMark | MarkupMark | Glissando;
 
 // === Key Signature ===
 
