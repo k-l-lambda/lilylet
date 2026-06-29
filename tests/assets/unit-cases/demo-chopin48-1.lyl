@@ -147,7 +147,7 @@
 \staff "2" <fs,, fs'>16[ <g g'> <g g'>] <g g'>[ <af af'> <a a'>] <as as'>[ <b b'> <c c'>] <cs cs'>[ <d d'> <ds ds'>] | %46
 
 \staff "1" <e' g e'>8\ff <e g c>\<([ <d g d'> <e g e'> <f g b f'>\!] \\
-\staff "2" \clef "treble" \grace fs,16[ \grace g] g4.->\trill \grace fs16[ \grace g] <g,, g'>8\sustainOff\sustainOn <g'' d' f b>\sustainOff\arpeggio[\arpeggio <g e' c'>\sustainOn\arpeggio <g d' g d'>\sustainOff\arpeggio]\arpeggio \\
+\staff "2" \clef "treble" \grace fs,16[ \grace g] g4.->\trill \grace fs16[ \grace g] <g,, g'>8\sustainOff\sustainOn <g'' d' f b>\sustainOff\arpeggio[ <g e' c'>\sustainOn\arpeggio <g d' g d'>\sustainOff\arpeggio] \\
 \staff "2" <c, g' c e>8\arpeggio \grace fs,16[ \grace g] g4.\trill \grace fs16[ \grace g(] | %47
 
 \staff "1" <e' g c e>16)\arpeggio \ottava #-1 <c' c'>[ <d d'>] <c c'>[ <g g'> <a a'>] <g g'>[ <e e'> \ottava #0 <f f'>] <e e'>[ <c c'> <d d'>] <c c'>[ <g g'> <a a'>] <g g'>[ <e e'> <f f'>] <e e'>[ <c c'> <d d'>] <c c'>[ <a a'> <f e'>] \\

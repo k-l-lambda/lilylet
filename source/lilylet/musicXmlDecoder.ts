@@ -306,12 +306,13 @@ class VoiceTracker {
 			});
 			this.currentStaff.set(voiceNum, staff);
 		}
-		const voice = this.voices.get(voiceNum)!;
-		// Update staff if specified
-		if (staff > 0) {
-			voice.staff = staff;
-		}
-		return voice;
+		// NOTE: do NOT overwrite voice.staff on later notes. voice.staff is the voice's
+		// HOME staff — the staff of its first note — matching the parser, which fixes
+		// voice.staff to the first leading \staff (so `\staff "1" … \staff "2" …` gives
+		// voice.staff=1, with the switch carried by an inline ctx(staff=2) event). The
+		// previous code clobbered it to every note's staff, so a voice that ended on a
+		// different staff round-tripped with the wrong home staff.
+		return this.voices.get(voiceNum)!;
 	}
 
 	addEvent(voiceNum: number, event: Event, duration: number, staff: number = 1): void {
