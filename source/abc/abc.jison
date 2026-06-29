@@ -542,15 +542,18 @@ bar
 	| ':' '|' ']'						-> ':|]'
 	| '|' N								-> '|' + $2
 	| '|' N volta_rest					-> '|' + $2 + $3
-	| ':' '|' N							-> ':|' + $2
-	| ':' '|' N volta_rest				-> ':|' + $2 + $3
+	| ':' '|' N							-> ':|' + $3
+	| ':' '|' N volta_rest				-> ':|' + $3 + $4
 	| '&'								-> '&'
 	;
 
-// Additional volta endings after the first number, comma-separated: "1,2", "1,2,3".
+// Additional volta endings after the first number: comma-separated "1,2,3", or a
+// hyphen range "1-3". Mirrors abc2xml, which normalizes "[1-2" to number="1,2".
 volta_rest
 	: ',' N								-> ',' + $2
+	| '-' N								-> ',' + $2
 	| volta_rest ',' N					-> $1 + ',' + $3
+	| volta_rest '-' N					-> $1 + ',' + $3
 	;
 
 music
@@ -566,7 +569,8 @@ music
 	| music NAME						-> $1
 	| music '^' NAME					-> $1
 	| music '^' articulation_letter		-> $1
-	| music '[' N						-> $1
+	| music '[' N						-> $1 ? [...$1, {volta: String($3)}] : [{volta: String($3)}]
+	| music '[' N volta_rest			-> $1 ? [...$1, {volta: String($3) + $4}] : [{volta: String($3) + $4}]
 	;
 
 // Articulation-class letters (P macro: HJLMOPRSTuv). After a stray '^' inside a

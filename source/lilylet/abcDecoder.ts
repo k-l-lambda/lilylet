@@ -40,6 +40,7 @@ import {
 	InstrumentName,
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
+import { MeasureRepeatInfo, buildMeasureLayout } from "./measureLayoutFromXml";
 
 
 // ============ Constants ============
@@ -453,6 +454,114 @@ const convertBarline = (bar: string | null): string | undefined => {
 			if (bar.startsWith("|:")) return ".|:";
 			return "|";
 	}
+};
+
+
+// ============ Repeat / Volta → measure-layout ============
+
+// Per-measure repeat markup gathered from the ABC bar tokens, in document order.
+//   trailBar  — the measure's TRAILING bar string (patch.bar), e.g. "|", ":|", "|:",
+//               ":|:", ":|]", "|2", ":|1,2". In ABC a repeat-START / volta-START sits
+//               on the bar that PRECEDES a measure, so it is the trailing bar of the
+//               previous measure.
+//   leadVolta — a bracket-volta marker ("1", "2", "1,2", …) captured at the START of
+//               this measure's music (the `[N` term the grammar now preserves).
+interface AbcBarInfo {
+	trailBar: string | null;
+	leadVolta?: string;
+}
+
+// First integer of a volta spec ("2" from "2", "1" from "1,2", "1" from "1,3,5").
+const firstVoltaNum = (spec: string): number => {
+	const m = spec.match(/\d+/);
+	return m ? parseInt(m[0], 10) : 1;
+};
+
+// Pull a trailing volta digit list out of a bar string: ":|1,2" → "1,2", "|2" → "2",
+// "|" / ":|" / "|]" → undefined. (The repeat glyph is stripped; only the volta remains.)
+const trailVoltaOf = (bar: string): string | undefined => {
+	const m = bar.match(/(\d+(?:,\d+)*)$/);
+	return m ? m[1] : undefined;
+};
+
+/**
+ * Build a MeasureRepeatInfo[] from the per-measure ABC bar tokens, mirroring how
+ * abc2xml maps ABC bars to MusicXML <repeat>/<ending> (so this converges with the
+ * MusicXML→lilylet path through the shared buildMeasureLayout). One entry per lilylet
+ * measure (indices are 1:1 — the decoder never merges bars).
+ *
+ * ABC convention (matches abc2xml): a repeat-START "|:" / volta-START "[1" attaches to
+ * the bar PRECEDING the measure it opens, i.e. the trailing bar of measure N opens the
+ * repeat/volta of measure N+1. A repeat-END ":|" closes ON measure N. "::"/":|:" both
+ * ends (on N) and starts (on N+1). The 3×-repeat forms ("|::"/"::|") are treated as a
+ * plain 2× backward+forward pair, exactly as abc2xml emits them.
+ */
+const collectAbcRepeatInfo = (bars: AbcBarInfo[]): MeasureRepeatInfo[] => {
+	const n = bars.length;
+	const infos: MeasureRepeatInfo[] = [];
+	for (let i = 0; i < n; i++) infos.push({ index: i + 1 });
+
+	// Track the currently-open volta so we can close it (endingStop) when the next
+	// volta opens or a repeat ends — abc2xml back-patches the stop onto the prior
+	// measure's right barline; here we set endingStop on the measure before the new one.
+	let openEndingStart = -1;   // measure index (1-based) where the current volta began
+
+	const closeOpenEnding = (lastIndex: number): void => {
+		if (openEndingStart >= 1 && lastIndex >= openEndingStart) {
+			infos[lastIndex - 1].endingStop = infos[openEndingStart - 1].endingStart;
+		}
+		openEndingStart = -1;
+	};
+
+	for (let i = 0; i < n; i++) {
+		const idx = i + 1;             // 1-based measure index
+		const info = infos[i];
+		const { trailBar, leadVolta } = bars[i];
+
+		// A bracket-volta term ("[1") at the START of this measure opens an ending here.
+		if (leadVolta !== undefined) {
+			if (openEndingStart >= 1 && openEndingStart !== idx) closeOpenEnding(idx - 1);
+			info.endingStart = firstVoltaNum(leadVolta);
+			openEndingStart = idx;
+		}
+
+		if (!trailBar) continue;
+
+		// Repeat END on this measure: any bar beginning with ":|" or "::".
+		// Consistency note: like abc2xml, we do NOT honor the ABC 3×-repeat forms
+		// ("|::"/"::|") as a times count — abc2xml emits them as a plain backward+forward
+		// repeat pair (2×), and matching that keeps the ABC and MusicXML paths identical.
+		const isEndStart = trailBar === ":|:" || trailBar === ":||:" || trailBar === "::";
+		const isEnd = trailBar.startsWith(":|") || trailBar.startsWith("::");
+		if (isEnd) {
+			info.repeatEnd = true;
+			closeOpenEnding(idx);
+		}
+
+		// Repeat START opened by this trailing bar attaches to the NEXT measure
+		// ("|:" forward, ":|:"/"::"/":||:" end-and-start).
+		const startsNext = trailBar.includes("|:") || isEndStart;
+		if (startsNext && idx < n) {
+			infos[idx].repeatStart = true;
+		}
+
+		// A trailing volta digit ("|2", ":|1,2") opens an ending on the NEXT measure.
+		const tv = trailVoltaOf(trailBar);
+		if (tv !== undefined && idx < n) {
+			if (openEndingStart >= 1) closeOpenEnding(idx);
+			infos[idx].endingStart = firstVoltaNum(tv);
+			openEndingStart = idx + 1;
+		} else if ((trailBar === "||" || trailBar === "|]" || trailBar === ":|]") && openEndingStart >= 1 && openEndingStart <= idx) {
+			// A section bar ("||", final "|]") closes an open ending here — matching
+			// abc2xml, which stops the volta at the next structural bar (so a trailing
+			// final ending like ":|2 …||" is a single section, not run to piece end).
+			closeOpenEnding(idx);
+		}
+	}
+
+	// Close a still-open final volta at the last measure.
+	closeOpenEnding(n);
+	return infos;
 };
 
 
@@ -1359,6 +1468,11 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 	// Process each ABC measure into Lilylet Measure
 	const lilyletMeasures: Measure[] = [];
 
+	// Per-measure repeat markup (trailing bar + leading bracket-volta), gathered for the
+	// reference voice so we can derive metadata.measureLayout after the loop. ABC repeat
+	// markup is voice-global by convention, so one voice suffices.
+	const barInfos: AbcBarInfo[] = [];
+
 	for (let mi = 0; mi < measures.length; mi++) {
 		const abcMeasure = measures[mi];
 
@@ -1370,6 +1484,24 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 				voicePatches.set(voiceNum, []);
 			}
 			voicePatches.get(voiceNum)!.push(patch);
+		}
+
+		// Capture this measure's repeat markup from the reference voice (the lowest
+		// voice number present). trailBar = its raw trailing bar; leadVolta = a "[N"
+		// bracket-volta term at the start of its music.
+		{
+			const refVoice = Math.min(...Array.from(voicePatches.keys()));
+			const refPatches = voicePatches.get(refVoice) || [];
+			let trailBar: string | null = null;
+			let leadVolta: string | undefined;
+			for (const p of refPatches) {
+				if (p.bar) trailBar = p.bar;   // last non-null trailing bar wins
+				if (leadVolta === undefined) {
+					const vt = (p.terms || []).find((t: any) => t.volta !== undefined);
+					if (vt) leadVolta = (vt as any).volta;
+				}
+			}
+			barInfos.push({ trailBar, leadVolta });
 		}
 
 		// Process each voice
@@ -1495,6 +1627,15 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 			} as ContextChange);
 		}
 	}
+
+	// Derive a performance-order measure layout from the ABC repeat/volta markup,
+	// converging with the MusicXML path via the shared buildMeasureLayout. Emitted as
+	// metadata.measureLayout → serialized [measures "..."] → MEI <expansion>.
+	try {
+		const repeatInfos = collectAbcRepeatInfo(barInfos);
+		const layout = buildMeasureLayout(repeatInfos, repeatInfos.length);
+		if (layout) metadata.measureLayout = layout;
+	} catch { /* repeat derivation is best-effort; never block decode */ }
 
 	const doc: LilyletDoc = {
 		measures: lilyletMeasures,
