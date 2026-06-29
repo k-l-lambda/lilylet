@@ -65,6 +65,69 @@ const filterToNoteRest = (events: Event[]): (NoteEvent | RestEvent)[] =>
 
 
 /**
+ * Normalized mark signatures for one event, as a sorted multiset of strings.
+ *
+ * The comparison is strict — every articulation, ornament, dynamic, pedal,
+ * fingering, glissando, navigation, markup and beam must survive the roundtrip —
+ * with a few PRINCIPLED normalizations for genuine representation differences
+ * (not lazy skips):
+ *  - `hairpin` end: a MusicXML/MEI hairpin STOP carries no cresc/dim distinction,
+ *    so crescendoEnd/diminuendoEnd both normalize to `hairpinEnd` (starts keep
+ *    their form). The pairing of which start a stop closes is checked elsewhere.
+ *  - `tie`/`slur`: span endpoints. A chord tie (one `~` on a chord) legitimately
+ *    expands to one tie per chord pitch on roundtrip, and ties split across
+ *    barlines — so per-event we compare PRESENCE (has a tie / has a slur), not
+ *    the raw mark count.
+ * Beam start/end (`[`/`]`) is REAL notation decoded from MusicXML <beam> and must
+ * round-trip exactly, so it is compared as a normal mark (begin → `beam:[`, end →
+ * `beam:]`).
+ */
+const markSignature = (e: NoteEvent | RestEvent): string[] => {
+	const marks = (e as NoteEvent).marks;
+	if (!marks || marks.length === 0) return [];
+	const sig: string[] = [];
+	let hasTie = false, hasSlur = false;
+	for (const mk of marks) {
+		switch (mk.markType) {
+			case 'beam':
+				sig.push((mk as { start: boolean }).start ? 'beam:[' : 'beam:]');
+				break;
+			case 'tie':
+				hasTie = true; break;
+			case 'slur':
+				hasSlur = true; break;
+			case 'hairpin': {
+				const t = mk.type;
+				sig.push('hairpin:' + (t === 'crescendoEnd' || t === 'diminuendoEnd' ? 'end' : t));
+				break;
+			}
+			case 'articulation':
+			case 'ornament':
+			case 'dynamic':
+			case 'pedal':
+				sig.push(mk.markType + ':' + (mk as { type: string }).type);
+				break;
+			case 'fingering':
+				sig.push('fingering:' + (mk as { finger: number }).finger);
+				break;
+			case 'navigation':
+				sig.push('navigation:' + (mk as { type: string }).type);
+				break;
+			case 'markup':
+				sig.push('markup:' + (mk as { content: string }).content);
+				break;
+			case 'glissando':
+				sig.push('glissando');
+				break;
+		}
+	}
+	if (hasTie) sig.push('tie');
+	if (hasSlur) sig.push('slur');
+	return sig.sort();
+};
+
+
+/**
  * Compare two LilyletDoc structures with robust comparison.
  *
  * Strategy:
@@ -187,6 +250,18 @@ const compareDocuments = (doc1: LilyletDoc, doc2: LilyletDoc): { equal: boolean;
 							diff: `Part ${pi + 1}, Staff ${staff}, Event ${i + 1}: Rest duration differs: div=${e1.duration.division} dots=${e1.duration.dots} vs div=${e2.duration.division} dots=${e2.duration.dots}`
 						};
 					}
+				}
+
+				// Marks: every articulation/ornament/dynamic/pedal/fingering/glissando/
+				// navigation/markup must survive (tie/slur compared by presence, beams
+				// excluded, hairpin ends form-normalized — see markSignature).
+				const sig1 = markSignature(e1);
+				const sig2 = markSignature(e2);
+				if (sig1.join('|') !== sig2.join('|')) {
+					return {
+						equal: false,
+						diff: `Part ${pi + 1}, Staff ${staff}, Event ${i + 1}: Marks differ: [${sig1.join(', ')}] vs [${sig2.join(', ')}]`
+					};
 				}
 			}
 		}
