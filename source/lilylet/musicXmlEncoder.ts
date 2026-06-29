@@ -32,6 +32,7 @@ import {
 	DynamicType,
 	HairpinType,
 	PedalType,
+	NavigationMarkType,
 	Tempo,
 	Metadata,
 	Fraction,
@@ -124,6 +125,7 @@ const DYNAMIC_TO_XML: Record<string, string> = {
 	fff: 'fff',
 	sfz: 'sfz',
 	rfz: 'rfz',
+	fp: 'fp',
 };
 
 // Barline style to MusicXML
@@ -289,6 +291,7 @@ const encodeAttributes = (
 const encodeNotations = (marks: Mark[], level: number): string => {
 	const articulations: string[] = [];
 	const ornaments: string[] = [];
+	const technical: string[] = [];
 	const otherNotations: string[] = [];
 
 	for (const mark of marks) {
@@ -301,15 +304,20 @@ const encodeNotations = (marks: Mark[], level: number): string => {
 				break;
 
 			case 'ornament':
-				const ornXml = ORNAMENT_TO_XML[mark.type];
-				if (ornXml) {
-					if (mark.type === 'fermata') {
-						otherNotations.push('<fermata/>');
-					} else if (mark.type === 'arpeggio') {
-						otherNotations.push('<arpeggiate/>');
-					} else {
-						ornaments.push(`<${ornXml}/>`);
-					}
+				// fermata / arpeggio live at the <notations> level; breath-mark is an
+				// <articulations> child; the rest are true <ornaments>. (shortFermata is
+				// a fermata with an "angled" shape — decoder maps it back.)
+				if (mark.type === 'fermata') {
+					otherNotations.push('<fermata/>');
+				} else if (mark.type === 'shortFermata') {
+					otherNotations.push('<fermata>angled</fermata>');
+				} else if (mark.type === 'arpeggio') {
+					otherNotations.push('<arpeggiate/>');
+				} else if (mark.type === 'breath') {
+					articulations.push('<breath-mark/>');
+				} else {
+					const ornXml = ORNAMENT_TO_XML[mark.type];
+					if (ornXml) ornaments.push(`<${ornXml}/>`);
 				}
 				break;
 
@@ -325,13 +333,22 @@ const encodeNotations = (marks: Mark[], level: number): string => {
 				otherNotations.push(`<tuplet type="${(mark as any).start ? 'start' : 'stop'}"/>`);
 				break;
 
+			case 'glissando':
+				// Lilylet \glissando is start-only (the line auto-connects to the next
+				// note); emit just the start spanner so the decoder reads it back.
+				otherNotations.push('<glissando type="start" number="1"/>');
+				break;
+
 			case 'fingering':
-				// Fingering goes in technical
+				technical.push(`<fingering>${mark.finger}</fingering>`);
 				break;
 		}
 	}
 
-	if (articulations.length === 0 && ornaments.length === 0 && otherNotations.length === 0) {
+	if (
+		articulations.length === 0 && ornaments.length === 0 &&
+		technical.length === 0 && otherNotations.length === 0
+	) {
 		return '';
 	}
 
@@ -355,6 +372,14 @@ const encodeNotations = (marks: Mark[], level: number): string => {
 			xml += `${indent(level + 2)}${orn}\n`;
 		}
 		xml += `${indent(level + 1)}</ornaments>\n`;
+	}
+
+	if (technical.length > 0) {
+		xml += `${indent(level + 1)}<technical>\n`;
+		for (const tech of technical) {
+			xml += `${indent(level + 2)}${tech}\n`;
+		}
+		xml += `${indent(level + 1)}</technical>\n`;
 	}
 
 	xml += `${indent(level)}</notations>\n`;
@@ -564,6 +589,23 @@ const encodeDirection = (
 				xml += `${indent(level + 1)}</direction-type>\n`;
 				xml += `${indent(level)}</direction>\n`;
 			}
+		} else if (mark.markType === 'markup') {
+			// Text direction → <words>. The decoder reads any non-tempo <words> back
+			// as a markup mark (text-as-markup convention).
+			const placement = mark.placement ? ` placement="${mark.placement}"` : '';
+			xml += `${indent(level)}<direction${placement}>\n`;
+			xml += `${indent(level + 1)}<direction-type>\n`;
+			xml += `${indent(level + 2)}<words>${escapeXml(mark.content)}</words>\n`;
+			xml += `${indent(level + 1)}</direction-type>\n`;
+			xml += `${indent(level)}</direction>\n`;
+		} else if (mark.markType === 'navigation') {
+			// \coda / \segno glyph → <direction-type><coda|segno>.
+			const glyph = mark.type === NavigationMarkType.coda ? 'coda' : 'segno';
+			xml += `${indent(level)}<direction>\n`;
+			xml += `${indent(level + 1)}<direction-type>\n`;
+			xml += `${indent(level + 2)}<${glyph}/>\n`;
+			xml += `${indent(level + 1)}</direction-type>\n`;
+			xml += `${indent(level)}</direction>\n`;
 		}
 	}
 
@@ -718,9 +760,11 @@ const encodeMeasure = (
 		for (const event of voice.events) {
 			switch (event.type) {
 				case 'note': {
-					// Check for direction marks (dynamics, hairpins, pedals)
+					// Check for direction marks (dynamics, hairpins, pedals, text, nav)
 					const directionMarks = event.marks?.filter(m =>
-						m.markType === 'dynamic' || m.markType === 'hairpin' || m.markType === 'pedal'
+						m.markType === 'dynamic' || m.markType === 'hairpin' ||
+						m.markType === 'pedal' || m.markType === 'markup' ||
+						m.markType === 'navigation'
 					) || [];
 					if (directionMarks.length > 0) {
 						xml += encodeDirection(directionMarks, level + 1);
@@ -731,11 +775,15 @@ const encodeMeasure = (
 					const dur = calculateDuration(event.duration);
 					voicePosition += dur;
 
-					// Encode chord notes
+					// Encode chord notes. Marks live on the parent NoteEvent (the whole
+					// chord) and are emitted on the first note only — re-emitting them on
+					// each member would multiply them on decode (the decoder aggregates
+					// every member's marks back onto the one chord event).
 					for (let i = 1; i < event.pitches.length; i++) {
 						const chordEvent: NoteEvent = {
 							...event,
 							pitches: [event.pitches[i]],
+							marks: undefined,
 						};
 						xml += encodeNote(chordEvent, voiceNum, currentStaff, level + 1, true);
 					}
@@ -773,6 +821,17 @@ const encodeMeasure = (
 						const isLast = ti === tupletEvents.length - 1;
 
 						if (subEvent.type === 'note') {
+							// Direction marks (dynamics, hairpins, pedals, text, nav) — same
+							// as the plain-note case; without this they vanish inside tuplets.
+							const directionMarks = subEvent.marks?.filter(m =>
+								m.markType === 'dynamic' || m.markType === 'hairpin' ||
+								m.markType === 'pedal' || m.markType === 'markup' ||
+								m.markType === 'navigation'
+							) || [];
+							if (directionMarks.length > 0) {
+								xml += encodeDirection(directionMarks, level + 1);
+							}
+
 							// Add tuplet notation marks
 							const tupletMarks: Mark[] = [];
 							if (isFirst) tupletMarks.push({ markType: 'tuplet', start: true } as any);

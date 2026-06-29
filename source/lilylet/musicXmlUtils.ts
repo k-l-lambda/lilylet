@@ -416,7 +416,7 @@ const DYNAMIC_MAP: Record<string, DynamicType> = {
 	fz: DynamicType.sfz,
 	sfp: DynamicType.sfz,
 	sfpp: DynamicType.sfz,
-	fp: DynamicType.f, // forte-piano, approximate
+	fp: DynamicType.fp, // forte-piano
 };
 
 export const convertDynamic = (name: string): DynamicType | undefined => {

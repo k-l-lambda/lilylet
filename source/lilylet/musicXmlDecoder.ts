@@ -431,9 +431,11 @@ const parseNotations = (notationsEl: Element): MusicXmlNotations => {
 		}
 	}
 
-	// Fermata
-	if (hasElement(notationsEl, 'fermata')) {
-		result.fermata = true;
+	// Fermata. The "angled" shape is LilyPond's \shortfermata; everything else
+	// (normal/square/unset) is the ordinary \fermata.
+	const fermataEl = getElements(notationsEl, 'fermata')[0];
+	if (fermataEl) {
+		result.fermata = (fermataEl.textContent || '').trim() === 'angled' ? 'short' : 'normal';
 	}
 
 	// Arpeggiate
@@ -950,7 +952,7 @@ const notationsToMarks = (
 
 	// Fermata
 	if (notations.fermata) {
-		marks.push({ markType: 'ornament', type: 'fermata' as any });
+		marks.push({ markType: 'ornament', type: (notations.fermata === 'short' ? 'shortFermata' : 'fermata') as any });
 	}
 
 	// Arpeggiate
@@ -1427,7 +1429,7 @@ const convertMeasure = (
 				// so the encoder can emit <fermata startid="#rest">; without this the
 				// 3-of-4 fermatas that sit on rests in typical piano scores are lost.
 				if (note.notations?.fermata) {
-					restEvent.marks = [{ markType: 'ornament', type: 'fermata' as any }];
+					restEvent.marks = [{ markType: 'ornament', type: (note.notations.fermata === 'short' ? 'shortFermata' : 'fermata') as any }];
 				}
 
 				// Grace notes don't advance time

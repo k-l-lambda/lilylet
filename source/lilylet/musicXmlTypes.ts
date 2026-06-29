@@ -59,7 +59,7 @@ export interface MusicXmlNotations {
 	beams?: { type: 'begin' | 'continue' | 'end'; number: number }[];
 	articulations?: string[];   // staccato, accent, tenuto, etc.
 	ornaments?: string[];       // trill, turn, mordent, etc.
-	fermata?: boolean;
+	fermata?: 'normal' | 'short';   // 'short' = angled shape (LilyPond \shortfermata)
 	arpeggiate?: boolean;
 	tremolo?: { type: 'single' | 'start' | 'stop'; value: number };
 	tuplet?: { type: 'start' | 'stop'; number: number };
