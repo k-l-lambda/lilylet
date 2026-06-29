@@ -1401,7 +1401,16 @@ const convertMeasure = (
 			// hairpin stop that lands just before a rest (common in piano scores:
 			// `<pedal stop/>` followed by rests filling the voice) is silently dropped.
 			const marks: Mark[] = note.isRest ? [] : (pendingMarks.get(voiceNum) || []);
-			if (!note.isRest) pendingMarks.delete(voiceNum);
+			if (!note.isRest) {
+				pendingMarks.delete(voiceNum);
+				// Drain directions that named this note's staff but had no known voice
+				// yet (queued under the -staff placeholder key by the <direction> handler).
+				const staffPending = pendingMarks.get(-staffNum);
+				if (staffPending && staffPending.length > 0) {
+					marks.push(...staffPending);
+					pendingMarks.delete(-staffNum);
+				}
+			}
 
 			if (note.isRest) {
 				// Rest event
@@ -1543,9 +1552,17 @@ const convertMeasure = (
 			// Handle marks (dynamics, hairpins, etc.)
 			const marks = directionToMarks(direction, spannerTracker);
 			if (marks.length > 0) {
-				// Store marks to attach to next note in current voice
-				const existing = pendingMarks.get(currentVoice) || [];
-				pendingMarks.set(currentVoice, [...existing, ...marks]);
+				// Route to the voice the marks belong to. A <direction> in a grand-staff
+				// part names its <staff>; the matching note is the NEXT note on that staff
+				// — NOT currentVoice, which after a <backup> still points at the voice that
+				// just ended (so a staff-2 direction emitted after the backup would wrongly
+				// land on staff 1). Queue under a -staff placeholder key; the next note on
+				// that staff drains it, and the end-of-measure flush falls back to that
+				// staff's last note if no further note appears. Without a staff (single-
+				// staff parts), fall back to currentVoice as before.
+				const targetKey = direction.staff ? -direction.staff : currentVoice;
+				const existing = pendingMarks.get(targetKey) || [];
+				pendingMarks.set(targetKey, [...existing, ...marks]);
 			}
 		} else if (tagName === 'backup') {
 			// A <forward> with no note after it (before this backup) is cursor
@@ -1623,10 +1640,23 @@ const convertMeasure = (
 			}
 			return undefined;
 		};
+		// A staff-keyed leftover (negative key = -staffNum, queued for a "next note on
+		// this staff" that never came): resolve to the last note on any voice that lives
+		// on that staff.
+		const findLastNoteOnStaff = (staff: number): NoteEvent | undefined => {
+			let best: NoteEvent | undefined;
+			for (const [, vs] of allVoices) {
+				if ((vs.staff || 1) !== staff) continue;
+				for (let i = vs.events.length - 1; i >= 0; i--) {
+					if (vs.events[i].type === 'note') { best = vs.events[i] as NoteEvent; break; }
+				}
+			}
+			return best;
+		};
 		for (const [voiceNum, marks] of pendingMarks) {
 			if (marks.length === 0) continue;
-			let target = findLastNote(voiceNum);
-			// Voice had no note (e.g. direction-only or rest-only): attach to the
+			let target = voiceNum < 0 ? findLastNoteOnStaff(-voiceNum) : findLastNote(voiceNum);
+			// Voice/staff had no note (e.g. direction-only or rest-only): attach to the
 			// last note of any voice so the marking is not silently dropped.
 			if (!target) {
 				for (const vn of allVoices.keys()) {

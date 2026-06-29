@@ -543,9 +543,18 @@ const encodeRestWithTuplet = (
  */
 const encodeDirection = (
 	marks: Mark[],
-	level: number
+	level: number,
+	staff: number = 0,
+	emitStaff: boolean = false
 ): string => {
 	let xml = '';
+
+	// In a grand-staff part, a <direction> must name its <staff> or the decoder
+	// can't route the mark back to the right staff (it would attach to the current
+	// voice/staff and drift — observed on chopin dynamics and cross-measure pedals).
+	const staffTag = (emitStaff && staff > 0)
+		? `${indent(level + 1)}<staff>${staff}</staff>\n`
+		: '';
 
 	for (const mark of marks) {
 		if (mark.markType === 'dynamic') {
@@ -557,6 +566,7 @@ const encodeDirection = (
 				xml += `${indent(level + 3)}<${dynXml}/>\n`;
 				xml += `${indent(level + 2)}</dynamics>\n`;
 				xml += `${indent(level + 1)}</direction-type>\n`;
+				xml += staffTag;
 				xml += `${indent(level)}</direction>\n`;
 			}
 		} else if (mark.markType === 'hairpin') {
@@ -573,6 +583,7 @@ const encodeDirection = (
 				xml += `${indent(level + 1)}<direction-type>\n`;
 				xml += `${indent(level + 2)}<wedge type="${wedgeType}"/>\n`;
 				xml += `${indent(level + 1)}</direction-type>\n`;
+				xml += staffTag;
 				xml += `${indent(level)}</direction>\n`;
 			}
 		} else if (mark.markType === 'pedal') {
@@ -587,6 +598,7 @@ const encodeDirection = (
 				xml += `${indent(level + 1)}<direction-type>\n`;
 				xml += `${indent(level + 2)}<pedal type="${pedalType}"/>\n`;
 				xml += `${indent(level + 1)}</direction-type>\n`;
+				xml += staffTag;
 				xml += `${indent(level)}</direction>\n`;
 			}
 		} else if (mark.markType === 'markup') {
@@ -597,6 +609,7 @@ const encodeDirection = (
 			xml += `${indent(level + 1)}<direction-type>\n`;
 			xml += `${indent(level + 2)}<words>${escapeXml(mark.content)}</words>\n`;
 			xml += `${indent(level + 1)}</direction-type>\n`;
+			xml += staffTag;
 			xml += `${indent(level)}</direction>\n`;
 		} else if (mark.markType === 'navigation') {
 			// \coda / \segno glyph → <direction-type><coda|segno>.
@@ -605,6 +618,7 @@ const encodeDirection = (
 			xml += `${indent(level + 1)}<direction-type>\n`;
 			xml += `${indent(level + 2)}<${glyph}/>\n`;
 			xml += `${indent(level + 1)}</direction-type>\n`;
+			xml += staffTag;
 			xml += `${indent(level)}</direction>\n`;
 		}
 	}
@@ -767,7 +781,7 @@ const encodeMeasure = (
 						m.markType === 'navigation'
 					) || [];
 					if (directionMarks.length > 0) {
-						xml += encodeDirection(directionMarks, level + 1);
+						xml += encodeDirection(directionMarks, level + 1, currentStaff, maxStaff > 1);
 					}
 
 					// Encode main note
@@ -829,7 +843,7 @@ const encodeMeasure = (
 								m.markType === 'navigation'
 							) || [];
 							if (directionMarks.length > 0) {
-								xml += encodeDirection(directionMarks, level + 1);
+								xml += encodeDirection(directionMarks, level + 1, currentStaff, maxStaff > 1);
 							}
 
 							// Add tuplet notation marks
