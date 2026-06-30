@@ -68,6 +68,15 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 		layout: '2*[1, 2], 2*[3, 4]',
 		order: [1, 2, 1, 2, 3, 4, 3, 4],
 	},
+	// End-and-start repeat ("::" / ":|:"): one bar both closes a repeat and opens
+	// the next section. The repeat-end (m2) pairs with the implicit start (m1), and
+	// the repeatStart it also sets on m3 belongs to the FOLLOWING (here non-repeated)
+	// span — so this must render 2*[1, 2], 3.. , not mis-pair the start after the end.
+	'end-and-start-repeat': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F | G A B c :: d e f g | a b c d |]\n',
+		layout: '2*[1, 2], 3, 4',
+		order: [1, 2, 1, 2, 3, 4],
+	},
 	// Navigation: D.C. al Fine — !D.C.! sends play back to measure 1, !fine! stops it.
 	// Structured as ABA <main, rest>: main = the pre-Fine span (with its inner
 	// repeat), rest = the post-Fine tail; the Once re-expansion replays main to Fine.

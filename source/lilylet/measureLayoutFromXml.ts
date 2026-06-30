@@ -174,7 +174,11 @@ const renderRepeatSpan = (infos: MeasureRepeatInfo[], lo: number, hi: number): s
 	}
 
 	const endInfo = repeatEnds[0];
-	const startIdx = span.find(i => i.repeatStart)?.index ?? lo;
+	// The repeat-start for THIS end is the latest repeat-start at or before it; a
+	// repeat-start sitting AFTER the end (e.g. the second half of a ":|:"/"::" that
+	// opens the next section) belongs to a following span, not this one. Falling
+	// back to `lo` models the implicit "repeat from the start of the span".
+	const startIdx = span.filter(i => i.repeatStart && i.index <= endInfo.index).map(i => i.index).sort((a, b) => b - a)[0] ?? lo;
 	const times = endInfo.repeatTimes ?? 2;
 	const endingStarts = span.filter(i => i.endingStart !== undefined).map(i => i.index).sort((a, b) => a - b);
 
