@@ -564,6 +564,11 @@ const collectAbcRepeatInfo = (bars: AbcBarInfo[]): MeasureRepeatInfo[] => {
 		// ("|:" forward, ":|:"/"::"/":||:" end-and-start).
 		const startsNext = trailBar.includes("|:") || isEndStart;
 		if (startsNext && idx < n) {
+			// A new repeat section opening here also CLOSES any still-open ending
+			// (a volta cannot span into the next repeat section). abc2xml back-patches
+			// the ending-stop onto this measure; without this a final volta (e.g.
+			// ":|2 …|:") would overshoot to the next volta/section bar far ahead.
+			if (openEndingStart >= 1 && openEndingStart <= idx) closeOpenEnding(idx);
 			infos[idx].repeatStart = true;
 		}
 

@@ -60,6 +60,15 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 		layout: '2*[1], 2*[2], 3',
 		order: [1, 1, 2, 2, 3],
 	},
+	// A 2nd-ending (:|2) immediately followed by a NEW repeat section (|:). The
+	// volta must CLOSE at its own measure — the new |: section opening also closes
+	// any still-open ending, else the ending overshoots into the next section and
+	// the whole piece falls back to flat. Mirrors a real corpus pattern (Chopin).
+	'volta-then-repeat-section': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\n|: C D E F |1 G A B c :|2 d e f g |: a b c d | e f g a :|\n',
+		layout: '2*[1]{2, 3}, 2*[4, 5]',
+		order: [1, 2, 1, 3, 4, 5, 4, 5],
+	},
 	// Multi-section AABB (two independent repeat sections, the common minuet /
 	// sonata exposition+recap shape). Each section structures independently and
 	// joins with a comma — this is what the multi-section renderer added.
