@@ -20,7 +20,7 @@
  * always-valid fallback.
  */
 
-import { parseMeasureLayout, expandMeasureLayout } from "./measureLayout";
+import { parseMeasureLayout, expandMeasureLayout, LayoutType } from "./measureLayout";
 import { getDirectChildren, getAttribute } from "./musicXmlUtils";
 
 // One decoded measure's repeat-relevant markup, in source order.
@@ -79,15 +79,9 @@ const simulate = (infos: MeasureRepeatInfo[]): number[] => {
 	const segnoIdx = infos.find(i => i.segno)?.index ?? 1;
 	const codaIdx = infos.find(i => i.coda)?.index;
 
-	// Ending (volta) spans, sorted by start index. On pass P of the enclosing
-	// repeat, the ending whose number === P is played; others are skipped by
-	// jumping to the next ending's start (the last ending is the fallthrough).
-	const endingSpans = infos
-		.filter(i => i.endingStart !== undefined)
-		.map(i => ({ number: i.endingStart!, start: i.index }))
-		.sort((a, b) => a.start - b.start);
-	const nextEndingStartAfter = (idx: number): number | undefined =>
-		endingSpans.find(e => e.start > idx)?.start;
+	// Classify repeat/volta sections once so ending-skip decisions are scoped to
+	// the current repeat section, not a later independent section's endings.
+	const sections = classifyRepeatSections(infos, 1, n);
 
 	const order: number[] = [];
 	const passCount = new Map<number, number>();   // forward-repeat start index → completed passes
@@ -108,12 +102,14 @@ const simulate = (infos: MeasureRepeatInfo[]): number[] => {
 		if (info?.endingStart !== undefined) {
 			const start = repeatStartStack[repeatStartStack.length - 1] ?? 1;
 			const currentPass = (passCount.get(start) ?? 0) + 1;
+			const section = findSectionForIndex(sections, i);
+			const endingSpans = section ? endingSpansForSection(infos, section) : [];
 			const isLastEnding = endingSpans[endingSpans.length - 1]?.start === i;
 			if (info.endingStart !== currentPass && !isLastEnding) {
-				const next = nextEndingStartAfter(i);
+				const next = endingSpans.find(e => e.start > i)?.start;
 				if (next !== undefined) { i = next; continue; }
-				// no further ending: fall past all endings
-				i = i + 1; continue;
+				i = section ? section.hi + 1 : i + 1;
+				continue;
 			}
 		}
 
@@ -162,6 +158,119 @@ const simulate = (infos: MeasureRepeatInfo[]): number[] => {
 // D.C./D.S. over a volta, segno jumps) is left to the flat fallback.
 
 const rangeCode = (a: number, b: number): string => a === b ? `${a}` : flatToCode(Array.from({ length: b - a + 1 }, (_, k) => a + k));
+
+const isAscendingRun = (seq: number[]): boolean => seq.every((v, i) => i === 0 || v === seq[i - 1] + 1);
+
+const compactFlatToCode = (seq: number[]): string => {
+	const parts: string[] = [];
+	let plain: number[] = [];
+	const flushPlain = (): void => {
+		if (plain.length > 0) {
+			parts.push(flatToCode(plain));
+			plain = [];
+		}
+	};
+
+	let i = 0;
+	while (i < seq.length) {
+		let repeatLen = 0;
+		for (let len = Math.floor((seq.length - i) / 2); len >= 1; len--) {
+			const chunk = seq.slice(i, i + len);
+			if (!isAscendingRun(chunk)) continue;
+			const next = seq.slice(i + len, i + 2 * len);
+			if (JSON.stringify(chunk) === JSON.stringify(next)) { repeatLen = len; break; }
+		}
+
+		if (repeatLen > 0) {
+			flushPlain();
+			parts.push(`2*[${flatToCode(seq.slice(i, i + repeatLen))}]`);
+			i += repeatLen * 2;
+		}
+		else plain.push(seq[i++]);
+	}
+	flushPlain();
+	return parts.join(", ");
+};
+
+const layoutExpandsTo = (code: string, seq: number[], type: LayoutType = LayoutType.Full): boolean => {
+	try {
+		const got = expandMeasureLayout(parseMeasureLayout(code), type);
+		return JSON.stringify(got) === JSON.stringify(seq);
+	} catch { return false; }
+};
+
+interface RepeatSection {
+	lo: number;
+	hi: number;
+	startIdx: number;
+	endIdx?: number;
+	times: number;
+	endingStarts: number[];
+	spurious: boolean;
+}
+
+const classifyRepeatSections = (infos: MeasureRepeatInfo[], lo: number, hi: number): RepeatSection[] => {
+	const inSpan = (idx: number): boolean => idx >= lo && idx <= hi;
+	const repeatEnds = infos.filter(i => i.repeatEnd && inSpan(i.index)).map(i => i.index).sort((a, b) => a - b);
+	const repeatStarts = infos.filter(i => i.repeatStart && inSpan(i.index)).map(i => i.index).sort((a, b) => a - b);
+	const endingStops = infos.filter(i => i.endingStop !== undefined && inSpan(i.index)).map(i => i.index).sort((a, b) => a - b);
+
+	if (repeatEnds.length === 0) {
+		return [{ lo, hi, startIdx: lo, times: 1, endingStarts: [], spurious: false }];
+	}
+
+	const sections: RepeatSection[] = [];
+	let prevHi = lo - 1;
+	for (const e of repeatEnds) {
+		if (e <= prevHi) continue;
+		const sectionLo = prevHi + 1;
+		const nextStart = repeatStarts.find(s => s > e);
+		const sectionEndingStarts = infos
+			.filter(i => i.endingStart !== undefined && i.index >= sectionLo && (nextStart === undefined || i.index < nextStart) && inSpan(i.index))
+			.map(i => i.index)
+			.sort((a, b) => a - b);
+
+		let sectionHi: number;
+		if (repeatEnds.length === 1) sectionHi = hi;
+		else if (sectionEndingStarts.length) {
+			const lastStart = sectionEndingStarts[sectionEndingStarts.length - 1];
+			const stop = endingStops.find(s => s >= lastStart);
+			sectionHi = stop ?? lastStart;
+		}
+		else sectionHi = e;
+
+		const explicitStartInSection = repeatStarts.some(s => s >= sectionLo && s <= e);
+		const implicitFromStart = sectionLo === lo && lo === 1;
+		const spurious = sectionEndingStarts.length === 0 && !explicitStartInSection && !implicitFromStart;
+		const startIdx = repeatStarts.filter(s => s >= sectionLo && s <= e).sort((a, b) => b - a)[0] ?? sectionLo;
+		const endInfo = infos.find(i => i.index === e);
+		sections.push({ lo: sectionLo, hi: sectionHi, startIdx, endIdx: e, times: endInfo?.repeatTimes ?? 2, endingStarts: sectionEndingStarts, spurious });
+		prevHi = sectionHi;
+	}
+
+	if (prevHi < hi) sections.push({ lo: prevHi + 1, hi, startIdx: prevHi + 1, times: 1, endingStarts: [], spurious: false });
+	return sections;
+};
+
+const findSectionForIndex = (sections: RepeatSection[], idx: number): RepeatSection | undefined =>
+	sections.find(s => idx >= s.lo && idx <= s.hi);
+
+const endingSpansForSection = (infos: MeasureRepeatInfo[], section: RepeatSection): Array<{ number: number; start: number; stop: number }> => {
+	const spans: Array<{ number: number; start: number; stop: number }> = [];
+	for (let e = 0; e < section.endingStarts.length; e++) {
+		const start = section.endingStarts[e];
+		const nextStart = section.endingStarts[e + 1];
+		let stop: number;
+		if (nextStart !== undefined) stop = nextStart - 1;
+		else {
+			const stopInfo = infos.find(info => info.index >= start && info.index <= section.hi && info.endingStop !== undefined);
+			stop = stopInfo ? stopInfo.index : start;
+		}
+		const number = infos.find(info => info.index === start)?.endingStart ?? e + 1;
+		spans.push({ number, start, stop });
+	}
+	return spans;
+};
 
 // Render the repeat/volta structure over measures [lo..hi] (no navigation),
 // or null if it isn't a single clean repeat/volta span. Shared by the plain
@@ -235,60 +344,21 @@ const renderRepeatSpan = (infos: MeasureRepeatInfo[], lo: number, hi: number): s
 // Used both for the whole piece (lo=1, hi=total) and recursively for the A / B
 // halves of a da-capo ABA.
 const renderRepeatSections = (infos: MeasureRepeatInfo[], lo: number, hi: number): string | null => {
-	const inSpan = (idx: number) => idx >= lo && idx <= hi;
-	const repeatEnds = infos.filter(i => i.repeatEnd && inSpan(i.index)).map(i => i.index).sort((a, b) => a - b);
-	const repeatStarts = infos.filter(i => i.repeatStart && inSpan(i.index)).map(i => i.index).sort((a, b) => a - b);
-	if (repeatEnds.length <= 1) return renderRepeatSpan(infos, lo, hi);
-
-	const endingStops = infos.filter(i => i.endingStop !== undefined && inSpan(i.index)).map(i => i.index);
-
+	const sections = classifyRepeatSections(infos, lo, hi);
 	const parts: string[] = [];
-	let prevHi = lo - 1;
-	for (const e of repeatEnds) {
-		const sectionLo = prevHi + 1;
-		// The next section's repeat-start bounds this section's voltas (2nd/3rd
-		// endings sit AFTER the repeat-end but BEFORE the next section starts).
-		const nextStart = repeatStarts.find(s => s > e);
-		const sectionEndingStarts = infos
-			.filter(i => i.endingStart !== undefined && i.index >= sectionLo && (nextStart === undefined || i.index < nextStart) && inSpan(i.index))
-			.map(i => i.index)
-			.sort((a, b) => a - b);
-
-		let sectionHi: number;
-		if (sectionEndingStarts.length) {
-			const lastStart = sectionEndingStarts[sectionEndingStarts.length - 1];
-			// the last ending's stop closes the section; else the ending start itself
-			const stop = endingStops.filter(s => s >= lastStart).sort((a, b) => a - b)[0];
-			sectionHi = stop ?? lastStart;
-		}
-		else sectionHi = e;
-
-		// A repeat-end only loops when an OPEN repeat-start feeds it (the simulate
-		// model): either an EXPLICIT repeat-start inside this section [sectionLo..e],
-		// or the implicit start of measure 1 for the very first section. A plain
-		// (no-volta) repeat-end with neither — e.g. the closing half of a "::" whose
-		// matching start was already consumed/popped by an earlier section — is
-		// SPURIOUS: those measures play exactly once, so emit a plain range instead
-		// of a bogus T*[...] wrapper (which would fail the re-expand guard → flat).
-		const explicitStartInSection = repeatStarts.some(s => s >= sectionLo && s <= e);
-		const implicitFromStart = sectionLo === lo && lo === 1;
-		if (sectionEndingStarts.length === 0 && !explicitStartInSection && !implicitFromStart) {
-			parts.push(rangeCode(sectionLo, sectionHi));
-			prevHi = sectionHi;
+	for (const section of sections) {
+		if (section.spurious) {
+			parts.push(rangeCode(section.lo, section.hi));
 			continue;
 		}
-
-		const code = renderRepeatSpan(infos, sectionLo, sectionHi);
+		const code = renderRepeatSpan(infos, section.lo, section.hi);
 		if (code === null) return null;
 		parts.push(code);
-		prevHi = sectionHi;
 	}
-	// trailing non-repeated tail
-	if (prevHi < hi) parts.push(rangeCode(prevHi + 1, hi));
 	return parts.join(", ");
 };
 
-const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null => {
+const tryStructured = (infos: MeasureRepeatInfo[], total: number, performed: number[]): string | null => {
 	const dacapo = infos.find(i => i.dacapo);
 	const dalsegno = infos.some(i => i.dalsegno);
 	const tocoda = infos.some(i => i.tocoda);
@@ -303,11 +373,14 @@ const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null
 		// D.C. over a volta → ABA <main, rest>; Once re-expansion gives the
 		// over-volta replay (body + last ending, no inner repeat). Plain D.C. al
 		// Fine without a volta can't bound A' at an arbitrary Fine → flat fallback.
-		return buildDaCapoABA(infos, dacapo.index);
+		return buildDaCapoABA(infos, dacapo.index, performed);
 	}
-	if (dalsegno || tocoda || infos.some(i => i.fine || i.segno || i.coda)) return null;
+	// D.S. / To-Coda alter playback in ways this compact DSL does not express well,
+	// so keep the flat fallback for them. Bare Fine/Segno/Coda marks without a jump
+	// are visual landmarks only; they must not block normal repeat structuring.
+	if (dalsegno || tocoda) return null;
 
-	// No navigation: one or more plain repeat/volta sections in sequence. Most
+	// No playback-changing navigation: one or more plain repeat/volta sections in sequence. Most
 	// real pieces (AABB minuets, sonata exposition+recap) have ≥2 repeat sections;
 	// render each independently and join with commas.
 	return renderRepeatSections(infos, 1, total);
@@ -322,7 +395,7 @@ const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null
 // via renderRepeatSections. Returns null when the shape doesn't fit (no Fine to
 // bound A, or no rest tail) → caller uses the flat fallback. The end-of-build
 // re-expand check still validates the result against the simulated order.
-const buildDaCapoABA = (infos: MeasureRepeatInfo[], dcIdx: number): string | null => {
+const buildDaCapoABA = (infos: MeasureRepeatInfo[], dcIdx: number, performed: number[]): string | null => {
 	const fineIdx = infos.find(i => i.fine)?.index;
 	if (fineIdx === undefined) {
 		// No explicit Fine: fall back to the legacy single-volta ABA shape, where
@@ -335,7 +408,7 @@ const buildDaCapoABA = (infos: MeasureRepeatInfo[], dcIdx: number): string | nul
 
 	const mainCode = renderRepeatSections(infos, 1, fineIdx);
 	const restCode = renderRepeatSections(infos, restLo, dcIdx);
-	if (mainCode === null || restCode === null) return null;
+	if (mainCode === null || restCode === null) return buildDaCapoABAFromReplay(infos, dcIdx, fineIdx, performed);
 
 	// `main` is parsed by the ABA grammar as ONE item (parseItem). It needs wrapping
 	// in [..] when it is a comma sequence ("1, 2*[..]") or a BARE range ("1..37",
@@ -346,7 +419,39 @@ const buildDaCapoABA = (infos: MeasureRepeatInfo[], dcIdx: number): string | nul
 	const isSingleToken = /^\d+$/.test(mainCode) || /^\d+\*\[/.test(mainCode) || /^\[/.test(mainCode);
 	const main = isSingleToken ? mainCode : `[${mainCode}]`;
 	const rest = /,/.test(restCode) ? `[${restCode}]` : restCode;
-	return `<${main}, ${rest}>`;
+	const candidate = `<${main}, ${rest}>`;
+	return layoutExpandsTo(candidate, performed) ? candidate : buildDaCapoABAFromReplay(infos, dcIdx, fineIdx, performed);
+};
+
+const wrapAbaMain = (code: string): string => /^\d+$/.test(code) || /^\d+\*\[/.test(code) || /^\[/.test(code) ? code : `[${code}]`;
+const wrapAbaRest = (code: string): string => /,/.test(code) ? `[${code}]` : code;
+
+const buildDaCapoABAFromReplay = (infos: MeasureRepeatInfo[], dcIdx: number, fineIdx: number, performed: number[]): string | null => {
+	// Some ABC/MusicXML D.C. exports place repeat-end/start boundaries so the
+	// notated pre-Fine span (1..Fine) is not enough to render main via source flags,
+	// even though the simulated order is a clean ABA: A(full) B A(once). Detect that
+	// shape from the final da-capo replay, then reuse the section renderer for the
+	// longer A candidate and derive B from the performed middle slice.
+	for (let k = Math.min(fineIdx, performed.length - 1); k >= 1; k--) {
+		const replay = Array.from({ length: k }, (_, i) => i + 1);
+		if (JSON.stringify(performed.slice(-k)) !== JSON.stringify(replay)) continue;
+
+		for (let mainHi = k; mainHi < dcIdx; mainHi++) {
+			const mainCode = renderRepeatSections(infos, 1, mainHi);
+			if (mainCode === null) continue;
+			const mainFull = expandMeasureLayout(parseMeasureLayout(mainCode));
+			const mainOnce = expandMeasureLayout(parseMeasureLayout(mainCode), LayoutType.Once);
+			if (JSON.stringify(mainOnce) !== JSON.stringify(replay)) continue;
+			if (JSON.stringify(performed.slice(0, mainFull.length)) !== JSON.stringify(mainFull)) continue;
+
+			const restSeq = performed.slice(mainFull.length, performed.length - mainOnce.length);
+			if (restSeq.length === 0) continue;
+			const restCode = compactFlatToCode(restSeq);
+			const candidate = `<${wrapAbaMain(mainCode)}, ${wrapAbaRest(restCode)}>`;
+			if (layoutExpandsTo(candidate, performed)) return candidate;
+		}
+	}
+	return null;
 };
 
 // Legacy ABA builder for D.C. WITHOUT an explicit Fine: main = the single
@@ -403,7 +508,7 @@ export const buildMeasureLayout = (infos: MeasureRepeatInfo[], totalMeasures: nu
 	// No actual unfolding happened (e.g. a lone start-repeat with no end): skip.
 	if (performed.length === totalMeasures && performed.every((v, k) => v === k + 1)) return undefined;
 
-	const structured = tryStructured(infos, totalMeasures);
+	const structured = tryStructured(infos, totalMeasures, performed);
 	if (structured) {
 		// Trust the structured form only if it reproduces the simulated order.
 		try {
@@ -411,6 +516,8 @@ export const buildMeasureLayout = (infos: MeasureRepeatInfo[], totalMeasures: nu
 			if (JSON.stringify(got) === JSON.stringify(performed)) return structured;
 		} catch { /* fall through to flat */ }
 	}
+	const compacted = compactFlatToCode(performed);
+	if (compacted !== flatToCode(performed) && layoutExpandsTo(compacted, performed)) return compacted;
 	return flatToCode(performed);
 };
 

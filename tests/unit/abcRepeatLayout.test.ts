@@ -69,6 +69,29 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 		layout: '2*[1]{2, 3}, 2*[4, 5]',
 		order: [1, 2, 1, 3, 4, 5, 4, 5],
 	},
+	// Two independent repeat sections, each with its own 1st/2nd endings. The
+	// volta skip logic must be scoped per section: the 1st ending in the first
+	// section must jump to its local 2nd ending (m3), not a later section's ending.
+	'two-independent-volta-sections': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\n|: C D E F |1 G A B c :|2 d e f g |: a b c d |1 e f g a :|2 c2 c2 |]\n',
+		layout: '2*[1]{2, 3}, 2*[4]{5, 6}',
+		order: [1, 2, 1, 3, 4, 5, 4, 6],
+	},
+	// Mixed section kinds: a volta section, then a plain repeat section, then
+	// another volta section. Section classification must not leak ending bounds
+	// across the middle plain repeat.
+	'volta-plain-repeat-volta': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\n|: C D E F |1 G A B c :|2 d e f g |: a b c d | e f g a :| |: c2 c2 |1 B A G F :|2 E D C B |]\n',
+		layout: '2*[1]{2, 3}, 2*[4, 5], 2*[6]{7, 8}',
+		order: [1, 2, 1, 3, 4, 5, 4, 5, 6, 7, 6, 8],
+	},
+	// A plain bridge measure between two independent volta sections must remain a
+	// plain range, not be absorbed into either neighboring repeat.
+	'volta-bridge-volta': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\n|: C D E F |1 G A B c :|2 d e f g || a b c d |: e f g a |1 c2 c2 :|2 B A G F |]\n',
+		layout: '2*[1]{2, 3}, 4, 2*[5]{6, 7}',
+		order: [1, 2, 1, 3, 4, 5, 6, 5, 7],
+	},
 	// Multi-section AABB (two independent repeat sections, the common minuet /
 	// sonata exposition+recap shape). Each section structures independently and
 	// joins with a comma — this is what the multi-section renderer added.
