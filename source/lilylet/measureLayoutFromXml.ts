@@ -125,7 +125,10 @@ const simulate = (infos: MeasureRepeatInfo[]): number[] => {
 		// Fine stop (only after a D.C./D.S. jump has occurred)
 		if (info?.fine && (jumpedDaCapo || jumpedDalSegno)) break;
 
-		// Backward repeat → jump to current repeat-start, counting the pass
+		// Backward repeat → jump to current repeat-start, counting the pass.
+		// If this same measure ALSO carries a D.C./D.S. (e.g. ABC "!D.C.!:|"), the
+		// repeat is resolved FIRST (all passes), then we fall through to the
+		// navigation jump below — the da-capo wraps the repeat, not the reverse.
 		if (info?.repeatEnd) {
 			const start = repeatStartStack[repeatStartStack.length - 1] ?? 1;
 			const times = info.repeatTimes ?? 2;
@@ -133,7 +136,10 @@ const simulate = (infos: MeasureRepeatInfo[]): number[] => {
 			passCount.set(start, done);
 			if (done < times) { i = start; continue; }
 			repeatStartStack = repeatStartStack.filter(s => s !== start);
-			i++; continue;
+			// repeat exhausted: only advance past it when there is no pending
+			// navigation on this measure (otherwise fall through to D.C./D.S.).
+			const hasPendingNav = (info.dacapo && !jumpedDaCapo) || (info.dalsegno && !jumpedDalSegno);
+			if (!hasPendingNav) { i++; continue; }
 		}
 
 		// D.S. (dal segno) — jump back to segno once, arm To-Coda

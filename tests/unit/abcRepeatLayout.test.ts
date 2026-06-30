@@ -85,6 +85,15 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 		layout: '<[1, 2*[2]], 3>',
 		order: [1, 2, 2, 3, 1, 2],
 	},
+	// D.C. that shares its measure with a repeat-end ("!D.C.!:|", common in ABC
+	// minuet+trio engravings, e.g. Chopin). The repeat must resolve FIRST (all
+	// passes), THEN the da-capo fires — so the D.C. wraps the trio repeat as the
+	// outer ABA, not the other way round. A=1,2 (to Fine), B=the |:3 4:| repeat.
+	'dc-al-fine-shared-repeat-end': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F | G A B c !fine!|: d e f g | a b c d !D.C.!:|\n',
+		layout: '<[1, 2], [2*[3, 4]]>',
+		order: [1, 2, 3, 4, 3, 4, 1, 2],
+	},
 	// Pure D.C. al Fine with NO inner repeat (the simplest minuet+trio shape):
 	// play A (1..fine) then B (fine+1..dc), then da-capo replay A to the Fine.
 	// Both halves are comma sequences so both get bracketed: <[..], [..]>.
