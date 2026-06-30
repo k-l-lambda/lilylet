@@ -774,6 +774,16 @@ const abcLayoutToStaves = (layout: ABC.StaffGroup[]): string | null => {
  * `voiceInstr` maps an ABC voice number to its {name, shortName}. The layout's staff ids
  * are arc-first voice numbers, so a staff id "5" looks up voice 5's name.
  */
+
+// ABC quoted strings carry literal escape sequences (e.g. `nm="Violin\nsolo"` is the 11
+// characters V-i-o-l-i-n-\-n-s-o-l-o). The lilylet doc model holds DECODED strings — the
+// serializer's escapeString re-encodes a real newline back to `\n`. Without decoding here,
+// the stored backslash would be escaped a second time (`\n` → `\\n`). Mirror the lilylet
+// grammar's `unq` unescape table so both import paths agree.
+const ABC_UNESCAPE: { [c: string]: string } = { n: "\n", r: "\r", t: "\t", '"': '"', "\\": "\\" };
+const unescapeAbcString = (s: string): string =>
+	s.replace(/\\(.)/g, (m, c) => (c in ABC_UNESCAPE ? ABC_UNESCAPE[c] : m));
+
 const abcInstrumentsToLilylet = (
 	stavesCode: string,
 	voiceInstr: Map<number, InstrumentName>,
@@ -1489,8 +1499,8 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 				if (isNaN(v)) continue;
 				const short = props.snm ?? props.sname;
 				voiceInstr.set(v, typeof short === "string" && short.length
-					? { name, shortName: short }
-					: { name });
+					? { name: unescapeAbcString(name), shortName: unescapeAbcString(short) }
+					: { name: unescapeAbcString(name) });
 			}
 			if (voiceInstr.size > 0) {
 				const instruments = abcInstrumentsToLilylet(metadata.staves, voiceInstr);
