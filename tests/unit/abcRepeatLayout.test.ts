@@ -60,6 +60,20 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 		layout: '1, 1, 2, 2, 3',
 		order: [1, 1, 2, 2, 3],
 	},
+	// Navigation: D.C. al Fine — !D.C.! sends play back to measure 1, !fine! stops it.
+	// (body 1-3 with the inner repeat, then da-capo replay 1-2 stopping at the Fine.)
+	'dc-al-fine': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F |: G A B c !fine!:| d e f g !D.C.!|]\n',
+		layout: '1, 2, 2, 3, 1, 2',
+		order: [1, 2, 2, 3, 1, 2],
+	},
+	// Navigation as a quoted text annotation (abc2xml treats "Fine" text as the Fine
+	// stop; we match it). Same effect as !fine!.
+	'dc-fine-text': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F | G A "_Fine." B c | d e f g "_D.C."|]\n',
+		layout: '1..3, 1, 2',
+		order: [1, 2, 3, 1, 2],
+	},
 	'no-repeat': {
 		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F | G A B c |]\n',
 		layout: '',  // no repeats → no measureLayout

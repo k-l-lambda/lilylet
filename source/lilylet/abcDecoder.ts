@@ -40,7 +40,7 @@ import {
 	InstrumentName,
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
-import { MeasureRepeatInfo, buildMeasureLayout } from "./measureLayoutFromXml";
+import { MeasureRepeatInfo, buildMeasureLayout, applyNavText } from "./measureLayoutFromXml";
 
 
 // ============ Constants ============
@@ -466,9 +466,13 @@ const convertBarline = (bar: string | null): string | undefined => {
 //               previous measure.
 //   leadVolta — a bracket-volta marker ("1", "2", "1,2", …) captured at the START of
 //               this measure's music (the `[N` term the grammar now preserves).
+//   navTexts  — navigation directive/glyph texts on this measure ("D.C.", "D.S. al
+//               Coda", "Fine", "Coda", "Segno") from ABC !decorations! — fed through
+//               the shared applyNavText so ABC nav semantics match the MusicXML path.
 interface AbcBarInfo {
 	trailBar: string | null;
 	leadVolta?: string;
+	navTexts?: string[];
 }
 
 // First integer of a volta spec ("2" from "2", "1" from "1,2", "1" from "1,3,5").
@@ -513,10 +517,28 @@ const collectAbcRepeatInfo = (bars: AbcBarInfo[]): MeasureRepeatInfo[] => {
 		openEndingStart = -1;
 	};
 
+	// ABC marks the "to coda" jump origin and the coda landing with the SAME !coda!
+	// glyph: the first occurrence is the To-Coda jump, the second is the Coda section.
+	// (applyNavText can't tell them apart from a lone "coda" word, so disambiguate here.)
+	let codaSeen = 0;
+
 	for (let i = 0; i < n; i++) {
 		const idx = i + 1;             // 1-based measure index
 		const info = infos[i];
-		const { trailBar, leadVolta } = bars[i];
+		const { trailBar, leadVolta, navTexts } = bars[i];
+
+		// Navigation directives / glyphs (D.C./D.S./al Fine/al Coda, Fine, Coda, Segno)
+		// → MeasureRepeatInfo flags via the shared recognizer, so ABC and MusicXML derive
+		// the same jumps. The first !coda! is the To-Coda origin, the second the landing.
+		for (const raw of navTexts || []) {
+			if (/\bcoda\b/i.test(raw) && !/\b(to|al)\s*coda\b/i.test(raw)) {
+				// bare "Coda" glyph: 1st = tocoda origin, 2nd = coda landing
+				if (codaSeen === 0) info.tocoda = true; else info.coda = true;
+				codaSeen++;
+			} else {
+				applyNavText(info, raw);
+			}
+		}
 
 		// A bracket-volta term ("[1") at the START of this measure opens an ending here.
 		if (leadVolta !== undefined) {
@@ -1488,7 +1510,9 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 
 		// Capture this measure's repeat markup from the reference voice (the lowest
 		// voice number present). trailBar = its raw trailing bar; leadVolta = a "[N"
-		// bracket-volta term at the start of its music.
+		// bracket-volta term at the start of its music. Navigation directives/glyphs
+		// (!D.C.!/!D.S.!/!fine!/!coda!/!segno!) are gathered from ALL voices, since an
+		// engraver may place them on any single staff of a grand-staff system.
 		{
 			const refVoice = Math.min(...Array.from(voicePatches.keys()));
 			const refPatches = voicePatches.get(refVoice) || [];
@@ -1501,7 +1525,31 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 					if (vt) leadVolta = (vt as any).volta;
 				}
 			}
-			barInfos.push({ trailBar, leadVolta });
+			const navTexts: string[] = [];
+			for (const patches of voicePatches.values()) {
+				for (const p of patches) {
+					for (const t of (p.terms || []) as any[]) {
+						// !D.C.!/!D.S.! (incl. "al fine"/"al coda") → directive text.
+						if (typeof t.directive === "string") navTexts.push(t.directive);
+						// !fine!/!coda!/!segno! decorations parse to an articulation name.
+						else if (t.articulation === "fine" || t.articulation === "coda" || t.articulation === "segno") {
+							navTexts.push(t.articulation);
+						}
+						// A quoted text annotation that is EXACTLY a navigation word
+						// ("Fine", "D.C. al Fine", "Coda", …) is treated as navigation, as
+						// abc2xml does. Strip the placement prefix (^/_/</>/@) and trailing
+						// punctuation; require a pure nav phrase so ordinary text/lyrics are
+						// not misread.
+						else if (typeof t.text === "string") {
+							const body = t.text.replace(/^[\^_<>@]/, "").trim().replace(/[.\s]+$/, "");
+							if (/^(d\.?\s*[cs]\.?(\s+al\s+(fine|coda))?|fine|coda|segno|to\s*coda)$/i.test(body)) {
+								navTexts.push(body);
+							}
+						}
+					}
+				}
+			}
+			barInfos.push({ trailBar, leadVolta, navTexts: navTexts.length ? navTexts : undefined });
 		}
 
 		// Process each voice

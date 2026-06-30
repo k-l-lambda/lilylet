@@ -309,7 +309,9 @@ export const buildMeasureLayout = (infos: MeasureRepeatInfo[], totalMeasures: nu
 // "D.C. al Fine" → dacapo (the Fine stop is marked separately where "Fine"
 // appears); "D.S. al Coda"/"D.S." → dalsegno; "To Coda" → tocoda; bare "Fine"
 // → fine; bare "Coda"/"Segno" → mark the landing point.
-const applyNavText = (info: MeasureRepeatInfo, raw: string): void => {
+// Exported so the ABC decoder can feed its !D.C.!/!D.S.!/!fine! decoration text
+// through the SAME recognizer, keeping the ABC and MusicXML nav semantics identical.
+export const applyNavText = (info: MeasureRepeatInfo, raw: string): void => {
 	const t = raw.trim().toLowerCase().replace(/\s+/g, " ");
 	if (!t) return;
 	const isDC = /\bd\.?\s*c\.?\b|\bda\s*capo\b/.test(t);
