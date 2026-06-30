@@ -263,6 +263,21 @@ const renderRepeatSections = (infos: MeasureRepeatInfo[], lo: number, hi: number
 		}
 		else sectionHi = e;
 
+		// A repeat-end only loops when an OPEN repeat-start feeds it (the simulate
+		// model): either an EXPLICIT repeat-start inside this section [sectionLo..e],
+		// or the implicit start of measure 1 for the very first section. A plain
+		// (no-volta) repeat-end with neither — e.g. the closing half of a "::" whose
+		// matching start was already consumed/popped by an earlier section — is
+		// SPURIOUS: those measures play exactly once, so emit a plain range instead
+		// of a bogus T*[...] wrapper (which would fail the re-expand guard → flat).
+		const explicitStartInSection = repeatStarts.some(s => s >= sectionLo && s <= e);
+		const implicitFromStart = sectionLo === lo && lo === 1;
+		if (sectionEndingStarts.length === 0 && !explicitStartInSection && !implicitFromStart) {
+			parts.push(rangeCode(sectionLo, sectionHi));
+			prevHi = sectionHi;
+			continue;
+		}
+
 		const code = renderRepeatSpan(infos, sectionLo, sectionHi);
 		if (code === null) return null;
 		parts.push(code);

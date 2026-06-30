@@ -77,6 +77,16 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 		layout: '2*[1, 2], 3, 4',
 		order: [1, 2, 1, 2, 3, 4],
 	},
+	// Spurious end-and-start repeat: a later "::" bar's repeat-end half has NO
+	// matching open repeat-start (its start was already consumed by an earlier
+	// section), so simulate plays that measure ONCE. Mirrors the real-corpus
+	// repeatEnds=[41,60,76,96]/repeatStarts=[42,77] shape: the 3rd repeat-end is
+	// spurious and must render as a plain range, not a bogus 2*[...].
+	'spurious-end-and-start-repeat': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F | G A B c :: d e f g | a b c d :| e f g a :: f g a b | c d e f :| g a b c |]\n',
+		layout: '2*[1, 2], 2*[3, 4], 5, 2*[6, 7], 8',
+		order: [1, 2, 1, 2, 3, 4, 3, 4, 5, 6, 7, 6, 7, 8],
+	},
 	// Navigation: D.C. al Fine — !D.C.! sends play back to measure 1, !fine! stops it.
 	// Structured as ABA <main, rest>: main = the pre-Fine span (with its inner
 	// repeat), rest = the post-Fine tail; the Once re-expansion replays main to Fine.
