@@ -102,6 +102,8 @@ const SCOPE_MAP: Record<string, string> = {
 	ORN_FERMATA: "ornament",
 	ORN_SHORTFERMATA: "ornament",
 	ORN_ARPEGGIO: "ornament",
+	ORN_BREATHE: "ornament",
+	CMD_GLISSANDO: "ornament",
 
 	DYN_PPP: "dynamic",
 	DYN_PP: "dynamic",
