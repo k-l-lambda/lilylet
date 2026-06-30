@@ -57,8 +57,16 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 	},
 	'back-to-back-repeats': {
 		abc: 'X:1\nL:1/4\nM:4/4\nK:C\n|: C D E F :| |: G A B c :| d e f g |]\n',
-		layout: '1, 1, 2, 2, 3',
+		layout: '2*[1], 2*[2], 3',
 		order: [1, 1, 2, 2, 3],
+	},
+	// Multi-section AABB (two independent repeat sections, the common minuet /
+	// sonata exposition+recap shape). Each section structures independently and
+	// joins with a comma — this is what the multi-section renderer added.
+	'aabb-two-sections': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\n|: C D E F | G A B c :| |: d e f g | a b c d :|\n',
+		layout: '2*[1, 2], 2*[3, 4]',
+		order: [1, 2, 1, 2, 3, 4, 3, 4],
 	},
 	// Navigation: D.C. al Fine — !D.C.! sends play back to measure 1, !fine! stops it.
 	// (body 1-3 with the inner repeat, then da-capo replay 1-2 stopping at the Fine.)

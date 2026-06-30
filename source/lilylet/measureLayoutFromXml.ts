@@ -214,6 +214,52 @@ const renderRepeatSpan = (infos: MeasureRepeatInfo[], lo: number, hi: number): s
 	return parts.join(", ");
 };
 
+// Render a whole piece that has one OR MORE plain repeat/volta sections in
+// sequence (no navigation). Real scores are usually multi-section (AABB minuets,
+// sonata exposition+recap), which the single-span renderRepeatSpan can't express
+// — it bails when it sees >1 repeat-end. Here we cut the piece at section
+// boundaries (each cut ends a repeat section, voltas included) and render each
+// span independently, joining with commas. Any non-repeated measures between two
+// sections are absorbed as the `pre` of the following span. Returns null if any
+// section isn't a clean single repeat/volta (caller then falls back to flat).
+const renderRepeatSections = (infos: MeasureRepeatInfo[], total: number): string | null => {
+	const repeatEnds = infos.filter(i => i.repeatEnd).map(i => i.index).sort((a, b) => a - b);
+	const repeatStarts = infos.filter(i => i.repeatStart).map(i => i.index).sort((a, b) => a - b);
+	if (repeatEnds.length <= 1) return renderRepeatSpan(infos, 1, total);
+
+	const endingStops = infos.filter(i => i.endingStop !== undefined).map(i => i.index);
+
+	const parts: string[] = [];
+	let prevHi = 0;
+	for (const e of repeatEnds) {
+		const lo = prevHi + 1;
+		// The next section's repeat-start bounds this section's voltas (2nd/3rd
+		// endings sit AFTER the repeat-end but BEFORE the next section starts).
+		const nextStart = repeatStarts.find(s => s > e);
+		const sectionEndingStarts = infos
+			.filter(i => i.endingStart !== undefined && i.index >= lo && (nextStart === undefined || i.index < nextStart))
+			.map(i => i.index)
+			.sort((a, b) => a - b);
+
+		let hi: number;
+		if (sectionEndingStarts.length) {
+			const lastStart = sectionEndingStarts[sectionEndingStarts.length - 1];
+			// the last ending's stop closes the section; else the ending start itself
+			const stop = endingStops.filter(s => s >= lastStart).sort((a, b) => a - b)[0];
+			hi = stop ?? lastStart;
+		}
+		else hi = e;
+
+		const code = renderRepeatSpan(infos, lo, hi);
+		if (code === null) return null;
+		parts.push(code);
+		prevHi = hi;
+	}
+	// trailing non-repeated tail
+	if (prevHi < total) parts.push(rangeCode(prevHi + 1, total));
+	return parts.join(", ");
+};
+
 const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null => {
 	const dacapo = infos.find(i => i.dacapo);
 	const dalsegno = infos.some(i => i.dalsegno);
@@ -233,8 +279,10 @@ const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null
 	}
 	if (dalsegno || tocoda || infos.some(i => i.fine || i.segno || i.coda)) return null;
 
-	// No navigation: a single plain repeat/volta over the whole piece.
-	return renderRepeatSpan(infos, 1, total);
+	// No navigation: one or more plain repeat/volta sections in sequence. Most
+	// real pieces (AABB minuets, sonata exposition+recap) have ≥2 repeat sections;
+	// render each independently and join with commas.
+	return renderRepeatSections(infos, total);
 };
 
 // Construct the ABA form <main, rest> for a D.C. case. main = the volta/repeat
