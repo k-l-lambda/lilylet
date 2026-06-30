@@ -316,9 +316,14 @@ const buildDaCapoABA = (infos: MeasureRepeatInfo[], dcIdx: number): string | nul
 	const restCode = renderRepeatSections(infos, restLo, dcIdx);
 	if (mainCode === null || restCode === null) return null;
 
-	// main wraps in [..] only when it is a comma-separated sequence (so the ABA
-	// parser reads it as one block); a single token (e.g. "2*[..]") needs no bracket.
-	const main = /,/.test(mainCode) ? `[${mainCode}]` : mainCode;
+	// `main` is parsed by the ABA grammar as ONE item (parseItem). It needs wrapping
+	// in [..] when it is a comma sequence ("1, 2*[..]") or a BARE range ("1..37",
+	// which parseItem stops at the first number). A lone number, or a single
+	// already-structured token ("2*[..]" / "2*[..]{..}" / "[..]"), parses as one item
+	// and needs no extra bracket. `rest` is parsed as a sequence, so it only needs
+	// bracketing to group a comma sequence — a range there is fine.
+	const isSingleToken = /^\d+$/.test(mainCode) || /^\d+\*\[/.test(mainCode) || /^\[/.test(mainCode);
+	const main = isSingleToken ? mainCode : `[${mainCode}]`;
 	const rest = /,/.test(restCode) ? `[${restCode}]` : restCode;
 	return `<${main}, ${rest}>`;
 };

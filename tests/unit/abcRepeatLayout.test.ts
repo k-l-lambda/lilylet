@@ -85,6 +85,14 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 		layout: '<[1, 2*[2]], 3>',
 		order: [1, 2, 2, 3, 1, 2],
 	},
+	// Pure D.C. al Fine with NO inner repeat (the simplest minuet+trio shape):
+	// play A (1..fine) then B (fine+1..dc), then da-capo replay A to the Fine.
+	// Both halves are comma sequences so both get bracketed: <[..], [..]>.
+	'dc-al-fine-no-repeat': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F | G A B c !fine! d e f g | a b c d | e f g a !D.C.!|]\n',
+		layout: '<[1, 2], [3, 4]>',
+		order: [1, 2, 3, 4, 1, 2],
+	},
 	// Navigation as a quoted text annotation (abc2xml treats "Fine" text as the Fine
 	// stop; we match it). Same effect as !fine!. ABA: main = 1,2 (to Fine), rest = 3.
 	'dc-fine-text': {
