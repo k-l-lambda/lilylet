@@ -69,17 +69,18 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 		order: [1, 2, 1, 2, 3, 4, 3, 4],
 	},
 	// Navigation: D.C. al Fine — !D.C.! sends play back to measure 1, !fine! stops it.
-	// (body 1-3 with the inner repeat, then da-capo replay 1-2 stopping at the Fine.)
+	// Structured as ABA <main, rest>: main = the pre-Fine span (with its inner
+	// repeat), rest = the post-Fine tail; the Once re-expansion replays main to Fine.
 	'dc-al-fine': {
 		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F |: G A B c !fine!:| d e f g !D.C.!|]\n',
-		layout: '1, 2, 2, 3, 1, 2',
+		layout: '<[1, 2*[2]], 3>',
 		order: [1, 2, 2, 3, 1, 2],
 	},
 	// Navigation as a quoted text annotation (abc2xml treats "Fine" text as the Fine
-	// stop; we match it). Same effect as !fine!.
+	// stop; we match it). Same effect as !fine!. ABA: main = 1,2 (to Fine), rest = 3.
 	'dc-fine-text': {
 		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F | G A "_Fine." B c | d e f g "_D.C."|]\n',
-		layout: '1..3, 1, 2',
+		layout: '<[1, 2], 3>',
 		order: [1, 2, 3, 1, 2],
 	},
 	'no-repeat': {
@@ -106,6 +107,29 @@ for (const name of Object.keys(CASES)) {
 	const got = expandMeasureLayout(parseMeasureLayout(layout));
 	assert(JSON.stringify(got) === JSON.stringify(wantOrder),
 		`${name}: performed order [${got}] === [${wantOrder}]`);
+}
+
+console.log('\nNavigation directives → visible marks (D.C./Fine attached to a note):');
+{
+	// !D.C.! + !fine! should attach a markup "D.C." and "Fine" to a note (mirrors
+	// the MusicXML path, which renders the same labels). Verify the marks land in
+	// the doc model so the serializer emits ^\markup "D.C." / "Fine".
+	const doc = abcDecoder.decode('X:1\nL:1/4\nM:4/4\nK:C\nC D E F |: G A B c !fine!:| d e f g !D.C.!|]\n');
+	const markupContents: string[] = [];
+	for (const m of doc.measures) for (const p of m.parts) for (const v of p.voices)
+		for (const e of v.events) if (e.type === 'note')
+			for (const mk of (e as any).marks || []) if (mk.markType === 'markup') markupContents.push(mk.content);
+	assert(markupContents.includes('Fine'), `dc-al-fine: markup "Fine" attached (got ${JSON.stringify(markupContents)})`);
+	assert(markupContents.includes('D.C.'), `dc-al-fine: markup "D.C." attached (got ${JSON.stringify(markupContents)})`);
+
+	// !coda!/!segno! glyphs → navigation marks (\coda / \segno).
+	const doc2 = abcDecoder.decode('X:1\nL:1/4\nM:4/4\nK:C\n!segno! C D E F | G A B c | d e f g !coda! a2 a2 |]\n');
+	const navTypes: string[] = [];
+	for (const m of doc2.measures) for (const p of m.parts) for (const v of p.voices)
+		for (const e of v.events) if (e.type === 'note')
+			for (const mk of (e as any).marks || []) if (mk.markType === 'navigation') navTypes.push(mk.type);
+	assert(navTypes.includes('segno'), `glyph nav: \\segno attached (got ${JSON.stringify(navTypes)})`);
+	assert(navTypes.includes('coda'), `glyph nav: \\coda attached (got ${JSON.stringify(navTypes)})`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

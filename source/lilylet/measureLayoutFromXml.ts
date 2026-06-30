@@ -214,49 +214,52 @@ const renderRepeatSpan = (infos: MeasureRepeatInfo[], lo: number, hi: number): s
 	return parts.join(", ");
 };
 
-// Render a whole piece that has one OR MORE plain repeat/volta sections in
+// Render a span [lo..hi] that has one OR MORE plain repeat/volta sections in
 // sequence (no navigation). Real scores are usually multi-section (AABB minuets,
 // sonata exposition+recap), which the single-span renderRepeatSpan can't express
-// — it bails when it sees >1 repeat-end. Here we cut the piece at section
+// — it bails when it sees >1 repeat-end. Here we cut the span at section
 // boundaries (each cut ends a repeat section, voltas included) and render each
-// span independently, joining with commas. Any non-repeated measures between two
-// sections are absorbed as the `pre` of the following span. Returns null if any
-// section isn't a clean single repeat/volta (caller then falls back to flat).
-const renderRepeatSections = (infos: MeasureRepeatInfo[], total: number): string | null => {
-	const repeatEnds = infos.filter(i => i.repeatEnd).map(i => i.index).sort((a, b) => a - b);
-	const repeatStarts = infos.filter(i => i.repeatStart).map(i => i.index).sort((a, b) => a - b);
-	if (repeatEnds.length <= 1) return renderRepeatSpan(infos, 1, total);
+// sub-span independently, joining with commas. Any non-repeated measures between
+// two sections are absorbed as the `pre` of the following span. Returns null if
+// any section isn't a clean single repeat/volta (caller then falls back to flat).
+// Used both for the whole piece (lo=1, hi=total) and recursively for the A / B
+// halves of a da-capo ABA.
+const renderRepeatSections = (infos: MeasureRepeatInfo[], lo: number, hi: number): string | null => {
+	const inSpan = (idx: number) => idx >= lo && idx <= hi;
+	const repeatEnds = infos.filter(i => i.repeatEnd && inSpan(i.index)).map(i => i.index).sort((a, b) => a - b);
+	const repeatStarts = infos.filter(i => i.repeatStart && inSpan(i.index)).map(i => i.index).sort((a, b) => a - b);
+	if (repeatEnds.length <= 1) return renderRepeatSpan(infos, lo, hi);
 
-	const endingStops = infos.filter(i => i.endingStop !== undefined).map(i => i.index);
+	const endingStops = infos.filter(i => i.endingStop !== undefined && inSpan(i.index)).map(i => i.index);
 
 	const parts: string[] = [];
-	let prevHi = 0;
+	let prevHi = lo - 1;
 	for (const e of repeatEnds) {
-		const lo = prevHi + 1;
+		const sectionLo = prevHi + 1;
 		// The next section's repeat-start bounds this section's voltas (2nd/3rd
 		// endings sit AFTER the repeat-end but BEFORE the next section starts).
 		const nextStart = repeatStarts.find(s => s > e);
 		const sectionEndingStarts = infos
-			.filter(i => i.endingStart !== undefined && i.index >= lo && (nextStart === undefined || i.index < nextStart))
+			.filter(i => i.endingStart !== undefined && i.index >= sectionLo && (nextStart === undefined || i.index < nextStart) && inSpan(i.index))
 			.map(i => i.index)
 			.sort((a, b) => a - b);
 
-		let hi: number;
+		let sectionHi: number;
 		if (sectionEndingStarts.length) {
 			const lastStart = sectionEndingStarts[sectionEndingStarts.length - 1];
 			// the last ending's stop closes the section; else the ending start itself
 			const stop = endingStops.filter(s => s >= lastStart).sort((a, b) => a - b)[0];
-			hi = stop ?? lastStart;
+			sectionHi = stop ?? lastStart;
 		}
-		else hi = e;
+		else sectionHi = e;
 
-		const code = renderRepeatSpan(infos, lo, hi);
+		const code = renderRepeatSpan(infos, sectionLo, sectionHi);
 		if (code === null) return null;
 		parts.push(code);
-		prevHi = hi;
+		prevHi = sectionHi;
 	}
 	// trailing non-repeated tail
-	if (prevHi < total) parts.push(rangeCode(prevHi + 1, total));
+	if (prevHi < hi) parts.push(rangeCode(prevHi + 1, hi));
 	return parts.join(", ");
 };
 
@@ -282,15 +285,44 @@ const tryStructured = (infos: MeasureRepeatInfo[], total: number): string | null
 	// No navigation: one or more plain repeat/volta sections in sequence. Most
 	// real pieces (AABB minuets, sonata exposition+recap) have ≥2 repeat sections;
 	// render each independently and join with commas.
-	return renderRepeatSections(infos, total);
+	return renderRepeatSections(infos, 1, total);
 };
 
-// Construct the ABA form <main, rest> for a D.C. case. main = the volta/repeat
-// structure; rest = the post-volta tail before the D.C. measure. The Once
-// re-expansion of main supplies the da-capo replay (body + last ending), giving
-// the over-volta semantics. Returns null when the shape doesn't fit (no volta,
-// or no tail to form the ABA "rest") → caller uses the flat fallback.
+// Construct the ABA form <main, rest> for a D.C. case. The ABA expansion plays
+// A B A' where A = main (Full), B = rest (Full), A' = main (Once: volta bodies
+// once + last alternate, no inner repeat). For D.C. al Fine, A is the whole
+// pre-Fine span (1..fine) and B is the post-Fine span up to the D.C. (fine+1..dc);
+// the da-capo replay A' then plays main once more, stopping at Fine. Both A and B
+// can themselves contain repeat/volta sections, so each is structured recursively
+// via renderRepeatSections. Returns null when the shape doesn't fit (no Fine to
+// bound A, or no rest tail) → caller uses the flat fallback. The end-of-build
+// re-expand check still validates the result against the simulated order.
 const buildDaCapoABA = (infos: MeasureRepeatInfo[], dcIdx: number): string | null => {
+	const fineIdx = infos.find(i => i.fine)?.index;
+	if (fineIdx === undefined) {
+		// No explicit Fine: fall back to the legacy single-volta ABA shape, where
+		// A ends at the last pre-D.C. ending and B is the tail to the D.C. measure.
+		return buildDaCapoABALegacy(infos, dcIdx);
+	}
+	if (fineIdx >= dcIdx) return null;          // Fine must precede the D.C. tail
+	const restLo = fineIdx + 1;
+	if (restLo > dcIdx) return null;            // no B section
+
+	const mainCode = renderRepeatSections(infos, 1, fineIdx);
+	const restCode = renderRepeatSections(infos, restLo, dcIdx);
+	if (mainCode === null || restCode === null) return null;
+
+	// main wraps in [..] only when it is a comma-separated sequence (so the ABA
+	// parser reads it as one block); a single token (e.g. "2*[..]") needs no bracket.
+	const main = /,/.test(mainCode) ? `[${mainCode}]` : mainCode;
+	const rest = /,/.test(restCode) ? `[${restCode}]` : restCode;
+	return `<${main}, ${rest}>`;
+};
+
+// Legacy ABA builder for D.C. WITHOUT an explicit Fine: main = the single
+// volta/repeat structure before the D.C., rest = the post-volta tail. Kept for
+// the original over-volta-without-Fine convention.
+const buildDaCapoABALegacy = (infos: MeasureRepeatInfo[], dcIdx: number): string | null => {
 	const endingStarts = infos.filter(i => i.index <= dcIdx && i.endingStart !== undefined).map(i => i.index).sort((a, b) => a - b);
 	if (endingStarts.length === 0) return null;   // plain D.C. al Fine (no volta) → flat
 	// body+endings up to the last ending stop; the rest (tail) runs to dcIdx.

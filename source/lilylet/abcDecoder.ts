@@ -839,6 +839,24 @@ const abcInstrumentsToLilylet = (
 
 // ============ Marks/Decorations Conversion ============
 
+const navTextToMark = (raw: string): Mark | undefined => {
+	const body = raw.replace(/^[\^_<>@]/, "").trim().replace(/[.\s]+$/, "");
+	const t = body.toLowerCase().replace(/\s+/g, " ");
+	// glyph names → navigation marks
+	if (t === "coda") return { markType: "navigation", type: NavigationMarkType.coda };
+	if (t === "segno") return { markType: "navigation", type: NavigationMarkType.segno };
+	// textual jumps → markup with the canonical label used by the XML path
+	const isDC = /^d\.?\s*c\.?/.test(t) || /\bda\s*capo\b/.test(t);
+	const isDS = /^d\.?\s*s\.?/.test(t) || /\bdal\s*segno\b/.test(t);
+	const alFine = /\bal\s*fine\b/.test(t);
+	const alCoda = /\bal\s*coda\b/.test(t);
+	if (isDC) return { markType: "markup", content: alFine ? "D.C. al Fine" : alCoda ? "D.C. al Coda" : "D.C.", placement: Placement.above };
+	if (isDS) return { markType: "markup", content: alFine ? "D.S. al Fine" : alCoda ? "D.S. al Coda" : "D.S.", placement: Placement.above };
+	if (/\bto\s*coda\b/.test(t)) return { markType: "markup", content: "To Coda", placement: Placement.above };
+	if (t === "fine") return { markType: "markup", content: "Fine", placement: Placement.above };
+	return undefined;
+};
+
 const convertArticulationMark = (artName: string): Mark | undefined => {
 	switch (artName) {
 		case "accent": case "L":
@@ -1495,6 +1513,12 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 	// markup is voice-global by convention, so one voice suffices.
 	const barInfos: AbcBarInfo[] = [];
 
+	// Navigation marks (D.C./D.S./Fine/Coda/Segno) to render as VISIBLE marks on
+	// the first note of each measure that carries them, keyed by 0-based measure
+	// index. Built alongside barInfos' navTexts; attached after each measure's
+	// parts are assembled (mirrors the MusicXML path attaching nav to a note).
+	const navMarksByMeasure = new Map<number, Mark[]>();
+
 	for (let mi = 0; mi < measures.length; mi++) {
 		const abcMeasure = measures[mi];
 
@@ -1550,6 +1574,26 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 				}
 			}
 			barInfos.push({ trailBar, leadVolta, navTexts: navTexts.length ? navTexts : undefined });
+
+			// Convert the navigation texts to VISIBLE marks (consistent with the
+			// MusicXML path). De-dup identical marks so a directive echoed on
+			// several voices yields one glyph/text. (Bare in-note `express` coda/segno
+			// are a separate ABC form handled in processExpressiveTerm; the !coda!/
+			// !segno!/!D.C.!/!fine! decorations gathered here parse to articulation/
+			// directive/text and have no per-note express, so they need attaching.)
+			if (navTexts.length) {
+				const seen = new Set<string>();
+				const marks: Mark[] = [];
+				for (const raw of navTexts) {
+					const mark = navTextToMark(raw);
+					if (!mark) continue;
+					const key = mark.markType === "markup" ? `m:${mark.content}` : `n:${(mark as any).type}`;
+					if (seen.has(key)) continue;
+					seen.add(key);
+					marks.push(mark);
+				}
+				if (marks.length) navMarksByMeasure.set(mi, marks);
+			}
 		}
 
 		// Process each voice
@@ -1660,6 +1704,26 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 		if (mi === 0) {
 			if (keySig) measure.key = keySig;
 			if (timeSig) measure.timeSig = timeSig;
+		}
+
+		// Attach this measure's navigation marks (D.C./D.S./Fine/Coda/Segno) to its
+		// first NoteEvent, scanning parts/voices in order (the reference staff). The
+		// MusicXML path likewise attaches navigation to a note; keeping it on a note
+		// means the serializer renders \coda/\segno or ^\markup "D.C. al Fine".
+		const navMarks = navMarksByMeasure.get(mi);
+		if (navMarks && navMarks.length) {
+			let attached = false;
+			for (const part of parts) {
+				for (const voice of part.voices) {
+					const firstNote = voice.events.find(e => e.type === "note") as NoteEvent | undefined;
+					if (firstNote) {
+						firstNote.marks = [...(firstNote.marks || []), ...navMarks];
+						attached = true;
+						break;
+					}
+				}
+				if (attached) break;
+			}
 		}
 
 		lilyletMeasures.push(measure);
