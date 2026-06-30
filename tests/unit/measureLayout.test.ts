@@ -108,6 +108,15 @@ console.log('\nABA LayoutType on "<[1,2], 3, 4>":');
 	assert(JSON.stringify(expandMeasureLayout(ast, LayoutType.Once)) === JSON.stringify([3,4,1,2]), 'Once → B A');
 }
 
+console.log('\nEmpty-rest ABA on "<[1, 2*[2]{3, 4}], >":');
+{
+	const ast = parseMeasureLayout('<[1, 2*[2]{3, 4}], >');
+	assert(JSON.stringify(expandMeasureLayout(ast, LayoutType.Full)) === JSON.stringify([1,2,3,2,4,1,2,4]),
+		'Full → A A′ when B/rest is empty');
+	assert(JSON.stringify(expandMeasureLayout(ast, LayoutType.Once)) === JSON.stringify([1,2,4]),
+		'Once → empty B + A′');
+}
+
 // ─── Serializer round-trip: serialize→reparse→expand is stable ──────────────
 console.log('\nSerializer round-trip (expansion stable through serialize→reparse):');
 {

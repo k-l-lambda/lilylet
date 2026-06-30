@@ -151,6 +151,28 @@ const CASES: Record<string, { abc: string; layout: string; order: number[] }> = 
 		layout: '<[1, 2], 3>',
 		order: [1, 2, 3, 1, 2],
 	},
+	// D.S. with no explicit Segno defaults to the start in the simulator, so it is
+	// structurally the same start-replay ABA as D.C. (but only when no To-Coda is
+	// involved). Mirrors generated corpus cases that mark D.S./Fine but omit Segno.
+	'ds-no-segno-al-fine': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F | G A B c !fine!| d e f g | a b c d !D.S.!|]\n',
+		layout: '<[1, 2], [3, 4]>',
+		order: [1, 2, 3, 4, 1, 2],
+	},
+	// D.C. immediately after a repeat-with-volta has no B section: play main full,
+	// then da-capo replay main once. The compact form is an ABA with an empty rest.
+	'dc-empty-rest-volta': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F |: G A B c |1 d e f g :|2 c2 c2 !D.C.!|]\n',
+		layout: '<[1, 2*[2]{3, 4}], >',
+		order: [1, 2, 3, 2, 4, 1, 2, 4],
+	},
+	// Same empty-rest D.C. shape, but the second ending spans multiple measures;
+	// the alternate must be bracketed inside the ABA main.
+	'dc-empty-rest-multimeasure-ending': {
+		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F |: G A B c |1 d e f g :|2 c2 c2 | e2 e2 !D.C.!|]\n',
+		layout: '<[1, 2*[2]{3, [4, 5]}], >',
+		order: [1, 2, 3, 2, 4, 5, 1, 2, 4, 5],
+	},
 	'no-repeat': {
 		abc: 'X:1\nL:1/4\nM:4/4\nK:C\nC D E F | G A B c |]\n',
 		layout: '',  // no repeats → no measureLayout

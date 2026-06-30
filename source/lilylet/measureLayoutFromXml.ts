@@ -363,21 +363,16 @@ const tryStructured = (infos: MeasureRepeatInfo[], total: number, performed: num
 	const dalsegno = infos.some(i => i.dalsegno);
 	const tocoda = infos.some(i => i.tocoda);
 
-	// D.C. (da capo → return to measure 1) over an inner repeat/volta maps cleanly
-	// to ABA <main, rest>: the trailing A' re-expansion uses LayoutType.Once (body
-	// once + the LAST alternate), which is exactly the "over-volta" convention —
-	// on the da-capo pass internal volta repeats are dropped, only the final
-	// pass-through plays, stopping at Fine. D.S. (segno ≠ measure 1) and To-Coda
-	// truncation can't be expressed this way → flat fallback.
-	if (dacapo && !dalsegno && !tocoda) {
-		// D.C. over a volta → ABA <main, rest>; Once re-expansion gives the
-		// over-volta replay (body + last ending, no inner repeat). Plain D.C. al
-		// Fine without a volta can't bound A' at an arbitrary Fine → flat fallback.
-		return buildDaCapoABA(infos, dacapo.index, performed);
+	// D.C. / D.S. jumps that replay from the start can use the ABA form. A real
+	// Segno (not measure 1) and To-Coda still fall back to flat because the DSL has
+	// no "replay from arbitrary middle marker" construct. Bare Fine/Segno/Coda marks
+	// without a jump are visual landmarks only; they must not block repeat structuring.
+	const hasExplicitSegno = infos.some(i => i.segno);
+	if (!tocoda && dacapo) return buildDaCapoABA(infos, dacapo.index, performed);
+	if (!tocoda && dalsegno && !hasExplicitSegno) {
+		const ds = infos.find(i => i.dalsegno);
+		if (ds) return buildDaCapoABA(infos, ds.index, performed);
 	}
-	// D.S. / To-Coda alter playback in ways this compact DSL does not express well,
-	// so keep the flat fallback for them. Bare Fine/Segno/Coda marks without a jump
-	// are visual landmarks only; they must not block normal repeat structuring.
 	if (dalsegno || tocoda) return null;
 
 	// No playback-changing navigation: one or more plain repeat/volta sections in sequence. Most
@@ -402,12 +397,11 @@ const buildDaCapoABA = (infos: MeasureRepeatInfo[], dcIdx: number, performed: nu
 		// A ends at the last pre-D.C. ending and B is the tail to the D.C. measure.
 		return buildDaCapoABALegacy(infos, dcIdx);
 	}
-	if (fineIdx >= dcIdx) return null;          // Fine must precede the D.C. tail
+	if (fineIdx >= dcIdx) return null;          // Fine must precede the D.C./D.S. tail
 	const restLo = fineIdx + 1;
-	if (restLo > dcIdx) return null;            // no B section
 
 	const mainCode = renderRepeatSections(infos, 1, fineIdx);
-	const restCode = renderRepeatSections(infos, restLo, dcIdx);
+	const restCode = restLo > dcIdx ? "" : renderRepeatSections(infos, restLo, dcIdx);
 	if (mainCode === null || restCode === null) return buildDaCapoABAFromReplay(infos, dcIdx, fineIdx, performed);
 
 	// `main` is parsed by the ABA grammar as ONE item (parseItem). It needs wrapping
@@ -424,7 +418,7 @@ const buildDaCapoABA = (infos: MeasureRepeatInfo[], dcIdx: number, performed: nu
 };
 
 const wrapAbaMain = (code: string): string => /^\d+$/.test(code) || /^\d+\*\[/.test(code) || /^\[/.test(code) ? code : `[${code}]`;
-const wrapAbaRest = (code: string): string => /,/.test(code) ? `[${code}]` : code;
+const wrapAbaRest = (code: string): string => code === "" ? "" : (/,/.test(code) ? `[${code}]` : code);
 
 const buildDaCapoABAFromReplay = (infos: MeasureRepeatInfo[], dcIdx: number, fineIdx: number, performed: number[]): string | null => {
 	// Some ABC/MusicXML D.C. exports place repeat-end/start boundaries so the
@@ -445,7 +439,6 @@ const buildDaCapoABAFromReplay = (infos: MeasureRepeatInfo[], dcIdx: number, fin
 			if (JSON.stringify(performed.slice(0, mainFull.length)) !== JSON.stringify(mainFull)) continue;
 
 			const restSeq = performed.slice(mainFull.length, performed.length - mainOnce.length);
-			if (restSeq.length === 0) continue;
 			const restCode = compactFlatToCode(restSeq);
 			const candidate = `<${wrapAbaMain(mainCode)}, ${wrapAbaRest(restCode)}>`;
 			if (layoutExpandsTo(candidate, performed)) return candidate;
@@ -485,9 +478,9 @@ const buildDaCapoABALegacy = (infos: MeasureRepeatInfo[], dcIdx: number): string
 
 	const pre = startIdx > 1 ? rangeCode(1, startIdx - 1) + ", " : "";
 	const main = pre ? `[${pre}${voltaCode}]` : voltaCode;
-	// rest = the tail from after the last ending to the D.C. measure
-	if (lastStop >= dcIdx) return null;   // no tail to form the ABA "rest"
-	const rest = rangeCode(lastStop + 1, dcIdx);
+	// rest = the tail from after the last ending to the D.C. measure. It may be
+	// empty when the navigation jump follows immediately after the main repeat.
+	const rest = lastStop >= dcIdx ? "" : rangeCode(lastStop + 1, dcIdx);
 	return `<${main}, ${rest}>`;
 };
 
