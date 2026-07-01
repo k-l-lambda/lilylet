@@ -2,15 +2,22 @@
  * Note-onset extraction from a parsed Lilylet document.
  *
  * Walks measures -> parts -> voices -> events, accumulating each note's ONSET (position
- * within its measure, in duration units where DIVISIONS=4 per quarter) and its SOUNDING
+ * within its measure, in duration units of RES=480 per quarter) and its SOUNDING
  * MIDI pitch. Sounding pitch honors octave-/interval-transposing clefs ("treble_8" sounds
  * an octave lower than written, etc.), tracked per voice and PERSISTED across measures.
  *
  * Shared by tools/astServer.ts (the HTTP onset API) and the clef-onset unit test.
  */
 
-import { calculateDuration, DIVISIONS } from "./musicXmlUtils";
+import { calculateDuration } from "./musicXmlUtils";
 import { Accidental } from "./types";
+
+// Onset resolution in ticks per quarter note. calculateDuration() rounds its result to an
+// integer, so it must run at a resolution fine enough to represent every note value exactly:
+// the shared DIVISIONS=4 (MusicXML export) rounds a 32nd (0.5) and a dotted 16th (1.5) to
+// integers, drifting the onset cursor. 480 is divisible by all common note/dot/tuplet values,
+// so durations stay exact. Onsets are reported in these units and also normalized per measure.
+const RES = 480;
 
 const PHONET_SEMITONE: Record<string, number> = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
 const ACCIDENTAL_SEMITONE: Record<string, number> = {
@@ -70,7 +77,7 @@ const walkVoice = (events: any[], staff: number, voice: number,
 			clefRef.shift = clefShift(ev.clef);
 		}
 		else if (ev.type === "note") {
-			const dur = calculateDuration(ev.duration) * scale;
+			const dur = calculateDuration(ev.duration, RES) * scale;
 			const midi = (ev.pitches || []).map((p: any) => pitchToMidi(p, clefRef.shift));
 			if (ev.grace) {
 				out.push({ onset: cursor, onsetNorm: 0, durationDiv: 0, midi, staff: ev.staff ?? staff, voice, grace: true });
@@ -80,14 +87,14 @@ const walkVoice = (events: any[], staff: number, voice: number,
 			cursor += dur;
 		}
 		else if (ev.type === "rest") {
-			cursor += calculateDuration(ev.duration) * scale;
+			cursor += calculateDuration(ev.duration, RES) * scale;
 		}
 		else if (ev.type === "tuplet" || ev.type === "times") {
 			const r = ev.ratio || { numerator: 1, denominator: 1 };
 			cursor = walkVoice(ev.events || [], staff, voice, scale * (r.numerator / r.denominator), cursor, clefRef, out);
 		}
 		else if (ev.type === "tremolo") {
-			const each = (DIVISIONS * 4 / ev.division) * scale;
+			const each = (RES * 4 / ev.division) * scale;
 			out.push({ onset: cursor, onsetNorm: 0, durationDiv: each,
 				midi: (ev.pitchA || []).map((p: any) => pitchToMidi(p, clefRef.shift)), staff, voice, grace: false });
 			cursor += each;
@@ -121,7 +128,7 @@ export const measureOnsets = (doc: any): MeasureOnsets[] => {
 				vIndex += 1;
 			}
 		}
-		const barDiv = curTime ? DIVISIONS * 4 * curTime.numerator / curTime.denominator : maxCursor;
+		const barDiv = curTime ? RES * 4 * curTime.numerator / curTime.denominator : maxCursor;
 		const span = barDiv > 0 ? barDiv : (maxCursor > 0 ? maxCursor : 1);
 		for (const n of notes)
 			n.onsetNorm = n.onset / span;
