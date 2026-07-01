@@ -45,10 +45,26 @@ const ACCIDENTAL_SEMITONE: Record<string, number> = {
 };
 
 // Absolute octave 0 == middle-C octave == MIDI 60 (see parser.resolveRelativePitch).
-const pitchToMidi = (pitch: any): number => {
+// `shift` is the written->sounding semitone transposition of the active clef (e.g. a
+// "treble_8" clef sounds an octave lower than written, so shift = -12).
+const pitchToMidi = (pitch: any, shift = 0): number => {
 	const semi = PHONET_SEMITONE[pitch.phonet] ?? 0;
 	const acc = pitch.accidental ? (ACCIDENTAL_SEMITONE[pitch.accidental] ?? 0) : 0;
-	return 60 + (pitch.octave || 0) * 12 + semi + acc;
+	return 60 + (pitch.octave || 0) * 12 + semi + acc + shift;
+};
+
+// Diatonic-step -> semitones within an octave (unison..seventh), for "_N"/"^N" clef suffixes.
+const DIATONIC_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
+
+// The written->sounding semitone shift a clef string declares. Per LilyPond convention a
+// "_N"/"^N" suffix transposes DOWN/UP by the diatonic interval N ("treble_8" = octave down
+// = -12, "treble^8" = +12, "treble_15" = two octaves down). A plain clef declares 0.
+const clefShift = (clefStr: string): number => {
+	const m = /^.*?([_^])(\d+)$/.exec(clefStr || "");
+	if (!m) return 0;
+	const k = parseInt(m[2], 10) - 1;					// diatonic steps above unison
+	const semis = DIATONIC_SEMITONES[k % 7] + 12 * Math.floor(k / 7);
+	return (m[1] === "^" ? 1 : -1) * semis;
 };
 
 interface NoteOnset {
@@ -57,21 +73,26 @@ interface NoteOnset {
 }
 
 // Walk a voice's events, accumulating onset in duration units. Tuplet/times scale their
-// inner durations by ratio (num/den). Grace notes take no time (onset frozen). Returns the
-// note onsets and the total consumed duration (the voice's played length).
+// inner durations by ratio (num/den). Grace notes take no time (onset frozen). `clefRef`
+// holds the active clef's written->sounding shift, updated by \clef contextChanges and
+// PERSISTED across measures (a clef stays in force until the next \clef). Returns the total
+// consumed duration (the voice's played length).
 const walkVoice = (events: any[], staff: number, voice: number,
-	scale: number, startCursor: number, out: NoteOnset[]): number => {
+	scale: number, startCursor: number, clefRef: { shift: number }, out: NoteOnset[]): number => {
 	let cursor = startCursor;
 	for (const ev of events) {
-		if (ev.type === "note") {
+		if (ev.type === "context" && typeof ev.clef === "string") {
+			clefRef.shift = clefShift(ev.clef);
+		}
+		else if (ev.type === "note") {
 			const dur = calculateDuration(ev.duration) * scale;
 			if (ev.grace) {
 				out.push({ onset: cursor, onsetNorm: 0, durationDiv: 0,
-					midi: (ev.pitches || []).map(pitchToMidi), staff: ev.staff ?? staff, voice, grace: true });
+					midi: (ev.pitches || []).map((p: any) => pitchToMidi(p, clefRef.shift)), staff: ev.staff ?? staff, voice, grace: true });
 				continue; // grace steals no measure time
 			}
 			out.push({ onset: cursor, onsetNorm: 0, durationDiv: dur,
-				midi: (ev.pitches || []).map(pitchToMidi), staff: ev.staff ?? staff, voice, grace: false });
+				midi: (ev.pitches || []).map((p: any) => pitchToMidi(p, clefRef.shift)), staff: ev.staff ?? staff, voice, grace: false });
 			cursor += dur;
 		}
 		else if (ev.type === "rest") {
@@ -79,25 +100,29 @@ const walkVoice = (events: any[], staff: number, voice: number,
 		}
 		else if (ev.type === "tuplet" || ev.type === "times") {
 			const r = ev.ratio || { numerator: 1, denominator: 1 };
-			cursor = walkVoice(ev.events || [], staff, voice, scale * (r.numerator / r.denominator), cursor, out);
+			cursor = walkVoice(ev.events || [], staff, voice, scale * (r.numerator / r.denominator), cursor, clefRef, out);
 		}
 		else if (ev.type === "tremolo") {
 			// tremolo occupies the two written note values (pitchA/pitchB each a division note)
 			const each = (DIVISIONS * 4 / ev.division) * scale;
 			out.push({ onset: cursor, onsetNorm: 0, durationDiv: each,
-				midi: (ev.pitchA || []).map(pitchToMidi), staff, voice, grace: false });
+				midi: (ev.pitchA || []).map((p: any) => pitchToMidi(p, clefRef.shift)), staff, voice, grace: false });
 			cursor += each;
 			out.push({ onset: cursor, onsetNorm: 0, durationDiv: each,
-				midi: (ev.pitchB || []).map(pitchToMidi), staff, voice, grace: false });
+				midi: (ev.pitchB || []).map((p: any) => pitchToMidi(p, clefRef.shift)), staff, voice, grace: false });
 			cursor += each;
 		}
-		// context / barline / markup / dynamic / harmony / pitchReset: no time
+		// barline / markup / dynamic / harmony / pitchReset: no time
 	}
 	return cursor;
 };
 
 const measureOnsets = (doc: any): any[] => {
 	let curTime: any = null;
+	// active clef shift PER voice index, persisted across measures (a \clef stays in force
+	// until the next one). SATB-style scores keep a stable voice order, so the positional
+	// voice index is a reliable key.
+	const clefByVoice: { shift: number }[] = [];
 	return (doc.measures || []).map((m: any, mi: number) => {
 		if (m.timeSig) curTime = m.timeSig;
 		const notes: NoteOnset[] = [];
@@ -105,7 +130,8 @@ const measureOnsets = (doc: any): any[] => {
 		let vIndex = 0;
 		for (const part of m.parts || []) {
 			for (const voice of part.voices || []) {
-				const end = walkVoice(voice.events || [], voice.staff ?? 1, vIndex, 1, 0, notes);
+				if (!clefByVoice[vIndex]) clefByVoice[vIndex] = { shift: 0 };
+				const end = walkVoice(voice.events || [], voice.staff ?? 1, vIndex, 1, 0, clefByVoice[vIndex], notes);
 				maxCursor = Math.max(maxCursor, end);
 				vIndex += 1;
 			}
