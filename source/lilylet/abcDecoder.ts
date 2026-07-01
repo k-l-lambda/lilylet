@@ -16,6 +16,7 @@ import {
 	RestEvent,
 	ContextChange,
 	TupletEvent,
+	TremoloEvent,
 	Pitch,
 	Duration,
 	Mark,
@@ -247,6 +248,65 @@ const convertDuration = (abcDuration: { numerator: number; denominator: number }
 	// Snap to nearest power of 2
 	const log2 = Math.round(Math.log2(division));
 	return { division: Math.pow(2, Math.max(0, log2)), dots: 0 };
+};
+
+// A whole note is WHOLE_TICKS ticks. 2^7·3^3·5·7 = 120960 divides by every dot (·3/2, ·7/4),
+// tuplet (÷3, ÷5, ÷7), and common division, so a voice's played length is an exact integer —
+// no float rounding when we compare it to the bar length (unlike calculateDuration's Math.round).
+const WHOLE_TICKS = 120960;
+
+// A resolved Duration's tick length (dots + optional lilylet tuplet ratio num/den applied).
+const durationTicks = (d: Duration): number => {
+	let t = WHOLE_TICKS / d.division;
+	if (d.dots) {
+		let dot = t / 2;
+		for (let i = 0; i < d.dots; i++) { t += dot; dot /= 2; }
+	}
+	if (d.tuplet) t = t * d.tuplet.numerator / d.tuplet.denominator;
+	return t;
+};
+
+// Sum the played tick length of an event list. Context / barline / markup / dynamic events
+// take no time, and GRACE notes steal none (they carry a nominal duration but do not advance
+// the beat). A tuplet/times group scales its inner notes by ratio num/den (e.g. \tuplet 3/2 of
+// eighths = a quarter). This mirrors the parser's own \partial check so the emitted \partial
+// never trips a partial-mismatch warning. Used to measure a voice against its bar length.
+const eventsTicks = (events: Event[]): number => {
+	let total = 0;
+	for (const ev of events) {
+		if (ev.type === "note" || ev.type === "rest") {
+			if ((ev as NoteEvent).grace) continue;
+			total += durationTicks((ev as NoteEvent | RestEvent).duration);
+		}
+		else if (ev.type === "tuplet" || ev.type === "times") {
+			const t = ev as TupletEvent;
+			const factor = t.ratio ? t.ratio.numerator / t.ratio.denominator : 1;
+			for (const inner of t.events || []) {
+				if ((inner.type === "note" || inner.type === "rest") && !(inner as NoteEvent).grace)
+					total += durationTicks(inner.duration) * factor;
+			}
+		}
+		else if (ev.type === "tremolo") {
+			const tr = ev as TremoloEvent;
+			total += 2 * (WHOLE_TICKS / tr.division);
+		}
+	}
+	return total;
+};
+
+// Build a \partial Duration (single {division, dots}) for a pickup of `ticks` whole-note ticks.
+// LilyPond's \partial takes one duration token, so only power-of-2 divisions with up to 2 dots
+// are expressible; a length that isn't (e.g. a 5/8 pickup) returns null and no \partial is added
+// (the bar simply renders short) rather than emitting a wrong duration.
+const ticksToPartialDuration = (ticks: number): Duration | null => {
+	if (ticks <= 0) return null;
+	for (let division = 1; division <= 128; division *= 2) {
+		const base = WHOLE_TICKS / division;
+		if (ticks === base) return { division, dots: 0 };
+		if (ticks === base * 1.5) return { division, dots: 1 };
+		if (ticks === base * 1.75) return { division, dots: 2 };
+	}
+	return null;
 };
 
 /**
@@ -1534,6 +1594,11 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 	// parts are assembled (mirrors the MusicXML path attaching nav to a note).
 	const navMarksByMeasure = new Map<number, Mark[]>();
 
+	// Running effective time signature (seeded from the header M:, updated by any inline
+	// [M:...] change). A bar whose played length is SHORTER than this gets a \partial (see
+	// the pickup/anacrusis handling below the per-measure assembly).
+	let curTime: TimeSig | undefined = timeSig;
+
 	for (let mi = 0; mi < measures.length; mi++) {
 		const abcMeasure = measures[mi];
 
@@ -1738,6 +1803,62 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 					}
 				}
 				if (attached) break;
+			}
+		}
+
+		// Pickup / short bar → \partial. Update the running time signature from any inline
+		// [M:...] this bar carried (the LAST \time in the bar wins — a bar may restate then
+		// change meter, e.g. \time 3/4 \time 9/8), then compare the bar's played length (the
+		// longest voice, so a bar that is complete in ANY voice is not treated as short)
+		// against the meter's full-bar length. A strictly shorter bar is an anacrusis (bar 1)
+		// or a truncated final bar; emit \partial <bar-length> on the first voice so LilyPond
+		// renders the incomplete bar. A full-measure rest (Z/R) voice is skipped — it fills the
+		// bar by definition, so it must not drag the measured length down.
+		{
+			for (const part of parts) {
+				for (const voice of part.voices) {
+					for (const e of voice.events) {
+						if (e.type === "context" && (e as ContextChange).time) {
+							const t = (e as ContextChange).time!;
+							curTime = { numerator: t.numerator, denominator: t.denominator };
+						}
+					}
+				}
+			}
+			if (curTime) {
+				const barTicks = WHOLE_TICKS * curTime.numerator / curTime.denominator;
+				// \partial is a GLOBAL timing directive — it shortens the bar for every voice at
+				// once. So it is only correct when every sounding voice has the SAME short length.
+				// Collect each voice's played ticks; a full-measure-rest (Z/R) voice fills the bar
+				// and is ignored. If the voices are ragged (different lengths — e.g. a messy meter
+				// change where some voices are 6/8 and others 8/8), no single \partial fits them
+				// all, so we emit none rather than one that mis-sizes some voices.
+				const lengths: number[] = [];
+				let anyFull = false;
+				for (const part of parts) {
+					for (const voice of part.voices) {
+						if (voice.events.some(e => e.type === "rest" && (e as RestEvent).fullMeasure)) { anyFull = true; continue; }
+						const t = eventsTicks(voice.events);
+						if (t > 0) lengths.push(t);
+					}
+				}
+				const uniform = lengths.length > 0 && lengths.every(t => t === lengths[0]);
+				const played = uniform ? lengths[0] : 0;
+				if (!anyFull && uniform && played < barTicks) {
+					const partial = ticksToPartialDuration(played);
+					if (partial) {
+						// Insert after any leading key/time context so the emitted order is
+						// \key … \time … \partial …  (LilyPond wants \partial after \time).
+						const target = measure.parts[0]?.voices[0];
+						if (target) {
+							let at = 0;
+							while (at < target.events.length && target.events[at].type === "context"
+								&& ((target.events[at] as ContextChange).key || (target.events[at] as ContextChange).time)
+								&& !(target.events[at] as ContextChange).clef) at++;
+							target.events.splice(at, 0, { type: "context", partial } as ContextChange);
+						}
+					}
+				}
 			}
 		}
 
