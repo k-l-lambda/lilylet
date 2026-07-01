@@ -111,6 +111,12 @@ const walkVoice = (events: any[], staff: number, voice: number,
  * Per-measure note onsets for a parsed LilyletDoc. The active clef transposition is tracked
  * per (positional) voice index and PERSISTS across measures — a \clef stays in force until the
  * next one, so a "treble_8" set in measure 1 still lowers measure 2 by an octave.
+ *
+ * Measure length (`measureDivisions`, used to normalize onsets to [0,1)) comes from the time
+ * signature for a full bar, but an INCOMPLETE bar carrying a `\partial` (a pickup, or a bar
+ * split by a repeat barline) is only as long as its `\partial` value. Honoring `\partial` makes
+ * the lilylet bar length match the corresponding MIDI measure's tick span (MuseScore emits a
+ * short 1/8 or 3/8 measure for exactly these), so the two onset grids align.
  */
 export const measureOnsets = (doc: any): MeasureOnsets[] => {
 	let curTime: any = null;
@@ -120,15 +126,25 @@ export const measureOnsets = (doc: any): MeasureOnsets[] => {
 		const notes: NoteOnset[] = [];
 		let maxCursor = 0;
 		let vIndex = 0;
+		// a \partial anywhere in the measure (any voice's leading contextChange) shortens the bar.
+		let partial: any = null;
 		for (const part of m.parts || []) {
 			for (const voice of part.voices || []) {
 				if (!clefByVoice[vIndex]) clefByVoice[vIndex] = { shift: 0 };
+				for (const ev of voice.events || []) {
+					if (ev.type === "context" && ev.partial) { partial = ev.partial; break; }
+					if (ev.type === "note" || ev.type === "rest" || ev.type === "tuplet"
+						|| ev.type === "times" || ev.type === "tremolo") break;	// partial must precede notes
+				}
 				const end = walkVoice(voice.events || [], voice.staff ?? 1, vIndex, 1, 0, clefByVoice[vIndex], notes);
 				maxCursor = Math.max(maxCursor, end);
 				vIndex += 1;
 			}
 		}
-		const barDiv = curTime ? RES * 4 * curTime.numerator / curTime.denominator : maxCursor;
+		// bar length: \partial value if the bar is incomplete, else the full time-signature bar,
+		// else (no time sig) the longest voice cursor.
+		const fullBar = curTime ? RES * 4 * curTime.numerator / curTime.denominator : maxCursor;
+		const barDiv = partial ? calculateDuration(partial, RES) : fullBar;
 		const span = barDiv > 0 ? barDiv : (maxCursor > 0 ? maxCursor : 1);
 		for (const n of notes)
 			n.onsetNorm = n.onset / span;
