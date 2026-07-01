@@ -1,0 +1,12 @@
+[staves "<-->"]
+[instrument-1 "Soprano" "S"]
+[instrument-2 "Alto" "A"]
+[instrument-3 "Tenor" "T"]
+
+\key g \major \numericTimeSignature \time 4/4 \clef "treble" d'4 d8 d d4 d8 d \\
+\clef "treble" b4 b8 b b4 b8 b \\
+\clef "treble_8" g'4 g8 g g4 g8 g | %1
+
+d'4 d8 d d4 d8 d \\
+b4 b8 b b4 b8 b \\
+g'4 g8 g g4 g8 g | %2

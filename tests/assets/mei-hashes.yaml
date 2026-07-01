@@ -63,6 +63,7 @@ clefs-inside-tuplet.lyl: ae358340f14a3d2b022fec397f3eeee6
 clefs-multivoice-shared-staff-change.lyl: aa2208298a0b188810b8e6c7e00f9d28
 clefs-octave-shift.lyl: ff1e4728088093ed0ef020960dac76d6
 clefs-transpose-arbitrary.lyl: c77987bdccf944acd5da95662dc09c9a
+clefs-treble8-satb-tenor-octave.lyl: ddf886313bd60980e04c8bfdcf1eb0c9
 clefs-whole-measure-staff2-change.lyl: 9457d595861042ad532c54181b8a873f
 comments.lyl: 0f39d889545cafef523e8846fe84d886
 cross-staves-rapid-switches.lyl: 9316a798df0f6c8ce169ce713d48412f

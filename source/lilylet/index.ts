@@ -4,6 +4,7 @@ export * from "./parser";
 export * from "./serializer";
 export * from "./staffLayout";
 export * from "./measureLayout";
+export * from "./onsets";
 
 import * as meiEncoder from "./meiEncoder";
 import * as musicXmlDecoder from "./musicXmlDecoder";
