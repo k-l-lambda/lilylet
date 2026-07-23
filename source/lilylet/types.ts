@@ -227,8 +227,8 @@ export interface LyricSyllable {
 	extend?: boolean;
 }
 
-// A lyrics lane (verse) scoped to a measure. Verse numbers are 1-based and
-// assigned by order of \addlyrics blocks within the measure.
+// A lyrics lane (verse) scoped to a voice. Verse numbers are 1-based and
+// assigned by order of \addlyrics blocks within the voice.
 export interface LyricLane {
 	verse?: number;
 	syllables: LyricSyllable[];
@@ -321,6 +321,10 @@ export type Event = NoteEvent | RestEvent | ContextChange | TremoloEvent | Tuple
 export interface Voice {
 	staff: number;
 	events: Event[];
+	// \addlyrics lanes scoped to this voice. Lyrics align to THIS voice's note
+	// events, so a lane is serialized inside the voice it belongs to (e.g. a
+	// vocal line under staff 1), not as a trailing measure-level block.
+	lyrics?: LyricLane[];
 }
 
 export interface Metadata {
@@ -362,7 +366,6 @@ export interface Measure {
 	timeSig?: TimeSig;
 	parts: Part[];
 	partial?: boolean;
-	lyrics?: LyricLane[];		 // \addlyrics lanes scoped to this measure
 }
 
 // Document structure

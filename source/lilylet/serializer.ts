@@ -929,6 +929,15 @@ const serializeVoice = (
 		parts.push('}');
 	}
 
+	// \addlyrics lanes are scoped to this voice; emit them inside the voice so
+	// they bind to THIS voice's notes (e.g. lyrics under staff 1 serialize
+	// within staff 1's voice, not as a trailing measure-level block).
+	if (voice.lyrics && voice.lyrics.length) {
+		for (const lane of voice.lyrics) {
+			parts.push(serializeLyricLane(lane));
+		}
+	}
+
 	return { str: parts.join(' '), newStaff: voice.staff };
 };
 
@@ -1045,12 +1054,6 @@ const serializeMeasure = (
 			staff = newStaff;
 		}
 		parts.push(partStrs.join(' \\\\\\\n'));
-	}
-
-	if (measure.lyrics && measure.lyrics.length) {
-		for (const lane of measure.lyrics) {
-			parts.push(serializeLyricLane(lane));
-		}
 	}
 
 	return { str: parts.join(' '), newStaff: staff };

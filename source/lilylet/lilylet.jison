@@ -65,7 +65,7 @@
 		mode,
 	});
 
-	const voice = (staff, events) => {
+	const voice = (staff, events, lyrics) => {
 		// Use the first \staff "N" context event that appears before any musical event
 		// (notes/rests/tuplets) as the authoritative voice.staff.
 		// Skip pitchReset events (from NEWLINE tokens at voice-line boundaries).
@@ -81,9 +81,13 @@
 			}
 			break; // first musical/structural event — stop
 		}
+		// \addlyrics lanes are scoped to THIS voice; verse numbers are 1-based by
+		// order of \addlyrics blocks within the voice.
+		const lanes = lyrics && lyrics.length ? lyrics.map((lane, i) => ({ verse: i + 1, ...lane })) : undefined;
 		return {
 			staff: leadingStaff != null ? leadingStaff : 1,
 			events,
+			lyrics: lanes,
 		};
 	};
 
@@ -96,15 +100,13 @@
 	const hasMusicalContent = (parts) =>
 		parts.some(p => p.voices.some(v => v.events.some(e => e && MUSICAL.has(e.type))));
 
-	const measure = (parts, key, timeSig, partial, lyrics) => {
+	const measure = (parts, key, timeSig, partial) => {
 		if (!hasMusicalContent(parts)) return null;
-		const lanes = lyrics && lyrics.length ? lyrics.map((lane, i) => ({ verse: i + 1, ...lane })) : undefined;
 		return {
 			key: key || undefined,
 			timeSig: timeSig || undefined,
 			parts,
 			partial: partial || undefined,
-			lyrics: lanes,
 		};
 	};
 
@@ -452,7 +454,7 @@ measures
 	;
 
 measure_content
-	: parts addlyrics_opt						%{
+	: parts									%{
 		// Check \partial declarations: warn if declared duration ≠ actual voice ticks
 		let partialDur = null;
 		outer: for (const p of $1) {
@@ -479,7 +481,7 @@ measure_content
 				}
 			}
 		}
-		$$ = measure($1, currentKey, currentTimeSig, partialDur ? true : undefined, $2);
+		$$ = measure($1, currentKey, currentTimeSig, partialDur ? true : undefined);
 	%}
 	;
 
@@ -504,8 +506,12 @@ part_start
 	;
 
 part_voices
-	: voice_events								{ $$ = [voice(currentStaff, $1)]; }
-	| part_voices VOICE_SEP voice_events		{ $$ = $1.concat([voice(currentStaff, $3)]); }
+	: voice_block								{ $$ = [voice(currentStaff, $1.events, $1.lyrics)]; }
+	| part_voices VOICE_SEP voice_block			{ $$ = $1.concat([voice(currentStaff, $3.events, $3.lyrics)]); }
+	;
+
+voice_block
+	: voice_events addlyrics_opt				{ $$ = { events: $1, lyrics: $2 }; }
 	;
 
 voice_events

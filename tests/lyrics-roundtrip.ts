@@ -24,12 +24,14 @@ const UNIT_CASES_DIR = path.join(import.meta.dirname, "assets/unit-cases");
 interface SyllableSnap { t?: string; h: boolean; k: boolean; e: boolean }
 interface LaneSnap { v: number; s: SyllableSnap[] }
 
-const snap = (doc: { measures: Array<{ lyrics?: Array<{ verse?: number; syllables: Array<{ text?: string; hyphen?: boolean; skip?: boolean; extend?: boolean }> }> }> }): string =>
+const snap = (doc: { measures: Array<{ parts: Array<{ voices: Array<{ lyrics?: Array<{ verse?: number; syllables: Array<{ text?: string; hyphen?: boolean; skip?: boolean; extend?: boolean }> }> }> }> }> }): string =>
 	JSON.stringify(doc.measures.map(m =>
-		(m.lyrics || []).map((l): LaneSnap => ({
-			v: l.verse ?? 0,
-			s: l.syllables.map((s): SyllableSnap => ({ t: s.text, h: !!s.hyphen, k: !!s.skip, e: !!s.extend })),
-		}))));
+		m.parts.map(p =>
+			p.voices.map(v =>
+				(v.lyrics || []).map((l): LaneSnap => ({
+					v: l.verse ?? 0,
+					s: l.syllables.map((s): SyllableSnap => ({ t: s.text, h: !!s.hyphen, k: !!s.skip, e: !!s.extend })),
+				}))))));
 
 interface Result { filename: string; status: "pass" | "fail" | "error" | "skip"; error?: string }
 
@@ -45,14 +47,20 @@ const testFile = (filename: string): Result => {
 
 		if (before === after) return { filename, status: "pass" };
 
-		// Surface the first divergent lane for diagnosis.
-		const b = JSON.parse(before) as LaneSnap[][]; const a = JSON.parse(after) as LaneSnap[][];
+		// Surface the first divergent lane for diagnosis (measures → parts → voices → lanes).
+		const b = JSON.parse(before) as LaneSnap[][][][]; const a = JSON.parse(after) as LaneSnap[][][][];
 		const diff: string[] = [];
 		for (let mi = 0; mi < Math.max(b.length, a.length); mi++) {
-			const lb = b[mi] || []; const la = a[mi] || [];
-			for (let li = 0; li < Math.max(lb.length, la.length); li++) {
-				const sb = JSON.stringify(lb[li]); const sa = JSON.stringify(la[li]);
-				if (sb !== sa) diff.push(`m${mi}/lane${li}: ${sb} → ${sa}`);
+			const pb = b[mi] || []; const pa = a[mi] || [];
+			for (let pi = 0; pi < Math.max(pb.length, pa.length); pi++) {
+				const vb = pb[pi] || []; const va = pa[pi] || [];
+				for (let vi = 0; vi < Math.max(vb.length, va.length); vi++) {
+					const lb = vb[vi] || []; const la = va[vi] || [];
+					for (let li = 0; li < Math.max(lb.length, la.length); li++) {
+						const sb = JSON.stringify(lb[li]); const sa = JSON.stringify(la[li]);
+						if (sb !== sa) diff.push(`m${mi}/p${pi}/v${vi}/lane${li}: ${sb} → ${sa}`);
+					}
+				}
 			}
 		}
 		return { filename, status: "fail", error: diff.slice(0, 3).join("; ") };
