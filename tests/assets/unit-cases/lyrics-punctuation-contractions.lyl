@@ -1,0 +1,15 @@
+[title "Don't Stop Me Now"]
+[lyricist "Freddie"]
+
+\key c \major \time 4/4 \clef "treble"
+c'4 d e f
+\addlyrics { Don't stop me now } |
+
+g4 a b c'
+\addlyrics { rock -- 'n' -- roll, baby! } |
+
+a4 g f e
+\addlyrics { it's a -- ma -- zing! } |
+
+d4 c b, c
+\addlyrics { Mr. Smith, Mrs. Jones? } |

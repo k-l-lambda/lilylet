@@ -1,0 +1,15 @@
+[title "Quoted Lyric Syllables"]
+[lyricist "Test"]
+
+\key c \major \time 4/4 \clef "treble"
+c'4 d e f
+\addlyrics { "hello world" "foo bar" baz "qux" } |
+
+g4 a b c'
+\addlyrics { "au lait" "et fromage" café } |
+
+a4 g f e
+\addlyrics { "line one" -- "line two" -- "line three" -- "line four" } |
+
+d4 c b, c
+\addlyrics { "a\"b" "c\\d" "e\tf" "🎵" } |

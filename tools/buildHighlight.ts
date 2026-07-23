@@ -104,6 +104,11 @@ const SCOPE_MAP: Record<string, string> = {
 	ORN_ARPEGGIO: "ornament",
 	ORN_BREATHE: "ornament",
 	CMD_GLISSANDO: "ornament",
+	CMD_ADDLYRICS: "lyric",
+	LYRIC_HYPHEN: "lyric",
+	LYRIC_EXTENDER: "lyric",
+	LYRIC_SKIP: "lyric",
+	LYRIC_WORD: "string",
 
 	DYN_PPP: "dynamic",
 	DYN_PP: "dynamic",

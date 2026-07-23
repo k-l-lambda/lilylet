@@ -214,6 +214,26 @@ export interface Tempo {
 	bpm?: number;
 }
 
+// === Lyrics ===
+
+// A lyric syllable within a lane, aligned by order to a voice's note events
+// (like LilyPond \lyricsto / \addlyrics). `hyphen` means the syllable is joined
+// to the next with a hyphen (LilyPond `--`); `skip` advances past a note with
+// no syllable (LilyPond `_`); `extend` draws an extender line (LilyPond `__`).
+export interface LyricSyllable {
+	text?: string;
+	hyphen?: boolean;
+	skip?: boolean;
+	extend?: boolean;
+}
+
+// A lyrics lane (verse) scoped to a measure. Verse numbers are 1-based and
+// assigned by order of \addlyrics blocks within the measure.
+export interface LyricLane {
+	verse?: number;
+	syllables: LyricSyllable[];
+}
+
 // === Events ===
 
 export interface NoteEvent {
@@ -342,6 +362,7 @@ export interface Measure {
 	timeSig?: TimeSig;
 	parts: Part[];
 	partial?: boolean;
+	lyrics?: LyricLane[];		 // \addlyrics lanes scoped to this measure
 }
 
 // Document structure

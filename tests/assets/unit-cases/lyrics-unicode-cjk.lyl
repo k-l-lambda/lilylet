@@ -1,0 +1,19 @@
+[title "我的歌声里"]
+[lyricist "邓紫棋"]
+
+\key c \major \time 4/4 \clef "treble"
+c'4 d e f
+\addlyrics { 你 好 世 界 }
+\addlyrics { 早 安 朋 友 } |
+
+g4 a b c'
+\addlyrics { 春 天 来 了。 }
+\addlyrics { 花 儿 绽 放！ } |
+
+a4 g f e
+\addlyrics { 我 的 歌 声 }
+\addlyrics { 你 的 笑 容 } |
+
+d4 c b, c
+\addlyrics { 爱 你 __ 啊 }
+\addlyrics { 想 你 __ 呀 } |

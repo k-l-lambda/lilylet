@@ -1,0 +1,15 @@
+[title "Melismas and Skips"]
+[lyricist "Test"]
+
+\key c \major \time 4/4 \clef "treble"
+c'4 d e f
+\addlyrics { a -- h __ _ _ } |
+
+g4 a b c'
+\addlyrics { o _ oh _ } |
+
+a4 g f e
+\addlyrics { yeah __ oh __ } |
+
+d4 c b, c
+\addlyrics { la -- la _ la } |

@@ -28,6 +28,7 @@ import {
 	StemDirection,
 	Accidental,
 	ArticulationType,
+	LyricLane,
 	OrnamentType,
 	DynamicType,
 	HairpinType,
@@ -969,6 +970,33 @@ const serializePart = (
 };
 
 
+// Serialize a \addlyrics lane: syllables separated by `--` (hyphen), `_` (skip),
+// `__` (extender). Bare words are emitted unquoted when they contain no
+// reserved characters, otherwise they are quoted and escaped. A syllable may
+// carry text AND a connector: the text is emitted first, then `--`/`__`, so
+// melismas (`text __`) and hyphenation (`text --`) never lose the syllable text.
+const serializeLyricLane = (lane: LyricLane): string => {
+	const out: string[] = [];
+	for (const s of lane.syllables) {
+		if (s.skip) {
+			out.push('_');
+			continue;
+		}
+		const t = s.text ?? '';
+		// An extender with no preceding text is an orphan (e.g. a leading `__`);
+		// emit it alone rather than an empty quoted string.
+		if (!t && s.extend) {
+			out.push('__');
+			continue;
+		}
+		const bare = /^[^ \t\r\n{}"\\]+$/.test(t);
+		out.push(bare ? t : `"${escapeString(t)}"`);
+		if (s.hyphen) out.push('--');
+		if (s.extend) out.push('__');
+	}
+	return `\\addlyrics { ${out.join(' ')} }`;
+};
+
 // Serialize a measure, tracking staff state across parts
 // Always output key/time at start of each measure
 const serializeMeasure = (
@@ -1017,6 +1045,12 @@ const serializeMeasure = (
 			staff = newStaff;
 		}
 		parts.push(partStrs.join(' \\\\\\\n'));
+	}
+
+	if (measure.lyrics && measure.lyrics.length) {
+		for (const lane of measure.lyrics) {
+			parts.push(serializeLyricLane(lane));
+		}
 	}
 
 	return { str: parts.join(' '), newStaff: staff };

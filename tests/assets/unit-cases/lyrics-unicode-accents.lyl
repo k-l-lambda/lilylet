@@ -1,0 +1,19 @@
+[title "Café au lait"]
+[lyricist "Jean-François"]
+
+\key c \major \time 4/4 \clef "treble"
+c'4 d e f
+\addlyrics { café _ _ _ }
+\addlyrics { naïve _ _ _ } |
+
+g4 a b c'
+\addlyrics { Se -- ño -- ri -- ta }
+\addlyrics { fa -- ça -- de -- là } |
+
+a4 g f e
+\addlyrics { ü -- ni -- vers _ _ }
+\addlyrics { Mü -- si -- ca _ _ } |
+
+d4 c b, c
+\addlyrics { São -- Pau -- lo _ }
+\addlyrics { a -- ño -- tar _ } |

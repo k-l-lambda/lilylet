@@ -63,7 +63,7 @@ clefs-inside-tuplet.lyl: ae358340f14a3d2b022fec397f3eeee6
 clefs-multivoice-shared-staff-change.lyl: aa2208298a0b188810b8e6c7e00f9d28
 clefs-octave-shift.lyl: ff1e4728088093ed0ef020960dac76d6
 clefs-transpose-arbitrary.lyl: c77987bdccf944acd5da95662dc09c9a
-clefs-treble8-satb-tenor-octave.lyl: ddf886313bd60980e04c8bfdcf1eb0c9
+clefs-treble8-satb-tenor-octave.lyl: 0d22a456a8d95c687699216dfa42c4e6
 clefs-whole-measure-staff2-change.lyl: 9457d595861042ad532c54181b8a873f
 comments.lyl: 0f39d889545cafef523e8846fe84d886
 cross-staves-rapid-switches.lyl: 9316a798df0f6c8ce169ce713d48412f
@@ -122,6 +122,12 @@ key-signatures-flat-key-signature.lyl: 6d3f73888673af684d97e416c46ab2e6
 key-signatures-fs-major-k6.lyl: c8679fe12b0ab8e2bdc303878c390b84
 key-signatures-g-major-k1.lyl: 20f4c2f2eed157d76c13258c83f2beaf
 key-signatures-gf-major-k-5.lyl: 8dc54dfb02030b4de741ef41012f0413
+lyrics-addlyrics-lanes.lyl: 9888328fcb4f7a4113e58b479b860692
+lyrics-melisma-skip.lyl: b74c66300391008431dbc84b5c4a1ef5
+lyrics-punctuation-contractions.lyl: e059e370dd97682035a4a7e5f067189f
+lyrics-quoted-escapes.lyl: a27d71fac359a2eeac018b23e24a383f
+lyrics-unicode-accents.lyl: 8fe1cab0a9120ea848a1636c0212ed91
+lyrics-unicode-cjk.lyl: 3624ba66446b7111f2a53f163990df63
 markup-above.lyl: 656a8c4b14b62cd6dd6ff15eb0b2fca2
 markup-basic.lyl: 68637870a5e7d80a674f4e513f3ad5b9
 markup-below.lyl: 4cbbd06925a07acbaed46e5264c6b4b0

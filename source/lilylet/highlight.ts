@@ -18,6 +18,7 @@ export type HighlightScope =
 	| "hairpin"
 	| "header"
 	| "keyword"
+	| "lyric"
 	| "markup"
 	| "mode"
 	| "navigation"
@@ -96,6 +97,7 @@ export const HIGHLIGHT_RULES: HighlightRule[] = [
 	{ re: /(?:\\segno\b)/iy, scope: "navigation" },
 	{ re: /(?:\\chords\b)/iy, scope: "keyword" },
 	{ re: /(?:\\markup\b)/iy, scope: "markup" },
+	{ re: /(?:\\addlyrics\b)/iy, scope: "lyric" },
 	{ re: /(?:\\<)/iy, scope: "hairpin" },
 	{ re: /(?:\\>)/iy, scope: "hairpin" },
 	{ re: /(?:\\!)/iy, scope: "hairpin" },
@@ -155,6 +157,13 @@ export const HIGHLIGHT_RULES: HighlightRule[] = [
 	{ re: /(?:=)/iy, scope: "operator" },
 	{ re: /(?:[rR])/iy, scope: "rest" },
 	{ re: /(?:[sS])/iy, scope: "rest" },
+	{ re: /(?:\{)/iy, scope: "brace" },
+	{ re: /(?:\})/iy, scope: "brace" },
+	{ re: /(?:--)/iy, scope: "lyric" },
+	{ re: /(?:__\b)/iy, scope: "lyric" },
+	{ re: /(?:_\b)/iy, scope: "lyric" },
+	{ re: /(?:"([^\"\\]|\\.)*")/iy, scope: "string" },
+	{ re: /(?:[^ \t\r\n{}\"\\]+)/iy, scope: "string" },
 ];
 
 /**

@@ -1,0 +1,11 @@
+[title "Lyrics Lanes"]
+[lyricist "Test Case"]
+
+\key c \major \time 4/4 \clef "treble"
+c'4 d e f
+\addlyrics { do -- re -- mi fa }
+\addlyrics { one two three four } |
+
+g4 a b c'
+\addlyrics { so -- la -- ti -- do }
+\addlyrics { five six se -- ven } |

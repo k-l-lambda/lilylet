@@ -34,6 +34,20 @@
 		};
 	};
 
+	// Build a lyric lane (one \addlyrics block) from raw lyric items. `--` is a
+	// connector that hyphenates the preceding syllable (it does not consume a
+	// note slot); `_` is a skipped slot; `__` extends the preceding syllable.
+	const addlyricsLane = (items) => {
+		const syllables = [];
+		for (const it of items) {
+			if (it.text !== undefined) syllables.push({ text: it.text });
+			else if (it.hyphen) { if (syllables.length) syllables[syllables.length - 1].hyphen = true; }
+			else if (it.skip) syllables.push({ skip: true });
+			else if (it.extend) { if (syllables.length) syllables[syllables.length - 1].extend = true; else syllables.push({ extend: true }); }
+		}
+		return { syllables };
+	};
+
 	const restEvent = (dur, options = {}) => ({
 		type: 'rest',
 		duration: dur,
@@ -82,13 +96,15 @@
 	const hasMusicalContent = (parts) =>
 		parts.some(p => p.voices.some(v => v.events.some(e => e && MUSICAL.has(e.type))));
 
-	const measure = (parts, key, timeSig, partial) => {
+	const measure = (parts, key, timeSig, partial, lyrics) => {
 		if (!hasMusicalContent(parts)) return null;
+		const lanes = lyrics && lyrics.length ? lyrics.map((lane, i) => ({ verse: i + 1, ...lane })) : undefined;
 		return {
 			key: key || undefined,
 			timeSig: timeSig || undefined,
 			parts,
 			partial: partial || undefined,
+			lyrics: lanes,
 		};
 	};
 
@@ -241,6 +257,7 @@
 
 %option flex unicode case-insensitive
 
+%x lyric
 
 %%
 
@@ -262,7 +279,7 @@
 \[auto\-beam					return 'HEADER_AUTOBEAM'
 \]								return ']'
 
-\"([^\"\\]|\\.)*\"					return 'STRING'
+\"([^\"\\]|\\.)*\"				return 'STRING'
 
 "\\clef"						return 'CMD_CLEF'
 "\\key"							return 'CMD_KEY'
@@ -292,6 +309,7 @@
 "\\segno"						return 'CMD_SEGNO'
 "\\chords"						return 'CMD_CHORDS'
 "\\markup"						return 'CMD_MARKUP'
+"\\addlyrics"					{ this.pushState('lyric'); return 'CMD_ADDLYRICS'; }
 
 "\\<"							return 'CMD_CRESC_BEGIN'
 "\\>"							return 'CMD_DIM_BEGIN'
@@ -369,6 +387,17 @@
 .								{}
 
 
+<lyric>"{"						return '{'
+<lyric>"}"						{ this.popState(); return '}'; }
+<lyric>[ \t]+					{}
+<lyric>(\r?\n)+					{}
+<lyric>"--"						return 'LYRIC_HYPHEN'
+<lyric>"__"						return 'LYRIC_EXTENDER'
+<lyric>"_"						return 'LYRIC_SKIP'
+<lyric>\"([^\"\\]|\\.)*\"		return 'LYRIC_WORD'
+<lyric>[^ \t\r\n{}\"\\]+		return 'LYRIC_WORD'
+
+
 /lex
 
 %start document
@@ -423,7 +452,7 @@ measures
 	;
 
 measure_content
-	: parts										%{
+	: parts addlyrics_opt						%{
 		// Check \partial declarations: warn if declared duration ≠ actual voice ticks
 		let partialDur = null;
 		outer: for (const p of $1) {
@@ -450,8 +479,19 @@ measure_content
 				}
 			}
 		}
-		$$ = measure($1, currentKey, currentTimeSig, partialDur ? true : undefined);
+		$$ = measure($1, currentKey, currentTimeSig, partialDur ? true : undefined, $2);
 	%}
+	;
+
+addlyrics_opt
+	: /* empty */								{ $$ = undefined; }
+	| addlyrics_blocks							{ $$ = $1; }
+	;
+
+addlyrics_blocks
+	: addlyrics_block							{ $$ = [$1]; }
+	| addlyrics_blocks addlyrics_block			{ $$ = $1.concat([$2]); }
+	| addlyrics_blocks NEWLINE					{ $$ = $1; }
 	;
 
 parts
@@ -786,4 +826,20 @@ markup_mark
 
 glissando_mark
 	: CMD_GLISSANDO								-> glissando()
+	;
+
+addlyrics_block
+	: CMD_ADDLYRICS '{' lyric_sequence '}'		-> addlyricsLane($3)
+	;
+
+lyric_sequence
+	: /* empty */								{ $$ = []; }
+	| lyric_sequence lyric_item					{ $$ = $1.concat([$2]); }
+	;
+
+lyric_item
+	: LYRIC_WORD								-> ({ text: $1.charAt(0) === '"' ? unq($1) : $1 })
+	| LYRIC_HYPHEN								-> ({ hyphen: true })
+	| LYRIC_SKIP								-> ({ skip: true })
+	| LYRIC_EXTENDER							-> ({ extend: true })
 	;
