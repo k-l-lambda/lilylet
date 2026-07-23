@@ -26,6 +26,8 @@ import {
 	Tempo,
 	Event,
 	InstrumentName,
+	LyricLane,
+	LyricSyllable,
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { gmProgramOf } from "./gmInstruments";
@@ -327,6 +329,49 @@ const tremoloToStemMod = (division: number): string | undefined => {
 	return undefined;
 };
 
+// Encode the lyric slots attached to one rhythmic event. Lanes are measure-local
+// because the parser stores them on the Voice created for that measure.
+interface LyricCursor {
+	consume(): string;
+	consumeRest(): void;
+}
+
+const lyricWordPosition = (syllables: LyricSyllable[], index: number): 'i' | 'm' | 't' | 'u' => {
+	const syllable = syllables[index];
+	if (!syllable?.text) return 'u';
+	const previous = index > 0 ? syllables[index - 1] : undefined;
+	if (previous?.text && previous.hyphen) return syllable.hyphen ? 'm' : 't';
+	return syllable.hyphen ? 'i' : 'u';
+};
+
+const lyricSyllableXml = (lane: LyricLane, index: number, indent: string): string => {
+	const syllable = lane.syllables[index];
+	if (!syllable || syllable.skip || syllable.text === undefined) return '';
+	const wordpos = lyricWordPosition(lane.syllables, index);
+	const con = syllable.extend ? 'u' : syllable.hyphen ? 'd' : undefined;
+	const attrs = ` wordpos="${wordpos}"${con ? ` con="${con}"` : ''}`;
+	return `${indent}<syl${attrs}>${escapeXml(syllable.text)}</syl>\n`;
+};
+
+const makeLyricCursors = (lanes: LyricLane[] | undefined, indent: string): LyricCursor[] =>
+	(lanes || []).map((lane) => {
+		let index = 0;
+		const consume = (): string => {
+			const current = index++;
+			const syllable = lane.syllables[current];
+			if (!syllable || syllable.skip || syllable.text === undefined) return '';
+			const verse = lane.verse || 1;
+			return `${indent}<verse n="${verse}">\n${lyricSyllableXml(lane, current, indent + '    ')}${indent}</verse>\n`;
+		};
+		return { consume, consumeRest: () => { index++; } };
+	});
+
+const lyricXmlForEvent = (cursors: LyricCursor[], indent: string): string => {
+	let xml = '';
+	for (const cursor of cursors) xml += cursor.consume();
+	return xml;
+};
+
 // Build note element
 const buildNoteElement = (
 	pitch: { pname: string; oct: number; octGes?: number; accid?: string; accidGes?: string },
@@ -341,7 +386,8 @@ const buildNoteElement = (
 		staff?: number;
 		layerStaff?: number;
 		artics?: { type: string; placement?: 'above' | 'below' }[];
-		tremolo?: number;
+			tremolo?: number;
+			lyricXml?: string;
 	} = {},
 	noteId?: string
 ): string => {
@@ -366,8 +412,7 @@ const buildNoteElement = (
 		if (stemMod) attrs += ` stem.mod="${stemMod}"`;
 	}
 
-	// Only artics remain as child elements; ornaments are control events
-	const hasChildren = !inChord && options.artics && options.artics.length > 0;
+	const hasChildren = !inChord && ((options.artics && options.artics.length > 0) || !!options.lyricXml);
 
 	if (!hasChildren) {
 		return `${indent}<note ${attrs} />\n`;
@@ -391,6 +436,8 @@ const buildNoteElement = (
 			result += `${indent}    <artic artic="${defaultArtics.join(' ')}" />\n`;
 		}
 	}
+
+	if (options.lyricXml) result += options.lyricXml;
 
 	result += `${indent}</note>\n`;
 	return result;
@@ -592,7 +639,8 @@ const noteEventToMEI = (
 	contextStemDir?: StemDirection,
 	keyFifths: number = 0,
 	ottavaShift: number = 0,
-	measureAccidentals?: Map<string, string>
+	measureAccidentals?: Map<string, string>,
+	lyricXml: string = ''
 ): NoteEventResult => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
@@ -630,7 +678,7 @@ const noteEventToMEI = (
 		const pitch = encodePitch(event.pitches[0], keyFifths, ottavaShift, measureAccidentals);
 		const noteId = generateId('note');
 		return {
-			xml: buildNoteElement(pitch, dur, dots, indent, false, noteOptions, noteId),
+			xml: buildNoteElement(pitch, dur, dots, indent, false, { ...noteOptions, lyricXml }, noteId),
 			elementId: noteId,
 			hairpin: markOptions.hairpin,
 			pedal: markOptions.pedal,
@@ -693,6 +741,7 @@ const noteEventToMEI = (
 		}
 	}
 
+		if (lyricXml) result += lyricXml;
 	result += `${indent}</chord>\n`;
 	return {
 		xml: result,
@@ -795,7 +844,7 @@ const tupletHasInternalBeams = (event: TupletEvent): boolean => {
 };
 
 // Convert TupletEvent to MEI
-const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false, measureAccidentals?: Map<string, string>, currentClef?: string): TupletEventResult => {
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false, measureAccidentals?: Map<string, string>, currentClef?: string, lyricCursors: LyricCursor[] = []): TupletEventResult => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
 	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
 	// MEI: num = number of notes written, numbase = normal equivalent
@@ -847,7 +896,8 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			const effectiveNoteEvent = effectiveStaff && layerStaff && effectiveStaff !== layerStaff
 				? { ...noteEvent, staff: effectiveStaff }
 				: noteEvent;
-			const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, false, undefined, keyFifths, ottavaShift, measureAccidentals);
+			const lyricXml = lyricCursors.length ? lyricXmlForEvent(lyricCursors, noteIndent + '    ') : '';
+				const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, false, undefined, keyFifths, ottavaShift, measureAccidentals, lyricXml);
 			xml += result.xml;
 
 			if (!firstNoteId) firstNoteId = result.elementId;
@@ -1152,6 +1202,8 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	let beamElementOpen = false;  // Whether actual <beam> element is open (passed to tuplets)
 	const baseIndent = indent + '    ';
 
+	const lyricCursors = makeLyricCursors(voice.lyrics, baseIndent);
+
 	// Track current clef to only emit changes
 	let currentClef: Clef | undefined = initialClef;
 
@@ -1327,7 +1379,8 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					? { ...noteEvent, staff: currentStaff }
 					: noteEvent;
 
-				const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift, measureAccidentals);
+				const eventLyricXml = isGraceNote ? '' : lyricXmlForEvent(lyricCursors, currentIndent + '    ');
+			const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift, measureAccidentals, eventLyricXml);
 				xml += result.xml;
 				lastNoteId = result.elementId;
 				extendOttavaEnd(result.elementId);
@@ -1472,7 +1525,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				// Pass beamElementOpen to tuplet so it knows not to create its own beam
 				// A pending ottava shift applies to the tuplet's notes' written octave.
 				applyPendingOttavaShift();
-				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen, measureAccidentals, currentClef);
+				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen, measureAccidentals, currentClef, lyricCursors);
 				xml += tupletResult.xml;
 
 				// An ottava span can open on, run through, or close at a tuplet (common
