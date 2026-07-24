@@ -36,6 +36,8 @@ import {
 	Tempo,
 	Metadata,
 	Fraction,
+	LyricLane,
+	LyricSyllable,
 } from "./types";
 
 import {
@@ -156,6 +158,38 @@ const escapeXml = (text: string): string => {
 };
 
 const indent = (level: number): string => '  '.repeat(level);
+
+interface MusicXmlLyricCursor {
+	lane: LyricLane;
+	index: number;
+	inChain: boolean;
+}
+
+const makeLyricCursors = (lanes: LyricLane[] | undefined): MusicXmlLyricCursor[] =>
+	(lanes || []).map(lane => ({ lane, index: 0, inChain: false }));
+
+const lyricForCursor = (cursor: MusicXmlLyricCursor): string | undefined => {
+	const syllable = cursor.lane.syllables[cursor.index++];
+	if (!syllable || syllable.skip || syllable.text === undefined) return undefined;
+	const syllabic = cursor.inChain
+		? (syllable.hyphen ? 'middle' : 'end')
+		: (syllable.hyphen ? 'begin' : 'single');
+	cursor.inChain = !!syllable.hyphen;
+	return `<lyric number="${cursor.lane.verse || 1}"><syllabic>${syllabic}</syllabic>` +
+		`<text>${escapeXml(syllable.text)}</text>${syllable.extend ? '<extend/>' : ''}</lyric>`;
+};
+
+const lyricXmlForNote = (cursors: MusicXmlLyricCursor[], level: number, grace?: boolean): string => {
+	if (grace) return '';
+	let xml = '';
+	for (const cursor of cursors) {
+		const lyric = lyricForCursor(cursor);
+		if (lyric) {
+			xml += `${indent(level)}${lyric}\n`;
+		}
+	}
+	return xml;
+};
 
 
 // === Encoding Functions ===
@@ -396,7 +430,8 @@ const encodeNote = (
 	voice: number,
 	staff: number,
 	level: number,
-	isChord: boolean = false
+	isChord: boolean = false,
+	lyricXml: string = ''
 ): string => {
 	let xml = `${indent(level)}<note>\n`;
 
@@ -458,6 +493,7 @@ const encodeNote = (
 		xml += encodeNotations(event.marks, level + 1);
 	}
 
+	xml += lyricXml;
 	xml += `${indent(level)}</note>\n`;
 
 	return xml;
@@ -762,6 +798,7 @@ const encodeMeasure = (
 	for (const voice of part.voices) {
 		let currentStaff = voice.staff || 1;
 		let voicePosition = 0;
+		const lyricCursors = makeLyricCursors(voice.lyrics);
 
 		// Backup if needed
 		if (currentPosition > 0 && voiceNum > 1) {
@@ -785,7 +822,8 @@ const encodeMeasure = (
 					}
 
 					// Encode main note
-					xml += encodeNote(event, voiceNum, currentStaff, level + 1);
+					xml += encodeNote(event, voiceNum, currentStaff, level + 1, false,
+						lyricXmlForNote(lyricCursors, level + 2, event.grace));
 					const dur = calculateDuration(event.duration);
 					voicePosition += dur;
 
@@ -854,10 +892,12 @@ const encodeMeasure = (
 							if (tupletMarks.length > 0) {
 								const origMarks = subEvent.marks;
 								subEvent.marks = [...(subEvent.marks || []), ...tupletMarks];
-								xml += encodeNote(subEvent, voiceNum, currentStaff, level + 1);
+									xml += encodeNote(subEvent, voiceNum, currentStaff, level + 1, false,
+										lyricXmlForNote(lyricCursors, level + 2, subEvent.grace));
 								subEvent.marks = origMarks;
 							} else {
-								xml += encodeNote(subEvent, voiceNum, currentStaff, level + 1);
+									xml += encodeNote(subEvent, voiceNum, currentStaff, level + 1, false,
+										lyricXmlForNote(lyricCursors, level + 2, subEvent.grace));
 							}
 							const dur = calculateDuration(subEvent.duration);
 							voicePosition += dur;

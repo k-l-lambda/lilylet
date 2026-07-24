@@ -30,6 +30,8 @@ import {
 	BarlineEvent,
 	HarmonyEvent,
 	TupletEvent,
+	LyricLane,
+	LyricSyllable,
 } from './types';
 
 import {
@@ -44,6 +46,7 @@ import {
 	MusicXmlHarmony,
 	MusicXmlNotations,
 	MusicXmlPitch,
+	MusicXmlLyric,
 } from './musicXmlTypes';
 
 import {
@@ -554,6 +557,24 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 		}));
 	}
 
+	// Lyrics are direct children of <note>; retain one slot per verse.
+	const lyricEls = getDirectChildren(noteEl, 'lyric');
+	let lyrics: MusicXmlLyric[] | undefined;
+	if (lyricEls.length > 0) {
+		lyrics = lyricEls.map(lyricEl => {
+			const rawSyllabic = getElementText(lyricEl, 'syllabic');
+			const syllabic = rawSyllabic === 'begin' || rawSyllabic === 'middle' ||
+				rawSyllabic === 'end' || rawSyllabic === 'single' ? rawSyllabic : 'single';
+			const textEl = getDirectChildren(lyricEl, 'text')[0];
+			return {
+				number: getAttributeNumber(lyricEl, 'number') || 1,
+				text: textEl?.textContent ?? undefined,
+				syllabic,
+				extend: getDirectChildren(lyricEl, 'extend').length > 0,
+			};
+		});
+	}
+
 	return {
 		isChord,
 		isRest,
@@ -572,6 +593,7 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 		notations,
 		fingerings,
 		beams,
+		lyrics,
 	};
 };
 
@@ -1192,7 +1214,7 @@ const directionToMarks = (
  * Result of converting a measure - now includes voices grouped by voice number
  */
 interface MeasureConversionResult {
-	voiceMap: Map<number, { events: Event[]; staff: number }>;
+	voiceMap: Map<number, { events: Event[]; staff: number; lyrics: Map<number, LyricSyllable[]> }>;
 	key?: KeySignature;
 	timeSig?: Fraction;
 	barline?: BarlineEvent;
@@ -1267,6 +1289,36 @@ const convertMeasure = (
 	let leadingBarline: BarlineEvent | undefined;
 	const harmonies: HarmonyEvent[] = [];
 	const clefs: Map<number, ContextChange> = new Map();
+	const lyricLanes: Map<number, { staff: number; lanes: Map<number, LyricSyllable[]>; noteIndex: number }> = new Map();
+	const lyricForNote = (note: MusicXmlNote, voiceNum: number, staffNum: number): void => {
+		if (note.isGrace || note.isChord || note.isRest) return;
+		let state = lyricLanes.get(voiceNum);
+		if (!state) {
+			state = { staff: staffNum, lanes: new Map(), noteIndex: 0 };
+			lyricLanes.set(voiceNum, state);
+		}
+		const byVerse = new Map((note.lyrics || []).map(l => [l.number, l]));
+		for (const number of byVerse.keys()) {
+			if (!state.lanes.has(number)) {
+				const lane: LyricSyllable[] = [];
+				for (let i = 0; i < state.noteIndex; i++) lane.push({ skip: true });
+				state.lanes.set(number, lane);
+			}
+		}
+		for (const [number, lane] of state.lanes) {
+			const lyric = byVerse.get(number);
+			if (!lyric) {
+				lane.push({ skip: true });
+			} else {
+				lane.push({
+					text: lyric.text,
+					hyphen: lyric.syllabic === 'begin' || lyric.syllabic === 'middle' ? true : undefined,
+					extend: lyric.extend || undefined,
+				});
+			}
+		}
+		state.noteIndex++;
+	};
 
 	// Pending marks from directions (to attach to next note), per voice
 	const pendingMarks: Map<number, Mark[]> = new Map();
@@ -1353,6 +1405,7 @@ const convertMeasure = (
 			const note = parseNote(child, voiceTracker.getDivisions());
 			const voiceNum = note.voice;
 			const staffNum = note.staff || 1;
+			lyricForNote(note, voiceNum, staffNum);
 			currentVoice = voiceNum;
 			// Record that this staff now has notes this measure and which voice is
 			// active on it, so a subsequent mid-measure <clef> attaches inline here.
@@ -1687,11 +1740,12 @@ const convertMeasure = (
 	}
 
 	// Build voice map from tracker
-	const voiceMap = new Map<number, { events: Event[]; staff: number }>();
+	const voiceMap = new Map<number, { events: Event[]; staff: number; lyrics: Map<number, LyricSyllable[]> }>();
 	for (const [voiceNum, voiceState] of voiceTracker.getVoices()) {
 		voiceMap.set(voiceNum, {
 			events: voiceState.events,
 			staff: voiceState.staff,
+			lyrics: lyricLanes.get(voiceNum)?.lanes || new Map(),
 		});
 	}
 
@@ -1825,6 +1879,9 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 			voices.push({
 				staff: voiceData.staff,
 				events,
+				lyrics: voiceData.lyrics.size > 0
+					? Array.from(voiceData.lyrics.entries()).sort(([a], [b]) => a - b).map(([verse, syllables]) => ({ verse, syllables }))
+					: undefined,
 			});
 		}
 

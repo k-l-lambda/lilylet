@@ -53,6 +53,15 @@ export interface MusicXmlAttributes {
 
 export type MusicXmlStemDirection = 'up' | 'down';
 
+export type MusicXmlLyricSyllabic = 'single' | 'begin' | 'middle' | 'end';
+
+export interface MusicXmlLyric {
+	number: number;
+	text?: string;
+	syllabic?: MusicXmlLyricSyllabic;
+	extend?: boolean;
+}
+
 export interface MusicXmlNotations {
 	ties?: { type: 'start' | 'stop' }[];
 	slurs?: { type: 'start' | 'stop'; number: number }[];
@@ -81,6 +90,7 @@ export interface MusicXmlNote {
 	notations?: MusicXmlNotations;
 	fingerings?: number[];      // one per chord member; a single note has at most one
 	beams?: { type: 'begin' | 'continue' | 'end'; number: number }[];
+	lyrics?: MusicXmlLyric[];
 }
 
 // ============ Direction Types ============
