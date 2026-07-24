@@ -1734,7 +1734,8 @@ const convertMeasure = (
 				if (vs.staff === pc.staff) { voiceNum = vn; break; }
 			}
 			if (voiceNum === undefined) voiceNum = voices.keys().next().value;
-			if (voiceNum !== undefined) voiceTracker.addEvent(voiceNum, pc.ctx, 0, pc.staff);
+			if (voiceNum === undefined) voiceNum = 1;
+			voiceTracker.addEvent(voiceNum, pc.ctx, 0, pc.staff ?? 1);
 		}
 		pendingContextChanges.length = 0;
 	}
