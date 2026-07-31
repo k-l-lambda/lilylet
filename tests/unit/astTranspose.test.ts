@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { parseCode } from "../../source/lilylet/parser";
 import { measureOnsets } from "../../source/lilylet/onsets";
 import { transposeDoc, transposePitch } from "../../source/lilylet/transposition";
-import { Accidental, Phonet } from "../../source/lilylet/types";
+import { Accidental, KeySignature, LilyletDoc, Phonet } from "../../source/lilylet/types";
 
 const code = String.raw`\time 4/4 \key e \major
 \clef "treble" cff8 cs8 d8 ds8 e8 f8 fs8 g8 |
@@ -74,6 +74,45 @@ assert.throws(() => transposeDoc(original, Number.NaN), /finite integer/);
 const flatResult = transposePitch({ phonet: Phonet.d, octave: 0 }, -1);
 assert.equal(flatResult.phonet, Phonet.d);
 assert.equal(flatResult.accidental, Accidental.flat);
+
+const keyDoc = (key: KeySignature): LilyletDoc => ({
+	measures: [{
+		key,
+		parts: [{ voices: [{ staff: 1, events: [{ type: "context", key }] }] }],
+	}],
+});
+
+const keyCases: Array<{ source: KeySignature; expected: KeySignature }> = [
+	{ source: { pitch: Phonet.c, accidental: Accidental.sharp, mode: "major" }, expected: { pitch: Phonet.d, accidental: Accidental.flat, mode: "major" } },
+	{ source: { pitch: Phonet.g, accidental: Accidental.sharp, mode: "major" }, expected: { pitch: Phonet.a, accidental: Accidental.flat, mode: "major" } },
+	{ source: { pitch: Phonet.d, accidental: Accidental.sharp, mode: "major" }, expected: { pitch: Phonet.e, accidental: Accidental.flat, mode: "major" } },
+	{ source: { pitch: Phonet.a, accidental: Accidental.sharp, mode: "major" }, expected: { pitch: Phonet.b, accidental: Accidental.flat, mode: "major" } },
+	{ source: { pitch: Phonet.a, accidental: Accidental.flat, mode: "minor" }, expected: { pitch: Phonet.g, accidental: Accidental.sharp, mode: "minor" } },
+	{ source: { pitch: Phonet.d, accidental: Accidental.flat, mode: "minor" }, expected: { pitch: Phonet.c, accidental: Accidental.sharp, mode: "minor" } },
+];
+
+for (const { source, expected } of keyCases) {
+	const sourceDoc = keyDoc(source);
+	const snapshot = JSON.stringify(sourceDoc);
+	const transposed = transposeDoc(sourceDoc, 0);
+	assert.deepEqual(transposed.measures[0].key, expected);
+	assert.deepEqual(transposed.measures[0].parts[0].voices[0].events[0], { type: "context", key: expected });
+	assert.equal(JSON.stringify(sourceDoc), snapshot);
+}
+
+const spellingDoc = parseCode(String.raw`\key bf \major f4 g a bf |`);
+const spellingResult = transposeDoc(spellingDoc, 5);
+const spellingNotes = spellingResult.measures[0].parts[0].voices[0].events.filter(event => event.type === "note");
+assert.deepEqual(spellingResult.measures[0].key, { pitch: Phonet.e, accidental: Accidental.flat, mode: "major" });
+assert.deepEqual(spellingNotes.map(event => event.type === "note" ? event.pitches[0] : undefined).map(pitch => ({
+	phonet: pitch?.phonet,
+	accidental: pitch?.accidental,
+})), [
+	{ phonet: Phonet.b, accidental: Accidental.flat },
+	{ phonet: Phonet.c, accidental: undefined },
+	{ phonet: Phonet.d, accidental: undefined },
+	{ phonet: Phonet.e, accidental: Accidental.flat },
+]);
 
 console.log(`\n${"═".repeat(50)}`);
 console.log(`Total: ${passed + failed}  Passed: ${passed}  Failed: ${failed}`);
