@@ -49,44 +49,70 @@ const oneVoice = (props: string): string =>
 
 
 // ── Case 1 ────────────────────────────────────────────────────────────────────
-// KNOWN BUG (dominant, 37.3% of transposing voices in the nota-src corpus).
-// transposeClefSuffix approximates semitones as round(semi * 7/12) diatonic
-// steps. That is exact for perfect/major intervals and loses one semitone
-// otherwise, so the sounding pitch is wrong by -1 for -3 / -8 / -10.
-console.log('\nCase 1 — semitone→diatonic approximation (KNOWN BUG: off by one)');
+// The semitone→suffix conversion must be EXACT for every transposition the corpora
+// declare. It used to approximate with round(semi * 7/12), which has no minor
+// interval to land on, so -3 / -8 / -10 were rounded to the neighbouring major
+// interval and every sounding pitch came out a semitone low. The `m` suffix form
+// closes that gap; these assertions pin the exact values.
+console.log('\nCase 1 — semitone→suffix conversion is exact, including minor intervals');
 {
-	// [declared semitones, suffix currently emitted, semitones it round-trips to]
-	const cases: Array<[number, string, number]> = [
-		[-2, 'treble_2', -2],		// B-flat instruments: exact
-		[-3, 'treble_3', -4],		// A clarinet: WRONG by -1
-		[-7, 'treble_5', -7],		// F horn: exact
-		[-8, 'treble_6', -9],		// WRONG by -1
-		[-9, 'treble_6', -9],		// exact — and collides with -8 above
-		[-10, 'treble_7', -11],		// E-flat instruments: WRONG by -1
-		[-12, 'treble_8', -12],		// octave: exact
-		[2, 'treble^2', 2],			// exact
+	// [declared semitones, suffix emitted, what the suffix means in semitones]
+	// The third column must equal the first: the conversion is lossless.
+	const cases: Array<[number, string]> = [
+		[-1, 'treble_m2'],		// minor second
+		[-2, 'treble_2'],		// B-flat instruments (major second)
+		[-3, 'treble_m3'],		// A clarinet (MINOR third) — was rounded to _3 (-4)
+		[-4, 'treble_3'],		// major third
+		[-5, 'treble_4'],		// perfect fourth
+		[-7, 'treble_5'],		// F horn (perfect fifth)
+		[-8, 'treble_m6'],		// MINOR sixth — was rounded to _6 (-9)
+		[-9, 'treble_6'],		// major sixth
+		[-10, 'treble_m7'],		// MINOR seventh — was rounded to _7 (-11)
+		[-11, 'treble_7'],		// major seventh
+		[-12, 'treble_8'],		// octave
+		[-14, 'treble_9'],		// compound: major ninth
+		[2, 'treble^2'],		// upward
+		[4, 'treble^3'],
+		[5, 'treble^4'],
 	];
 
-	for (const [semi, expectedClef, roundTrip] of cases) {
+	for (const [semi, expectedClef] of cases) {
 		const doc = abcDecoder.decode(oneVoice(`treble transpose=${semi}`));
 		const clefs = clefsOf(doc);
 		assert(clefs[0] === expectedClef,
 			`transpose=${semi} emits ${expectedClef} (got ${clefs[0]})`);
-		assert(clefShift(expectedClef) === roundTrip,
-			`${expectedClef} round-trips to ${roundTrip} semitones` +
-			(roundTrip === semi ? '' : ` — LOSSY, declared ${semi}`));
+		assert(clefShift(expectedClef) === semi,
+			`${expectedClef} means exactly ${semi} semitones (got ${clefShift(expectedClef)})`);
 	}
 
-	// -8 and -9 are distinct instrument transpositions that collapse onto one suffix.
-	assert(clefShift('treble_6') === -9,
-		'-8 and -9 both map to treble_6, so -8 is unrecoverable');
+	// -8 and -9 must no longer collide: they were both _6 before `m` existed.
+	assert(clefShift('treble_m6') === -8 && clefShift('treble_6') === -9,
+		'-8 (_m6) and -9 (_6) are now distinct');
 
-	// The error reaches sounding pitch: written c' = MIDI 72, A clarinet sounds 69.
+	// `m` is only meaningful on intervals that have a minor form. Seconds, thirds,
+	// sixths and sevenths do; unison, fourths, fifths and octaves are perfect, so a
+	// suffix like _m4 is malformed and must be ignored rather than mis-read.
+	for (const bogus of ['treble_m1', 'treble_m4', 'treble_m5', 'treble_m8']) {
+		assert(clefShift(bogus) === 0, `${bogus} is malformed and declares no shift`);
+	}
+
+	// The tritone has neither a major/perfect nor a minor form, so it has no suffix.
+	// The decoder must DROP such a transposition, never round it — a silent
+	// one-semitone error is worse than a visibly absent shift.
+	{
+		const doc = abcDecoder.decode(oneVoice('treble transpose=6'));
+		const clefs = clefsOf(doc);
+		assert(clefs[0] === 'treble',
+			`transpose=6 (tritone) has no exact suffix, so the clef stays plain (got ${clefs[0]})`);
+		assert(clefShift(clefs[0]) === 0, 'no bogus shift is invented for the tritone');
+	}
+
+	// The exact value reaches sounding pitch: written c' = MIDI 72, A clarinet 69.
 	const doc = abcDecoder.decode(oneVoice('treble transpose=-3'));
 	const midi = soundingMidi(doc);
 	assert(midi.length === 8, `all 8 notes present (got ${midi.length})`);
-	assert(midi[0] === 68,
-		`written c'=72 with transpose=-3 currently sounds 68 (correct is 69) — got ${midi[0]}`);
+	assert(midi[0] === 69,
+		`written c'=72 with transpose=-3 sounds 69 (got ${midi[0]})`);
 	assert(new Set(midi).size === 1, 'the shift is constant across the voice');
 }
 

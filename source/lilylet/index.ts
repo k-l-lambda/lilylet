@@ -5,6 +5,7 @@ export * from "./serializer";
 export * from "./staffLayout";
 export * from "./measureLayout";
 export * from "./onsets";
+export * from "./clefTransposition";
 export * from "./transposition";
 
 import * as meiEncoder from "./meiEncoder";

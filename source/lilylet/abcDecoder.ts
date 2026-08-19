@@ -42,6 +42,7 @@ import {
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { MeasureRepeatInfo, buildMeasureLayout, applyNavText } from "./measureLayoutFromXml";
+import { parseClefSuffix, withClefTransposition } from "./clefTransposition";
 
 
 // ============ Constants ============
@@ -476,25 +477,32 @@ const convertClef = (clefStr: string): Clef | undefined => {
 
 /**
  * Fold an ABC voice `transpose=N` property (a written→sounding shift in
- * SEMITONES) into the Lilylet clef-suffix form `_M` / `^M`, where M is a
- * diatonic interval number. ABC carries only semitones, so the diatonic
- * interval is approximated by the nearest scale-step count
- * (steps = round(semi * 7/12), interval number = |steps| + 1); `_` lowers,
- * `^` raises. The Lilylet→MEI encoder later expands the suffix back into
- * trans.diat / trans.semi (see meiEncoder.resolveClef). This is exact when the
- * semitone count is a major/perfect interval (e.g. -2, -9, +2, ±12) and a
- * nearest-interval approximation otherwise.
+ * SEMITONES) into the Lilylet clef suffix, which the →MEI encoder later expands
+ * into trans.diat / trans.semi (see meiEncoder.resolveClef).
+ *
+ * The conversion is EXACT: clefTransposition.semitonesToClefSuffix returns the
+ * suffix for the interval that spans exactly this many semitones, using the `m`
+ * (minor) form where the major/perfect interval does not fit — so -3 becomes
+ * `_m3` rather than the nearest major third `_3`. It previously approximated with
+ * round(semi * 7/12), which put a one-semitone error on the sounding pitch of
+ * every minor-interval transposition (-3 A clarinet, -8, -10 E-flat instruments:
+ * 37% of transposing voices in the corpora checked).
+ *
+ * A semitone count with no exact suffix (only the tritone, ±6, within an octave)
+ * is dropped with a warning rather than rounded: a silent one-semitone pitch error
+ * is worse than a visibly absent transposition.
  */
 const transposeClefSuffix = (clef: Clef | undefined, semitones: number): Clef | undefined => {
 	if (!clef || !semitones) return clef;
-	// A clef that already carries an octave suffix (treble_8 etc.) is left as-is;
-	// stacking another shift on top is not meaningful for ABC sources.
-	if (/[_^]\d+$/.test(clef as string)) return clef;
-	const steps = Math.round((semitones * 7) / 12);
-	if (steps === 0) return clef;
-	const num = Math.abs(steps) + 1;
-	const suffix = (steps < 0 ? "_" : "^") + num;
-	return (clef + suffix) as Clef;
+	// A clef that already carries a transposition suffix (treble_8 etc.) is left
+	// as-is; stacking another shift on top is not meaningful for ABC sources.
+	if (parseClefSuffix(clef as string)) return clef;
+	const transposed = withClefTransposition(clef as string, semitones);
+	if (transposed === undefined) {
+		console.warn(`abcDecoder: transpose=${semitones} has no exact clef suffix; transposition dropped for clef "${clef}"`);
+		return clef;
+	}
+	return transposed as Clef;
 };
 
 /**

@@ -11,6 +11,7 @@
 
 import { calculateDuration } from "./musicXmlUtils";
 import { Accidental } from "./types";
+import { clefSuffixSemitones } from "./clefTransposition";
 
 // Onset resolution in ticks per quarter note. calculateDuration() rounds its result to an
 // integer, so it must run at a resolution fine enough to represent every note value exactly:
@@ -25,22 +26,14 @@ const ACCIDENTAL_SEMITONE: Record<string, number> = {
 	[Accidental.doubleSharp]: 2, [Accidental.doubleFlat]: -2,
 };
 
-// Diatonic-step -> semitones within an octave (unison..seventh), for "_N"/"^N" clef suffixes.
-const DIATONIC_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
-
 /**
- * The written->sounding semitone shift a clef string declares. Per the LilyPond convention a
- * "_N"/"^N" suffix transposes DOWN/UP by the diatonic interval N: "treble_8" = octave down
- * (-12), "treble^8" = +12, "treble_15" = two octaves down (-24), "treble_5" = fifth down (-7).
- * A plain clef (no suffix) declares 0.
+ * The written->sounding semitone shift a clef string declares. A "_N"/"^N" suffix transposes
+ * DOWN/UP by the diatonic interval N ("treble_8" = octave down, -12; "treble_5" = fifth down,
+ * -7), and an "m" before the number selects that interval's MINOR form ("treble_m3" = minor
+ * third down, -3). A plain clef declares 0. See clefTransposition.ts for the grammar; this is
+ * a thin alias kept because clefShift is the name the onset API and its tests already use.
  */
-export const clefShift = (clefStr: string): number => {
-	const m = /^.*?([_^])(\d+)$/.exec(clefStr || "");
-	if (!m) return 0;
-	const k = parseInt(m[2], 10) - 1;					// diatonic steps above unison
-	const semis = DIATONIC_SEMITONES[k % 7] + 12 * Math.floor(k / 7);
-	return (m[1] === "^" ? 1 : -1) * semis;
-};
+export const clefShift = (clefStr: string): number => clefSuffixSemitones(clefStr);
 
 /**
  * Sounding MIDI pitch of a resolved (absolute-octave) Lilylet pitch. Octave 0 = middle-C

@@ -32,6 +32,7 @@ import {
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { gmProgramOf } from "./gmInstruments";
 import { parseMeasureLayout, expandMeasureLayout, decomposeToSegments } from "./measureLayout";
+import { clefBaseName, clefSuffixTransposition } from "./clefTransposition";
 
 
 // MEI key signatures: positive = sharps, negative = flats
@@ -88,7 +89,7 @@ const CLEF_SHAPES: Record<string, { shape: string; line: number }> = {
 
 // Semitone offsets of the major/perfect intervals within one diatonic octave,
 // indexed by diatonic step (0 = unison, 1 = 2nd, … 6 = 7th).
-const DIATONIC_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
+
 
 // Convert a LilyPond clef interval-number suffix into an MEI written→sounding
 // transposition. The number N is a diatonic interval number (2 = 2nd, 3 = 3rd,
@@ -96,29 +97,23 @@ const DIATONIC_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
 // raises it. Returns { diat, semi } where diat is the diatonic step shift
 // (N - 1, signed) and semi is the corresponding chromatic shift in semitones,
 // extended octave-wise for compound intervals.
-const clefTransposition = (intervalNumber: number, up: boolean): { diat: number; semi: number } => {
-	const k = intervalNumber - 1;					// diatonic steps
-	const semis = DIATONIC_SEMITONES[k % 7] + 12 * Math.floor(k / 7);
-	const sign = up ? 1 : -1;
-	return { diat: sign * k, semi: sign * semis };
-};
+
 
 // Resolve a clef string into MEI shape/line plus optional written→sounding
-// transposition. Per the LilyPond convention a "_N"/"^N" suffix transposes the
-// clef down/up by the diatonic interval N (e.g. "treble_8" octave down,
-// "treble_5" fifth down, "treble^3" third up). MEI's clef.dis only covers octave
-// displacement (8|15|22), so all clef transposition — octaves included — is
-// encoded uniformly via att.transposition (trans.diat / trans.semi) on staffDef.
+// transposition. A "_N"/"^N" suffix transposes the clef down/up by the diatonic
+// interval N ("treble_8" octave down, "treble_5" fifth down), and "_mN"/"^mN"
+// selects that interval's minor form ("treble_m3" = minor third down) — see
+// clefTransposition.ts. MEI's clef.dis only covers octave displacement
+// (8|15|22), so all clef transposition — octaves included — is encoded uniformly
+// via att.transposition (trans.diat / trans.semi) on staffDef. A minor interval is
+// exactly why both fields are needed: a minor third is {diat:-2, semi:-3}.
 const resolveClef = (clefStr: string): { shape: string; line: number; trans?: { diat: number; semi: number } } => {
-	const match = clefStr.match(/^(.*?)([_^])(\d+)$/);
-	const base = match ? match[1] : clefStr;
-	const clefInfo = CLEF_SHAPES[base] || CLEF_SHAPES.treble;
-	if (!match) return { shape: clefInfo.shape, line: clefInfo.line };
-	const trans = clefTransposition(Number(match[3]), match[2] === "^");
+	const clefInfo = CLEF_SHAPES[clefBaseName(clefStr)] || CLEF_SHAPES.treble;
+	const trans = clefSuffixTransposition(clefStr);
 	return {
 		shape: clefInfo.shape,
 		line: clefInfo.line,
-		trans,
+		...(trans ? { trans } : {}),
 	};
 };
 
