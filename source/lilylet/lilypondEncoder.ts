@@ -38,6 +38,8 @@ import {
 	Placement,
 } from "./types";
 
+import { clefBaseName, clefSuffixSemitones, isLilyPondClefSuffix, lilyPondTranspositionPitch } from "./clefTransposition";
+
 
 // === Constants and Mappings ===
 
@@ -306,10 +308,42 @@ const encodeTimeSig = (timeSig: { numerator: number; denominator: number; symbol
 
 
 /**
- * Encode clef to LilyPond
+ * Encode clef to LilyPond.
+ *
+ * A lilylet clef suffix carries a written→sounding shift; LilyPond's does not —
+ * there the suffix only repositions middle C on the staff and MIDI is untouched,
+ * and sounding pitch comes from the separate `\transposition <pitch>`. The two are
+ * orthogonal, so a transposing clef translates to BOTH: the suffix for the glyph,
+ * `\transposition` for the sound. Emitting only the suffix (what this did before)
+ * produced a file whose notation was right and whose MIDI was a transposition out.
+ *
+ * The clef string is quoted. LilyPond accepts a bare name unquoted, but `_m3`
+ * lexes as `_` followed by `m3` and breaks the parse; quoting is valid for every
+ * form. A `m` suffix has no LilyPond glyph at all (unknown clef type), so the base
+ * clef is emitted and the shift rides entirely on `\transposition`.
  */
 const encodeClef = (clef: Clef): string => {
-	return `\\clef ${CLEF_MAP[clef] || clef}`;
+	const clefStr = clef as string;
+	const shift = clefSuffixSemitones(clefStr);
+
+	// Keep the suffix only when LilyPond can render it; otherwise fall back to the
+	// base name rather than emit a clef LilyPond rejects.
+	const name = (shift === 0 || isLilyPondClefSuffix(clefStr)) ? clefStr : clefBaseName(clefStr);
+	const mapped = CLEF_MAP[name] || name;
+	const parts: string[] = [];
+
+	// \transposition comes FIRST so that a reader tracking it as a standing
+	// declaration has the shift in hand by the time the clef arrives.
+	if (shift !== 0) {
+		const pitch = lilyPondTranspositionPitch(shift);
+		if (pitch)
+			parts.push(`\\transposition ${pitch}`);
+		else
+			console.warn(`lilypondEncoder: clef "${clefStr}" shift ${shift} has no \\transposition pitch; sounding pitch not declared`);
+	}
+	parts.push(`\\clef "${mapped}"`);
+
+	return parts.join(' ');
 };
 
 

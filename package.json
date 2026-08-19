@@ -57,6 +57,7 @@
     "test:clef-onset": "tsx ./tests/unit/clefOnsetTranspose.test.ts",
     "test:abc-transpose": "tsx ./tests/unit/abcTransposingClef.test.ts",
     "test:clef-transposition": "tsx ./tests/unit/clefTransposition.test.ts",
+    "test:clef-translation": "tsx ./tests/unit/clefTranslation.test.ts",
     "test:fine-rhythm-onset": "tsx ./tests/unit/fineRhythmOnset.test.ts",
     "test:transpose": "tsx ./tests/unit/astTranspose.test.ts",
     "build:tests": "tsc -p tsconfig.tests.json; cp source/lilylet/grammar.jison.js lib-tests/source/lilylet/ && cp source/abc/grammar.jison.js lib-tests/source/abc/ && node tools/fixEsmExtensions.cjs lib-tests && ln -sfn ../../tests/assets lib-tests/tests/assets",

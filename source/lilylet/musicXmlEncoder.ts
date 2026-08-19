@@ -48,6 +48,8 @@ import {
 
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 
+import { clefBaseName, clefSuffixSemitones, clefSuffixTransposition } from "./clefTransposition";
+
 
 // === Constants and Reverse Mappings ===
 
@@ -304,12 +306,44 @@ const encodeAttributes = (
 	}
 
 	if (options.clef) {
-		const clefInfo = CLEF_TO_SIGN[options.clef];
+		// Look the sign/line up under the BASE name. A lilylet clef may carry a
+		// transposition suffix ("treble_8", "treble_m3"), and keying the table on the
+		// whole string missed every one of them — `clefInfo` came back undefined and
+		// the <clef> element was dropped entirely, sign and line with it.
+		const clefStr = options.clef as string;
+		const clefInfo = CLEF_TO_SIGN[clefBaseName(clefStr)];
 		if (clefInfo) {
 			xml += `${indent(level + 1)}<clef>\n`;
 			xml += `${indent(level + 2)}<sign>${clefInfo.sign}</sign>\n`;
 			xml += `${indent(level + 2)}<line>${clefInfo.line}</line>\n`;
+			// A whole-octave shift also has a notational form: the "8" drawn under or
+			// over the clef. This is the glyph only — sounding pitch rides on
+			// <transpose> below, exactly as in LilyPond.
+			const semitones = clefSuffixSemitones(clefStr);
+			if (semitones % 12 === 0 && semitones !== 0)
+				xml += `${indent(level + 2)}<clef-octave-change>${semitones / 12}</clef-octave-change>\n`;
 			xml += `${indent(level + 1)}</clef>\n`;
+		}
+
+		// The written->sounding transposition. MusicXML carries the diatonic step count
+		// and the chromatic semitone count separately, which is what lets a minor third
+		// (-2 steps, -3 semitones) be expressed exactly. <transpose> follows <clef> in
+		// the attributes content order.
+		const trans = clefSuffixTransposition(clefStr);
+		if (trans) {
+			// <diatonic> and <chromatic> hold the WITHIN-OCTAVE remainder and whole
+			// octaves go in <octave-change>, so both must be reduced by the same octave
+			// count: 7 diatonic steps and 12 semitones each. Reducing only the semitones
+			// would make an octave clef read as two octaves.
+			const octaveChange = Math.trunc(trans.semi / 12);
+			const diatonic = trans.diat - 7 * octaveChange;
+			const chromatic = trans.semi - 12 * octaveChange;
+			xml += `${indent(level + 1)}<transpose>\n`;
+			xml += `${indent(level + 2)}<diatonic>${diatonic}</diatonic>\n`;
+			xml += `${indent(level + 2)}<chromatic>${chromatic}</chromatic>\n`;
+			if (octaveChange !== 0)
+				xml += `${indent(level + 2)}<octave-change>${octaveChange}</octave-change>\n`;
+			xml += `${indent(level + 1)}</transpose>\n`;
 		}
 	}
 

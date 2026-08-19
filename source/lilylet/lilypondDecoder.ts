@@ -43,6 +43,8 @@ import {
 	Tempo,
 } from "./types";
 
+import { clefBaseName, parseClefSuffix, withClefTransposition } from "./clefTransposition";
+
 
 // Phonet names mapping
 const PHONET_NAMES: Record<number, Phonet> = {
@@ -74,6 +76,72 @@ const LILYPOND_CLEF_MAP: Record<string, Clef> = {
 	F: Clef.bass,
 	alto: Clef.alto,
 	C: Clef.alto,
+};
+
+
+/**
+ * Fold a standing `\transposition` shift onto a clef as a lilylet suffix.
+ *
+ * The two carry different things in LilyPond and must not be added: a clef suffix
+ * there is notational and moves no pitch, while `\transposition` moves pitch and
+ * draws nothing. lilylet's suffix means sounding shift, so `\transposition` is the
+ * authority whenever it is present — a file with BOTH `\clef "treble_8"` and
+ * `\transposition c` (which is what lilypondEncoder emits for an octave clef) states
+ * one octave, not two.
+ *
+ * With no `\transposition`, a suffix already on the clef is kept as-is: that is the
+ * plain octave-clef part, where the notation is taken to imply its own shift.
+ */
+const applyTransposition = (clef: Clef | undefined, semitones: number): Clef | undefined => {
+	if (!clef || semitones === 0) return clef;
+	const base = clefBaseName(clef as string);
+	const shifted = withClefTransposition(base, semitones);
+	if (shifted === undefined) {
+		console.warn(`lilypondDecoder: \\transposition of ${semitones} semitones has no exact clef suffix; dropped for clef "${clef}"`);
+		return clef;
+	}
+	return shifted as Clef;
+};
+
+// Semitones above c for each diatonic step index (0 = c ... 6 = b).
+const PHONET_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
+
+/**
+ * Semitone offset from c' of a `\transposition` pitch term, which is how LilyPond
+ * states a transposing instrument's written->sounding shift (the clef suffix there is
+ * notational and states nothing). Returns 0 for a pitch that cannot be read.
+ */
+const transpositionSemitones = (term: any): number => {
+	const el = term?.args?.[0];
+	if (!el) return 0;
+	const step = el.phonetStep;
+	const octave = el.absolutePitch?.octave;
+	if (typeof step !== 'number' || typeof octave !== 'number') return 0;
+	// c' is the no-transposition reference, and sits at 12 in this scale.
+	return (PHONET_SEMITONES[step] + (el.alterValue || 0) + 12 * octave) - 12;
+};
+
+/**
+ * A LilyPond clef name to a lilylet Clef, keeping any transposing suffix.
+ *
+ * The map is keyed on BASE names, so looking up the whole string missed every
+ * suffixed clef ("treble_8" is not a key) and `if (clef)` then dropped the clef
+ * event altogether — the transposition went with it. Resolve the base through the
+ * map and reattach the suffix, which is the form lilylet's own model uses.
+ *
+ * A suffix LilyPond cannot write (the `m` minor-interval form) cannot appear in
+ * LilyPond input, so nothing here has to handle it; parseClefSuffix simply returns
+ * undefined for an unsuffixed name and the base is used as-is.
+ */
+const resolveLilyPondClef = (clefName: string): Clef | undefined => {
+	const direct = LILYPOND_CLEF_MAP[clefName];
+	if (direct) return direct;
+
+	const parsed = parseClefSuffix(clefName);
+	if (!parsed) return undefined;
+	const base = LILYPOND_CLEF_MAP[parsed.base];
+	if (!base) return undefined;
+	return (base + clefName.slice(parsed.base.length)) as Clef;
 };
 
 
@@ -569,6 +637,9 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 		let lastKey: number | undefined = undefined;  // Track value changes (key fifths)
 		let lastTimeSig: string | undefined = undefined;  // Track value changes (as string for comparison)
 		let lastClef: Clef | undefined = undefined;  // Track value changes
+		// \transposition is a standing declaration: it applies to every clef emitted
+		// after it, and lilylet folds the shift into the clef suffix.
+		let transposeSemis = 0;
 		let lastOttava: number | undefined = undefined;  // Track value changes
 		let lastStemDirection: string | undefined = undefined;  // Track value changes
 		let partialEmitted = false;  // Emit \partial context once per track
@@ -669,7 +740,7 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 
 					// Handle clef context change (emit when value changes)
 					if (context.clef) {
-						const clef = LILYPOND_CLEF_MAP[context.clef.clefName];
+						const clef = applyTransposition(resolveLilyPondClef(context.clef.clefName), transposeSemis);
 						if (clef && clef !== lastClef) {
 							voice.events.push({
 								type: 'context',
@@ -796,9 +867,25 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 						}
 					}
 				}
+				else if (term instanceof lilyParser.LilyTerms.Transposition) {
+					const semis = transpositionSemitones(term);
+					if (semis !== transposeSemis) {
+						transposeSemis = semis;
+						// A `\transposition` AFTER the clef still governs it, so re-emit the
+						// clef with the shift folded in rather than let the already-emitted
+						// plain clef stand. Order between the two is not fixed in the wild.
+						if (lastClef) {
+							const corrected = applyTransposition(clefBaseName(lastClef as string) as Clef, transposeSemis);
+							if (corrected && corrected !== lastClef) {
+								voice.events.push({ type: 'context', clef: corrected });
+								lastClef = corrected;
+							}
+						}
+					}
+				}
 				// Handle standalone clef (emit when value changes)
 				else if (term instanceof lilyParser.LilyTerms.Clef) {
-					const clef = LILYPOND_CLEF_MAP[term.clefName];
+					const clef = applyTransposition(resolveLilyPondClef(term.clefName), transposeSemis);
 					if (clef && clef !== lastClef) {
 						voice.events.push({
 							type: 'context',

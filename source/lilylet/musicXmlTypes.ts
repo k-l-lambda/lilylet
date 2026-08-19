@@ -41,12 +41,22 @@ export interface MusicXmlClef {
 	clefOctaveChange?: number; // -1, 0, 1
 }
 
+// A part's written->sounding transposition. diatonic/chromatic hold the
+// within-octave remainder and octaveChange the whole octaves, so the total shift is
+// chromatic + 12 * octaveChange semitones.
+export interface MusicXmlTranspose {
+	diatonic?: number;
+	chromatic: number;
+	octaveChange?: number;
+}
+
 export interface MusicXmlAttributes {
 	divisions?: number;     // Divisions per quarter note
 	key?: MusicXmlKey;
 	time?: MusicXmlTime;
 	clefs?: { staff: number; clef: MusicXmlClef }[];  // Clefs by staff number
 	staves?: number;        // Number of staves
+	transpose?: MusicXmlTranspose;  // Instrument transposition, folded into the clef suffix
 }
 
 // ============ Note Types ============

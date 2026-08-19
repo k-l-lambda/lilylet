@@ -8,6 +8,7 @@
 import { DOMParser } from '@xmldom/xmldom';
 
 import {
+	Clef,
 	LilyletDoc,
 	Measure,
 	Part,
@@ -48,6 +49,8 @@ import {
 	MusicXmlPitch,
 	MusicXmlLyric,
 } from './musicXmlTypes';
+
+import { withClefTransposition } from './clefTransposition';
 
 import {
 	getElementText,
@@ -644,6 +647,21 @@ const parseAttributes = (attrEl: Element): MusicXmlAttributes => {
 					clef: { sign, line, clefOctaveChange: octaveChange },
 				});
 			}
+		}
+	}
+
+	// Instrument transposition. This is what carries a transposing part's sounding
+	// pitch in MusicXML (<clef-octave-change> is only the glyph), and it was never
+	// read, so every transposing instrument decoded as sounding-as-written.
+	const transposeEl = getElements(attrEl, 'transpose')[0];
+	if (transposeEl) {
+		const chromatic = getElementInt(transposeEl, 'chromatic');
+		if (chromatic != null) {
+			result.transpose = {
+				diatonic: getElementInt(transposeEl, 'diatonic') ?? undefined,
+				chromatic,
+				octaveChange: getElementInt(transposeEl, 'octave-change') ?? undefined,
+			};
 		}
 	}
 
@@ -1261,6 +1279,38 @@ const forwardGapToRests = (gapTicks: number, divisions: number): RestEvent[] => 
 };
 
 /**
+ * Fold a MusicXML transposition onto a lilylet clef as a suffix.
+ *
+ * MusicXML keeps the two apart: <transpose> is the sounding shift and moves pitch,
+ * <clef-octave-change> is the "8" glyph under the clef and moves nothing. A lilylet
+ * suffix means sounding shift, so only ONE of them may be folded in — adding both
+ * would double an octave clef that also declares <transpose> (the shape this
+ * encoder itself now emits) into two octaves.
+ *
+ * <transpose> wins when present, being the explicit statement of sounding pitch.
+ * Absent it, an octave clef is read as implying its own shift, which is what a
+ * tenor-voice or guitar treble_8 part means.
+ *
+ * A shift with no exact suffix (only the tritone) leaves the clef plain rather than
+ * rounding: a silently wrong sounding pitch is worse than a visibly absent shift.
+ */
+const clefWithShift = (
+	clef: Clef | undefined,
+	transposeSemitones: number,
+	clefOctaveChange?: number,
+): Clef | undefined => {
+	if (!clef) return clef;
+	const semitones = transposeSemitones !== 0 ? transposeSemitones : 12 * (clefOctaveChange ?? 0);
+	if (semitones === 0) return clef;
+	const shifted = withClefTransposition(clef as string, semitones);
+	if (shifted === undefined) {
+		console.warn(`musicXmlDecoder: transposition ${semitones} has no exact clef suffix; dropped for clef "${clef}"`);
+		return clef;
+	}
+	return shifted as Clef;
+};
+
+/**
  * Total time a TupletEvent advances the voice, in voiceTracker duration units.
  * Sum the inner note/rest values then apply the tuplet ratio (triplet etc.).
  */
@@ -1281,7 +1331,10 @@ const convertMeasure = (
 	voiceTracker: VoiceTracker,
 	spannerTracker: SpannerTracker,
 	ottavaTracker: { current: number },
-	tupletTracker: TupletTracker
+	tupletTracker: TupletTracker,
+	// A part's <transpose> is declared once, usually in measure 1, and stays in force
+	// for the whole part, so it has to survive across measures like the ottava does.
+	transposeTracker: { semitones: number }
 ): MeasureConversionResult => {
 	let key: KeySignature | undefined;
 	let timeSig: Fraction | undefined;
@@ -1369,10 +1422,20 @@ const convertMeasure = (
 				timeSig = createFraction(attrs.time.beats, attrs.time.beatType);
 			}
 
+			// Instrument transposition, in force from here to the end of the part.
+			if (attrs.transpose) {
+				const { chromatic, octaveChange } = attrs.transpose;
+				transposeTracker.semitones = chromatic + 12 * (octaveChange ?? 0);
+			}
+
 			// Clefs - store by staff number
 			if (attrs.clefs) {
 				for (const clefEntry of attrs.clefs) {
-					const clef = convertClef(clefEntry.clef.sign, clefEntry.clef.line);
+					const clef = clefWithShift(
+						convertClef(clefEntry.clef.sign, clefEntry.clef.line),
+						transposeTracker.semitones,
+						clefEntry.clef.clefOctaveChange,
+					);
 					if (clef) {
 						const staff = clefEntry.staff;
 						if (staffHasNotes.has(staff)) {
@@ -1761,6 +1824,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 	const voiceTracker = new VoiceTracker();
 	const spannerTracker = new SpannerTracker();
 	const ottavaTracker = { current: 0 };
+	const transposeTracker = { semitones: 0 };
 	const tupletTracker = new TupletTracker();
 
 	let lastKey: KeySignature | undefined;
@@ -1779,7 +1843,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 
 	for (const measureEl of measureEls) {
 		voiceTracker.reset();
-		const { voiceMap, key, timeSig, barline, leadingBarline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker, tupletTracker);
+		const { voiceMap, key, timeSig, barline, leadingBarline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker, tupletTracker, transposeTracker);
 
 		// A forward-repeat (or any `location="left"`) barline belongs at the END of
 		// the PREVIOUS measure in lilylet's "\bar = current measure's end bar" model.

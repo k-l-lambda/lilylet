@@ -147,3 +147,51 @@ export const withClefTransposition = (base: string, semitones: number): string |
 	const suffix = semitonesToClefSuffix(semitones);
 	return suffix === undefined ? undefined : base + suffix;
 };
+
+
+/**
+ * Whether LilyPond itself accepts this suffix on a clef name. LilyPond's grammar is
+ * `([_^])([^0-9a-zA-Z]*)([1-9][0-9]*)` — a sign then a bare number — so it has no
+ * place for the `m` that selects a minor interval, and `\clef "treble_m3"` is
+ * rejected outright as an unknown clef type.
+ */
+export const isLilyPondClefSuffix = (clefStr: string): boolean => {
+	const parsed = parseClefSuffix(clefStr);
+	return parsed !== undefined && !parsed.minor;
+};
+
+// Note names for the twelve semitones above c, in ENGLISH spelling (`bf`, not Dutch
+// `bes`) — lilypondEncoder emits `\language "english"`, under which a Dutch name is
+// rejected as "wrong type for argument 1, expecting pitch". Flats throughout: a
+// transposing instrument is named by its flat spelling.
+const ENGLISH_PITCH_NAMES = ["c", "df", "d", "ef", "e", "f", "gf", "g", "af", "a", "bf", "b"];
+
+
+/**
+ * The LilyPond `\transposition` pitch that declares a written→sounding shift of
+ * `semitones`, or undefined when the shift is beyond the two octaves either side of
+ * c' that instrument transpositions occupy.
+ *
+ * This is the mechanism that carries sounding pitch in LilyPond: `\transposition`
+ * takes a pitch, reaches every semitone, and DOES move MIDI, while the clef suffix
+ * is purely notational and moves nothing. The two are orthogonal, so a lilylet clef
+ * whose suffix means a sounding shift translates to BOTH — the suffix for the glyph
+ * (when LilyPond accepts it) and `\transposition` for the sound.
+ *
+ * The pitch is spelled relative to c', the no-transposition reference: an octave
+ * mark `'` per octave above, a `,` per octave below. Compound intervals are real —
+ * a major ninth down (-14) is the written form of some orchestral parts — so the
+ * range is not limited to a single octave.
+ */
+export const lilyPondTranspositionPitch = (semitones: number): string | undefined => {
+	if (!Number.isInteger(semitones) || Math.abs(semitones) > 24) return undefined;
+
+	// Reduce to a pitch class plus an octave count, measuring from c'.
+	const within = ((semitones % 12) + 12) % 12;
+	const octaves = Math.floor(semitones / 12);
+	const name = ENGLISH_PITCH_NAMES[within];
+
+	// c' is the reference and carries one `'`; each octave adds or removes one.
+	const marks = 1 + octaves;
+	return name + (marks >= 0 ? "'".repeat(marks) : ",".repeat(-marks));
+};
