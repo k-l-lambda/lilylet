@@ -7,9 +7,11 @@
  * semitones. Each stage below is asserted separately so a regression names its
  * own stage instead of surfacing as a vague pitch mismatch.
  *
- * Cases 1 and 2 assert CURRENT (defective) behaviour and are marked KNOWN-BUG:
- * they are here to pin the defect and must be inverted when it is fixed, not
- * deleted. Cases 3 and 4 assert correct behaviour that must not regress.
+ * All four defects these cases were written for are now fixed, so every assertion
+ * states the CORRECT behaviour: exact semitone→suffix conversion (case 1), free-text
+ * header fields leaving voices and clefs intact (case 2), grouped %%score arc-mates
+ * each keeping their own clef (case 3), and the ordinary orchestral score that masked
+ * case 3 (case 4). Each case names the defect it guards so a regression is legible.
  *
  * Usage: npx tsx tests/unit/abcTransposingClef.test.ts
  */
@@ -118,71 +120,102 @@ console.log('\nCase 1 — semitone→suffix conversion is exact, including minor
 
 
 // ── Case 2 ────────────────────────────────────────────────────────────────────
-// KNOWN BUG (0.6% of transposing corpus files, catastrophic per file).
-// An `I:` header field is not consumed as a header field, so it degenerates into
-// a phantom body measure 0 holding one patch with no voice number. The clef
-// emission loop is gated on `mi === 0`, so it only ever fires inside that phantom
-// measure — every voice but the first loses its clef, and with it its transposition.
-console.log('\nCase 2 — `I:` header field collapses parts and drops clefs (KNOWN BUG)');
+// A free-text header field must be consumed as a header field. `I:percmap E B 35
+// none` was not: only a narrow set of value shapes was accepted, so the field
+// terminated the header and everything after it — including the remaining `V:`
+// declarations — became a phantom body measure 0 holding one patch with no voice
+// number. Clef emission was then gated on `mi === 0`, so it fired only inside that
+// phantom measure and every real voice lost its clef, and with it its transposition.
+console.log('\nCase 2 — a free-text header field does not disturb voices or clefs');
 {
 	const twoVoices = (extraHeader: string): string =>
 		`X:1\n%%score (1) (2)\nL:1/4\nM:4/4\nV:1 treble transpose=-2\n${extraHeader}V:2 treble transpose=-7\nK:C\n` +
 		`[V:1] c c c c |[V:2] c c c c |\n[V:1] c c c c |[V:2] c c c c |\n`;
 
-	// Baseline: without the I: field both voices keep their own transposing clef.
-	{
-		const doc = abcDecoder.decode(twoVoices(''));
+	// Every free-text field must leave the decode identical to having no field at all.
+	// `I:` is the one the corpora actually carry; the others are the same lexical
+	// shape and are checked so the fix is not narrowly special-cased to percmap.
+	const fields = [
+		'',
+		'I:percmap E B 35 none\n',		// multi-token value — the original failure
+		'I:percmap\n',					// single-token value
+		'I:linebreak $\n',				// value containing a symbol
+		'I:MIDI program 1\n',
+		'N:a free-text note\n',
+		'Z:transcribed by someone\n',
+		'R:slow reel\n',
+		'S:some source\n',
+	];
+	for (const field of fields) {
+		const label = field ? field.trim() : '(no extra field)';
+		const doc = abcDecoder.decode(twoVoices(field));
 		const clefs = clefsOf(doc);
 		assert(doc.measures[0].parts.length === 2,
-			`baseline: 2 parts (got ${doc.measures[0].parts.length})`);
+			`${label}: 2 parts (got ${doc.measures[0].parts.length})`);
 		assert(clefs.join(',') === 'treble_2,treble_5',
-			`baseline: both clefs emitted (got ${clefs.join(',') || 'none'})`);
+			`${label}: both clefs emitted (got ${clefs.join(',') || 'none'})`);
 		assert(clefShift(clefs[0]) === -2 && clefShift(clefs[1]) === -7,
-			'baseline: both shifts reach onsets (-2, -7)');
+			`${label}: both shifts reach onsets (-2, -7)`);
 	}
 
-	// With `I:percmap` in the header, voice 2's clef and transposition vanish.
+	// The clef must not depend on measure 0 containing the voice. Here voice 2 is
+	// silent in the first measure and still gets its declared transposing clef.
+	{
+		const lateVoice = `X:1\n%%score (1) (2)\nL:1/4\nM:4/4\nV:1 treble transpose=-2\nV:2 treble transpose=-7\nK:C\n` +
+			`[V:1] c c c c |\n[V:1] c c c c |[V:2] c c c c |\n`;
+		const clefs = clefsOf(abcDecoder.decode(lateVoice));
+		assert(clefs.includes('treble_5'),
+			`a voice first appearing in measure 2 still gets its clef (got ${clefs.join(',')})`);
+	}
+
+	// Each voice's clef is emitted exactly once, not repeated per measure.
 	{
 		const doc = abcDecoder.decode(twoVoices('I:percmap E B 35 none\n'));
-		const clefs = clefsOf(doc);
-		assert(doc.measures[0].parts.length === 1,
-			`I: field collapses 2 parts into ${doc.measures[0].parts.length} (currently 1)`);
-		assert(clefs.length === 1,
-			`only ${clefs.length} clef survives (currently 1 of 2)`);
-		assert(!clefs.some(c => clefShift(c) === -7),
-			"voice 2's transpose=-7 is lost entirely");
+		assert(clefsOf(doc).length === 2,
+			`exactly 2 clef events across the whole doc (got ${clefsOf(doc).length})`);
 	}
 }
 
 
 // ── Case 3 ────────────────────────────────────────────────────────────────────
-// KNOWN BUG (mechanism confirmed; 0 occurrences observed in the nota-src corpus
-// because orchestral arc-mates declare identical clefs). The clef loop scans for
-// the FIRST voice matching (partIndex, staff) and breaks, and Voice carries no
-// voice number, so arc-mates sharing a staff all inherit the first voice's clef —
-// the WRONG clef, not a missing one.
-console.log('\nCase 3 — grouped %%score arc-mates inherit the first clef (KNOWN BUG)');
+// A `%%score` arc such as `( 1 2 )` puts several voices on ONE staff. The clef loop
+// used to scan for the FIRST voice whose layout assignment matched (partIndex,
+// staff) and break, and Voice carries no voice number, so arc-mates all inherited
+// the first voice's clef — the WRONG clef, taking its transposition with it. A clef
+// is per voice in lilylet's model (onsets tracks clefByVoice), so each voice must
+// emit its own.
+console.log('\nCase 3 — grouped %%score arc-mates each keep their own clef');
 {
-	// Arc ( 1 2 ) puts both voices on ONE staff; they declare different clefs.
+	// Arc ( 1 2 ) shares one staff; the two voices declare different clefs.
 	const grouped = `X:1\n%%score ( 1 2 )\nL:1/4\nM:4/4\nV:1 treble\nV:2 bass-8\nK:C\n` +
 		`[V:1] c c c c |[V:2] C C C C |\n[V:1] c c c c |[V:2] C C C C |\n`;
 	const doc = abcDecoder.decode(grouped);
 	const clefs = clefsOf(doc);
 
 	assert(clefs.length === 2, `both voices get a clef event (got ${clefs.length})`);
-	assert(clefs[0] === 'treble', `voice 1 keeps treble (got ${clefs[0]})`);
-	assert(clefs[1] === 'treble',
-		`voice 2 declared bass-8 but currently inherits treble (got ${clefs[1]})`);
-	assert(clefShift(clefs[1]) === 0,
-		"voice 2's -12 octave shift is lost (inherited clef has shift 0)");
+	assert(clefs.join(',') === 'treble,bass_8',
+		`each voice keeps its own declared clef (got ${clefs.join(',')})`);
+	assert(clefShift(clefs[1]) === -12,
+		`voice 2's octave shift survives (got ${clefShift(clefs[1])})`);
 
-	// Separate staves take the same declarations correctly — the arc is the trigger.
+	// Separate staves take the same declarations, so the arc is no longer a special case.
 	const separate = `X:1\n%%score (1) (2)\nL:1/4\nM:4/4\nV:1 treble\nV:2 bass-8\nK:C\n` +
 		`[V:1] c c c c |[V:2] C C C C |\n[V:1] c c c c |[V:2] C C C C |\n`;
 	const sepClefs = clefsOf(abcDecoder.decode(separate));
 	assert(sepClefs.join(',') === 'treble,bass_8',
-		`separate staves keep both clefs (got ${sepClefs.join(',')})`);
-	assert(clefShift(sepClefs[1]) === -12, 'bass_8 sounds an octave lower');
+		`separate staves agree with the arc (got ${sepClefs.join(',')})`);
+
+	// Arc-mates with DIFFERENT transpositions each keep their own — the shape that
+	// made the inheritance bug change sounding pitch rather than just the clef glyph.
+	{
+		const arcTransposed = `X:1\n%%score ( 1 2 )\nL:1/4\nM:4/4\nV:1 treble transpose=-3\nV:2 treble transpose=-10\nK:C\n` +
+			`[V:1] c c c c |[V:2] c c c c |\n[V:1] c c c c |[V:2] c c c c |\n`;
+		const tClefs = clefsOf(abcDecoder.decode(arcTransposed));
+		assert(tClefs.join(',') === 'treble_m3,treble_m7',
+			`arc-mates keep distinct transposing clefs (got ${tClefs.join(',')})`);
+		assert(clefShift(tClefs[0]) === -3 && clefShift(tClefs[1]) === -10,
+			'both shifts reach onsets (-3, -10)');
+	}
 }
 
 

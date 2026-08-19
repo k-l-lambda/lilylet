@@ -1607,6 +1607,15 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 	// the pickup/anacrusis handling below the per-measure assembly).
 	let curTime: TimeSig | undefined = timeSig;
 
+	// ABC voice numbers whose declared clef has already been emitted. A voice gets its
+	// clef on the measure where it FIRST carries music, which is not always measure 0:
+	// a header field the grammar does not consume (e.g. `I:percmap`) degenerates into a
+	// phantom measure 0 holding a single patch with no voice number, and the emission
+	// was previously gated on `mi === 0`, so every real voice lost its clef — and with
+	// it its transposition. Keying on the voice number instead of the measure index
+	// makes the emission independent of what measure 0 happens to contain.
+	const emittedClefVoices = new Set<number>();
+
 	for (let mi = 0; mi < measures.length; mi++) {
 		const abcMeasure = measures[mi];
 
@@ -1753,31 +1762,39 @@ const decodeTune = (tune: ABC.Tune, options: DecodeOptions = {}): LilyletDoc => 
 		for (const pi of sortedPartIndices) {
 			const voicesMap = partVoicesMap.get(pi)!;
 			const voices: Voice[] = [];
+			// Voice -> the ABC voice number it came from, recovered from the map key
+			// (voiceKey = staffInPart * 1000 + voiceNum). Voice itself carries no voice
+			// number, and the clef below is a per-voice property, so the association has
+			// to be kept explicitly rather than searched for.
+			const voiceNumOf = new Map<Voice, number>();
 			const sortedKeys = Array.from(voicesMap.keys()).sort((a, b) => a - b);
 			for (const key of sortedKeys) {
-				voices.push(voicesMap.get(key)!);
+				const voice = voicesMap.get(key)!;
+				voices.push(voice);
+				voiceNumOf.set(voice, key % 1000);
 			}
 
 			const part: Part = { voices };
 
-			// Add clef context to first voice of each staff on first measure
-			if (mi === 0) {
-				for (const voice of voices) {
-					// Find voices for this part's staff and add initial clef
-					const voiceNums = Array.from(voicePatches.keys());
-					for (const vn of voiceNums) {
-						if (scoreLayout) {
-							const assign = scoreLayout.get(vn);
-							if (assign && assign.partIndex === pi && assign.staffInPart === voice.staff) {
-								const clef = voiceClefs.get(vn);
-								if (clef) {
-									voice.events.unshift({ type: "context", clef } as ContextChange);
-									break;
-								}
-							}
-						}
-					}
-				}
+			// Give each voice its OWN declared clef on the measure where it first
+			// appears. A clef must be per voice, not per staff: an ABC voice folds its
+			// `transpose=` into the clef suffix, so two voices sharing a staff can
+			// legitimately differ, and lilylet's model is per-voice throughout
+			// (onsets.measureOnsets tracks clefByVoice, serializer.findVoiceClef reads
+			// one clef per Voice).
+			//
+			// This used to scan for the FIRST voice whose scoreLayout assignment matched
+			// (partIndex, staff) and break, so every voice on a shared staff inherited
+			// the first one's clef — the WRONG clef, taking its transposition with it.
+			// A `%%score` arc such as `( 1 2 )` puts both voices on one staff and is
+			// exactly that shape.
+			for (const voice of voices) {
+				const vn = voiceNumOf.get(voice)!;
+				if (emittedClefVoices.has(vn)) continue;
+				const clef = voiceClefs.get(vn);
+				if (!clef) continue;
+				voice.events.unshift({ type: "context", clef } as ContextChange);
+				emittedClefVoices.add(vn);
 			}
 
 			parts.push(part);

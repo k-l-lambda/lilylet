@@ -213,6 +213,7 @@ SPECIAL								[:!^_,'/<>={}()\[\]|.\-+~&]
 
 ^[T][:][\s]*						{ var pre = this.matched.slice(0, this.matched.length - yytext.length); if (pre === '' || pre.slice(-1) === '\n') { this.pushState('title_string'); return 'T:'; } this.unput(yytext.slice(1)); yytext = 'T'; return 'T'; }
 ^[C][:][\s]*						{ var pre = this.matched.slice(0, this.matched.length - yytext.length); if (pre === '' || pre.slice(-1) === '\n') { this.pushState('title_string'); return 'C:'; } this.unput(yytext.slice(1)); yytext = 'C'; return 'A'; }
+^[ABDFGHINORSWZ][:](?![|])[ \t]*	{ var pre = this.matched.slice(0, this.matched.length - yytext.length); if (pre === '' || pre.slice(-1) === '\n') { this.pushState('title_string'); yytext = yytext[0]; return 'TEXT_FIELD'; } this.unput(yytext.slice(1)); yytext = yytext[0]; return 'H'; }
 <title_string>\n					{ this.popState(); }
 <title_string>[^\n]+				return 'STR_CONTENT'
 
@@ -379,6 +380,7 @@ head_line
 	| 'K:' key_signature				-> header('K', $2)
 	| 'V:' header_value					-> header('V', $2)
 	| H ':' header_value				-> header($1, $3)
+	| TEXT_FIELD string_content			-> header($1, $2)
 	;
 
 header_value
