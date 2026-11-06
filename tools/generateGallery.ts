@@ -52,6 +52,7 @@ const getCategory = (name: string): string => {
     if (name.startsWith('cross-staves-')) return 'cross-staves';
     if (name.startsWith('staves-')) return 'staves';
     if (name.startsWith('instrument-')) return 'instrument';
+    if (name.startsWith('lyrics-')) return 'lyrics';
     if (name.startsWith('text-')) return 'markup';
     if (name.startsWith('demo-')) return 'demo';
     if (name === 'comments') return 'other';
