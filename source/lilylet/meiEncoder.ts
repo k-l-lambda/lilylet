@@ -2041,6 +2041,7 @@ const measureStartClef = (measure: Measure, globalStaff: number, partInfos: Part
 
 // Barline style to MEI @right attribute mapping
 const BARLINE_TO_MEI: Record<string, string> = {
+	'': 'invis',
 	'|': 'single',
 	'||': 'dbl',
 	'|.': 'end',
@@ -2052,7 +2053,7 @@ const BARLINE_TO_MEI: Record<string, string> = {
 
 // Encode a measure
 // encodeMeasure accepts mutable tieState, slurState, hairpinState, ottavaState and clefState that persist across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}, measureIds?: string[], glissState: GlissState = {}): string => {
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}, measureIds?: string[], glissState: GlissState = {}, barHidden: boolean = false): string => {
 	const measureId = generateId("measure");
 	if (measureIds) measureIds.push(measureId);
 	let staffContent = '';  // Build staff content first, then add measure tag with barline
@@ -2270,9 +2271,12 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		staffContent += `${indent}    <dir xml:id="${generateId('dir')}" startid="#${mkup.startid}"${placeAttr}>${escapeXml(mkup.content)}</dir>\n`;
 	}
 
-	// Determine barline attribute from collected barlines
+	// Determine barline attribute from collected barlines. Under \\omit Score.BarLine
+	// the right barline is hidden whatever its style, as in LilyPond.
 	let barlineAttr = '';
-	if (allBarlines.length > 0) {
+	if (barHidden) {
+		barlineAttr = ' right="invis"';
+	} else if (allBarlines.length > 0) {
 		const lastBarline = allBarlines[allBarlines.length - 1];
 		const meiBarline = BARLINE_TO_MEI[lastBarline.style];
 		if (meiBarline && meiBarline !== 'single') {
@@ -2464,7 +2468,8 @@ const encodeScoreDef = (
 	indent: string,
 	meterSymbol?: 'common' | 'cut',
 	stavesCode?: string,
-	instruments: { [key: string]: InstrumentName } = {}
+	instruments: { [key: string]: InstrumentName } = {},
+	meterHidden: boolean = false
 ): string => {
 	const scoreDefId = generateId("scoredef");
 
@@ -2474,7 +2479,8 @@ const encodeScoreDef = (
 
 	// Build meter attributes
 	const meterSymAttr = meterSymbol ? ` meter.sym="${meterSymbol}"` : '';
-	let xml = `${indent}<scoreDef xml:id="${scoreDefId}" key.sig="${keySig}"${meterSymAttr} meter.count="${timeNum}" meter.unit="${timeDen}">\n`;
+	const meterVisAttr = meterHidden ? ' meter.visible="false"' : '';
+	let xml = `${indent}<scoreDef xml:id="${scoreDefId}" key.sig="${keySig}"${meterSymAttr} meter.count="${timeNum}" meter.unit="${timeDen}"${meterVisAttr}>\n`;
 
 	// Flat ordered list of global staves (n + clef), in part/voice order.
 	const flatStaves: { n: number; clef: Clef }[] = [];
@@ -2813,6 +2819,58 @@ const applyAutoBeamToVoice = (events: Event[], beamGroups: number[]): void => {
 
 
 // Main encode function
+// Visibility under \\omit / \\undo \\omit Score.TimeSignature / Score.BarLine, per
+// measure. LilyPond creates a measure's time signature, and the barline that
+// closes the PREVIOUS measure, at the measure's first moment, after that moment's
+// \\omit/\\undo has taken effect. So a change written before a measure's first
+// note governs its time signature and the barline before it; a change later in
+// the measure governs only what comes after. The last measure's closing barline
+// follows the state at the end of the piece.
+//   meterHidden[i]: a time signature drawn at the start of measure i is hidden
+//   barHidden[i]:   the right barline of measure i is hidden
+const computeOmitStates = (measures: Measure[]): { meterHidden: boolean[]; barHidden: boolean[] } => {
+	type State = { timeSignature: boolean; barLine: boolean };
+	const MUSICAL = new Set(['note', 'rest', 'tuplet', 'times', 'tremolo']);
+	const apply = (state: State, omit: ContextChange['omit']): void => {
+		if (!omit) return;
+		if (omit.timeSignature !== undefined) state.timeSignature = omit.timeSignature;
+		if (omit.barLine !== undefined) state.barLine = omit.barLine;
+	};
+	// Changes before / after each voice's first musical event, in voice order.
+	const split = (measure: Measure): { lead: ContextChange['omit'][]; rest: ContextChange['omit'][] } => {
+		const lead: ContextChange['omit'][] = [];
+		const rest: ContextChange['omit'][] = [];
+		for (const part of measure.parts) {
+			for (const voice of part.voices) {
+				let started = false;
+				const walk = (events: Event[]): void => {
+					for (const e of events) {
+						if (!e) continue;
+						if (e.type === 'context' && (e as ContextChange).omit) (started ? rest : lead).push((e as ContextChange).omit);
+						else if (e.type === 'tuplet' || e.type === 'times') walk((e as TupletEvent).events as Event[]);
+						if (MUSICAL.has(e.type)) started = true;
+					}
+				};
+				walk(voice.events);
+			}
+		}
+		return { lead, rest };
+	};
+	const parts = measures.map(split);
+	const state: State = { timeSignature: false, barLine: false };
+	const meterHidden: boolean[] = [];
+	const atStart: State[] = [];
+	for (let i = 0; i < measures.length; i++) {
+		parts[i].lead.forEach(o => apply(state, o));
+		atStart.push({ ...state });
+		meterHidden.push(state.timeSignature);
+		parts[i].rest.forEach(o => apply(state, o));
+	}
+	// Right barline of measure i is drawn at the start of measure i + 1.
+	const barHidden = measures.map((_, i) => (i + 1 < measures.length ? atStart[i + 1].barLine : state.barLine));
+	return { meterHidden, barHidden };
+};
+
 const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	const indent = options.indent || "    ";
 	resetIdCounter();
@@ -2900,7 +2958,8 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += `${indent}${indent}<body>\n`;
 	mei += `${indent}${indent}${indent}<mdiv xml:id="${generateId("mdiv")}">\n`;
 	mei += `${indent}${indent}${indent}${indent}<score xml:id="${generateId("score")}">\n`;
-	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol, doc.metadata?.staves, doc.metadata?.instruments);
+	const omitStates = computeOmitStates(doc.measures);
+	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol, doc.metadata?.staves, doc.metadata?.instruments, omitStates.meterHidden[0]);
 	mei += `${indent}${indent}${indent}${indent}${indent}<section xml:id="${generateId("section")}">\n`;
 	// Splice point for an <expansion> element (must be the FIRST child of
 	// <section>, but its plist needs the measure ids collected during the loop
@@ -3025,7 +3084,9 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 				currentMeterSymbol = newMeterSymbol;
 				// Output a scoreDef with the new time signature
 				const meterSymAttr = currentMeterSymbol ? ` meter.sym="${currentMeterSymbol}"` : '';
-				mei += `${indent}${indent}${indent}${indent}${indent}${indent}<scoreDef xml:id="${generateId('scoredef')}"${meterSymAttr} meter.count="${currentTimeNum}" meter.unit="${currentTimeDen}" />\n`;
+				// meter.visible is not inherited by a later scoreDef: state it on each one.
+				const meterVisAttr = omitStates.meterHidden[mi] ? ' meter.visible="false"' : '';
+				mei += `${indent}${indent}${indent}${indent}${indent}${indent}<scoreDef xml:id="${generateId('scoredef')}"${meterSymAttr} meter.count="${currentTimeNum}" meter.unit="${currentTimeDen}"${meterVisAttr} />\n`;
 			}
 		}
 		// Check for a written→sounding transposition change at this measure
@@ -3067,7 +3128,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		const openTag = segOpenAt.get(mIndex);
 		if (openTag) mei += openTag;
 		const measureIndent = segDecomp ? `${mIndent}${indent}` : mIndent;
-		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds, glissState);
+		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds, glissState, omitStates.barHidden[mi]);
 		const closeTag = segCloseAt.get(mIndex);
 		if (closeTag) mei += closeTag;
 	});

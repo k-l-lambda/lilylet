@@ -1,0 +1,3 @@
+\omit Score.TimeSignature \time 4/4 \clef "treble" c'4 d e f |
+\time 3/4 g'4 a b |
+\undo \omit Score.TimeSignature \time 2/4 c''4 d |

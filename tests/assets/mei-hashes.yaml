@@ -31,6 +31,8 @@ articulations-tenuto.lyl: 0778a15be95a3a0b2875c4e532324ad8
 articulations-trill.lyl: 8be52b3f7bd1ede8ffa889e8e580a7f5
 articulations-turn.lyl: 333c33596fde37a6d2b0f8a3bf2b5957
 barline-double.lyl: 796d9e279d2c445c97a1d65af1405839
+barline-invisible.lyl: 405601204edb0f450f7b41279db641d6
+barline-omit.lyl: c455829a42c827b0f25b552662a0fbdc
 barline-repeat.lyl: 92aee0d740af50175ec4d19a1f3f34d2
 barline-terminal.lyl: 7402d33727c70706257298200454988b
 basic-notes-multiple-notes-with-different-durations.lyl: 9e7089c90672d60335a20d27052d8cdc
@@ -224,8 +226,10 @@ time-signatures-6-8-time.lyl: 9ad83d81d52a3f6bf25f7f65e211c8b8
 time-signatures-7-8-time.lyl: 1bfd601d362e9a5a5863d865d6786b6d
 time-signatures-9-8-time.lyl: 8d02fde803e36ccd3f14aef291611305
 time-signatures-default-after-numeric.lyl: fa4f93b069c7cd3021af88060c9d6d5d
+time-signatures-free-time.lyl: d9f37c7d5046997048189efced9de312
 time-signatures-numeric-2-2.lyl: ce0b11df7b1ec93d1d4e7706174d718c
 time-signatures-numeric-4-4.lyl: 34883497ccb08f86b9ead1459813f297
+time-signatures-omit.lyl: eacbc726069052e32afaf9bf56f023fa
 tremolos-double-tremolo-chord.lyl: 6e62a255f0b6ee6e352850ed8bbf78cd
 tremolos-double-tremolo-default-division.lyl: 6fb9b919f2ce527c317e6b5a74b2aa58
 tremolos-double-tremolo.lyl: 3df3e3bb273f8fe7def1bc561f36fc7c

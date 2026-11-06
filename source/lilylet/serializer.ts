@@ -434,6 +434,17 @@ const serializeRestEvent = (
 const serializeContextChange = (event: ContextChange): string => {
 	const parts: string[] = [];
 
+	// \\omit / \\undo \\omit come first: LilyPond honours an \\omit given at the same
+	// moment as the \\time it hides.
+	if (event.omit) {
+		const grobs: [keyof NonNullable<ContextChange['omit']>, string][] = [['timeSignature', 'TimeSignature'], ['barLine', 'BarLine']];
+		for (const [field, grob] of grobs) {
+			const v = event.omit[field];
+			if (v === true) parts.push('\\omit Score.' + grob);
+			else if (v === false) parts.push('\\undo \\omit Score.' + grob);
+		}
+	}
+
 	// Clef
 	if (event.clef) {
 		parts.push('\\clef "' + (CLEF_MAP[event.clef] ?? event.clef) + '"');
@@ -614,8 +625,9 @@ const serializeTremoloEvent = (
 
 // Serialize a barline event
 const serializeBarlineEvent = (event: BarlineEvent): string => {
-	// Only output non-default barlines
-	if (event.style && event.style !== '|') {
+	// Only output non-default barlines. An empty style (`\\bar ""`) is an invisible
+	// barline, not a default one, so it must survive.
+	if (event.style !== undefined && event.style !== '|') {
 		return '\\bar "' + event.style + '"';
 	}
 	return '';

@@ -142,6 +142,7 @@ const STEM_MAP: Record<string, string> = {
 
 // Barline styles
 const BARLINE_MAP: Record<string, string> = {
+	"": "",
 	"|": "|",
 	"||": "||",
 	"|.": "|.",
@@ -561,6 +562,14 @@ const encodeRestEvent = (event: RestEvent, env: PitchEnv, lastDuration: Duration
  */
 const encodeContextChange = (event: ContextChange): string => {
 	const parts: string[] = [];
+
+	// Same syntax in LilyPond; emitted before \\time so it hides that one too.
+	if (event.omit) {
+		if (event.omit.timeSignature === true) parts.push('\\omit Score.TimeSignature');
+		else if (event.omit.timeSignature === false) parts.push('\\undo \\omit Score.TimeSignature');
+		if (event.omit.barLine === true) parts.push('\\omit Score.BarLine');
+		else if (event.omit.barLine === false) parts.push('\\undo \\omit Score.BarLine');
+	}
 
 	if (event.key) {
 		parts.push(encodeKey(event.key));

@@ -61,6 +61,7 @@
     "test:fine-rhythm-onset": "tsx ./tests/unit/fineRhythmOnset.test.ts",
     "test:transpose": "tsx ./tests/unit/astTranspose.test.ts",
     "test:bug-repro": "tsx ./tests/unit/reportedBugRepro.test.ts",
+    "test:omit": "tsx ./tests/unit/omitGrobs.test.ts",
     "build:tests": "tsc -p tsconfig.tests.json; cp source/lilylet/grammar.jison.js lib-tests/source/lilylet/ && cp source/abc/grammar.jison.js lib-tests/source/abc/ && node tools/fixEsmExtensions.cjs lib-tests && ln -sfn ../../tests/assets lib-tests/tests/assets",
     "test:roundtrip:compiled": "node lib-tests/tests/lilypond-roundtrip.js",
     "ts": "tsx"

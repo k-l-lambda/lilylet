@@ -266,6 +266,9 @@ export interface ContextChange {
 	stemDirection?: StemDirection;
 	tempo?: Tempo;
 	staff?: number;					// Staff number for cross-staff notation
+	// \omit Score.TimeSignature / Score.BarLine (true) or \undo \omit … (false):
+	// hide or show that element from this point on, score-wide.
+	omit?: { timeSignature?: boolean; barLine?: boolean };
 }
 
 export interface TremoloEvent {

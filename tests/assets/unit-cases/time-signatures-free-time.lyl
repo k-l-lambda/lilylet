@@ -1,0 +1,3 @@
+\omit Score.TimeSignature \omit Score.BarLine \key c \major \clef "treble" c'4 d e f |
+g'4 a b c |
+d''4 e f g \undo \omit Score.BarLine \bar "|." |

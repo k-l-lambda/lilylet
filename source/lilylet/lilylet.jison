@@ -288,6 +288,10 @@
 "\\time"						return 'CMD_TIME'
 "\\partial"						return 'CMD_PARTIAL'
 "\\numericTimeSignature"		return 'CMD_NUMERIC_TIME_SIG'
+\\undo[ \t]+\\omit[ \t]+(?:Score|Staff)\.TimeSignature\b	return 'CMD_UNDO_OMIT_TIME_SIG'
+\\undo[ \t]+\\omit[ \t]+(?:Score|Staff)\.BarLine\b		return 'CMD_UNDO_OMIT_BAR_LINE'
+\\omit[ \t]+(?:Score|Staff)\.TimeSignature\b		return 'CMD_OMIT_TIME_SIG'
+\\omit[ \t]+(?:Score|Staff)\.BarLine\b			return 'CMD_OMIT_BAR_LINE'
 "\\defaultTimeSignature"		return 'CMD_DEFAULT_TIME_SIG'
 "\\tempo"						return 'CMD_TEMPO'
 "\\staff"						return 'CMD_STAFF'
@@ -612,6 +616,17 @@ context_event
 	| stem_cmd									-> contextChange({ stemDirection: $1 })
 	| numeric_time_sig_cmd						-> null
 	| default_time_sig_cmd						-> null
+	| omit_cmd									-> contextChange({ omit: $1 })
+	;
+
+// \omit Score.TimeSignature / Score.BarLine hides that grob from this point on;
+// \undo \omit … shows it again. `Staff.` is accepted as an alias of `Score.`:
+// lilylet treats both as score-wide (serialized back as `Score.`).
+omit_cmd
+	: CMD_OMIT_TIME_SIG							-> ({ timeSignature: true })
+	| CMD_UNDO_OMIT_TIME_SIG					-> ({ timeSignature: false })
+	| CMD_OMIT_BAR_LINE							-> ({ barLine: true })
+	| CMD_UNDO_OMIT_BAR_LINE					-> ({ barLine: false })
 	;
 
 clef_cmd

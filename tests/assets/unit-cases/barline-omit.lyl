@@ -1,0 +1,4 @@
+\omit Score.BarLine \key c \major \time 4/4 \clef "treble" c'4 d e f |
+g'4 a b c \bar "||" |
+d''4 e f g |
+\undo \omit Score.BarLine a'4 b c d \bar "|." |
