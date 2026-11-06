@@ -1,0 +1,4 @@
+\key g \major \time 3/4 \clef "treble" g'4 a b |
+c''4 b a |
+\key d \major \time 2/4 d''4 cs'' |
+e''4 d'' |

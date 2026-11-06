@@ -1,0 +1,5 @@
+\clef "treble_8" c'4 d e f |
+\clef "treble^8" c4 d e f |
+\clef "bass_8" c4 d e f |
+\clef "treble_15" c''4 d e f |
+\clef "treble_m3" c'4 d e f |
