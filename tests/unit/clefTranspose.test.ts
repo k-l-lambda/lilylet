@@ -3,12 +3,20 @@
  *
  * LilyPond clef suffix "_N"/"^N" transposes the clef by the diatonic interval
  * number N ("_" down, "^" up): "treble_8" = octave down, "treble_5" = fifth
- * down, "treble^3" = third up. MEI's clef.dis only covers octave displacement
- * (8|15|22), so all clef transposition is encoded via att.transposition
- * (trans.diat / trans.semi) on <staffDef>, written→sounding.
+ * down, "treble^3" = third up.
  *
- * Bug before fix: the encoder's resolveClef regex only matched _8/_15 and mapped
- * them to clef.dis; any other amount (fifth, third) was silently dropped.
+ * MEI states the two shapes differently:
+ *   - a whole-octave suffix (_8, _15, ^8) is an octave clef: clef.dis /
+ *     clef.dis.place on <staffDef>, which draws the 8/15, with the octave folded
+ *     into each note's @oct and NO trans.* (Verovio reads @oct relative to a
+ *     displaced clef, so trans.* on top would double-transpose MIDI);
+ *   - any other interval has no clef.dis form and is att.transposition
+ *     (trans.diat / trans.semi) on <staffDef>, written→sounding.
+ *
+ * Bug before the first fix: the encoder's resolveClef regex only matched _8/_15
+ * and mapped them to clef.dis; any other amount (fifth, third) was silently
+ * dropped. Bug before the second: every suffix, octaves included, went to trans.*,
+ * so an octave clef lost its 8/15 glyph.
  *
  * Usage: npx tsx tests/unit/clefTranspose.test.ts
  */
@@ -39,15 +47,34 @@ function staffDefFor(clef: string): string {
 
 // Each case: clef string → expected trans.diat / trans.semi (written→sounding).
 const CASES: { clef: string; diat: number; semi: number }[] = [
-	{ clef: 'treble_8',  diat: -7,  semi: -12 },	// octave down
-	{ clef: 'treble_15', diat: -14, semi: -24 },	// two octaves down
 	{ clef: 'treble_5',  diat: -4,  semi: -7 },	// fifth down
 	{ clef: 'treble^3',  diat: 2,   semi: 4 },	// third up
 	{ clef: 'treble^2',  diat: 1,   semi: 2 },	// second up
-	{ clef: 'bass_8',    diat: -7,  semi: -12 },	// octave down, bass clef
+	{ clef: 'treble_m3', diat: -2,  semi: -3 },	// minor third down
 ];
 
-console.log('\nClef arbitrary transposition → MEI att.transposition');
+// Octave clefs: clef string → expected clef.dis / clef.dis.place, and the octave
+// folded into the first note's @oct (the snippet's c4 is written oct 4).
+const OCTAVE_CASES: { clef: string; dis: string; place: string; oct: number }[] = [
+	{ clef: 'treble_8',  dis: '8',  place: 'below', oct: 3 },
+	{ clef: 'treble_15', dis: '15', place: 'below', oct: 2 },
+	{ clef: 'treble^8',  dis: '8',  place: 'above', oct: 5 },
+	{ clef: 'bass_8',    dis: '8',  place: 'below', oct: 3 },
+];
+
+console.log('\nOctave clef → MEI clef.dis, octave folded into @oct, no trans.*');
+
+for (const c of OCTAVE_CASES) {
+	const mei = encode(parseCode(`\\clef "${c.clef}" c4 d e f |`));
+	const sd = mei.split('\n').find(l => /<staffDef/.test(l)) || '';
+	assert(sd.includes(`clef.dis="${c.dis}"`) && sd.includes(`clef.dis.place="${c.place}"`),
+		`"${c.clef}" → clef.dis="${c.dis}" clef.dis.place="${c.place}" (got: ${sd.match(/clef\.dis[^ ]*/g)?.join(' ') ?? 'none'})`);
+	assert(!sd.includes('trans.'), `"${c.clef}" → no trans.* (got: ${sd.match(/trans\.\w+="[^"]*"/g)?.join(' ') ?? 'none'})`);
+	const oct = mei.match(/<note\b[^>]*\boct="(\d+)"/)?.[1];
+	assert(oct === String(c.oct), `"${c.clef}" → first note oct="${c.oct}" (got ${oct})`);
+}
+
+console.log('\nNon-octave clef transposition → MEI att.transposition');
 
 for (const c of CASES) {
 	const sd = staffDefFor(c.clef);

@@ -99,17 +99,41 @@ const CLEF_SHAPES: Record<string, { shape: string; line: number }> = {
 // extended octave-wise for compound intervals.
 
 
-// Resolve a clef string into MEI shape/line plus optional written→sounding
-// transposition. A "_N"/"^N" suffix transposes the clef down/up by the diatonic
-// interval N ("treble_8" octave down, "treble_5" fifth down), and "_mN"/"^mN"
-// selects that interval's minor form ("treble_m3" = minor third down) — see
-// clefTransposition.ts. MEI's clef.dis only covers octave displacement
-// (8|15|22), so all clef transposition — octaves included — is encoded uniformly
-// via att.transposition (trans.diat / trans.semi) on staffDef. A minor interval is
-// exactly why both fields are needed: a minor third is {diat:-2, semi:-3}.
-const resolveClef = (clefStr: string): { shape: string; line: number; trans?: { diat: number; semi: number } } => {
+// MEI clef.dis values by octave count: the small 8 / 15 / 22 drawn on the clef.
+const CLEF_DIS: Record<number, string> = { 1: "8", 2: "15", 3: "22" };
+
+interface ResolvedClef {
+	shape: string;
+	line: number;
+	/** Octave-displacement glyph (clef.dis / clef.dis.place), whole-octave suffixes only. */
+	dis?: { dis: string; place: 'above' | 'below'; octaves: number };
+	/** Written→sounding transposition, for suffixes clef.dis cannot express. */
+	trans?: { diat: number; semi: number };
+}
+
+// Resolve a clef string into MEI shape/line plus the shift its suffix declares —
+// see clefTransposition.ts for the suffix grammar ("treble_8" octave down,
+// "treble_5" fifth down, "treble_m3" minor third down).
+//
+// The two shapes of shift are encoded differently, because Verovio reads them
+// differently:
+//   - A WHOLE-OCTAVE suffix (_8, ^8, _15, _22) is an octave clef. It becomes
+//     clef.dis / clef.dis.place, which draws the small 8/15/22 AND makes Verovio
+//     read every @oct on the staff relative to the displaced clef. So the octave is
+//     folded into each note's @oct (see clefOctaveShift / encodePitch), and no
+//     trans.* is emitted — trans.semi on top would transpose MIDI a second time.
+//   - Any other interval (_5, ^3, _m3) has no clef.dis form, so it stays as
+//     att.transposition (trans.diat / trans.semi) on <staffDef>: notes keep their
+//     written @oct and only the sounding pitch moves. A minor interval is why both
+//     fields are needed: a minor third is {diat:-2, semi:-3}.
+const resolveClef = (clefStr: string): ResolvedClef => {
 	const clefInfo = CLEF_SHAPES[clefBaseName(clefStr)] || CLEF_SHAPES.treble;
 	const trans = clefSuffixTransposition(clefStr);
+	if (trans && trans.semi % 12 === 0 && trans.diat === 7 * (trans.semi / 12)) {
+		const octaves = trans.semi / 12;
+		const dis = CLEF_DIS[Math.abs(octaves)];
+		if (dis) return { shape: clefInfo.shape, line: clefInfo.line, dis: { dis, place: octaves > 0 ? 'above' : 'below', octaves } };
+	}
 	return {
 		shape: clefInfo.shape,
 		line: clefInfo.line,
@@ -117,19 +141,27 @@ const resolveClef = (clefStr: string): { shape: string; line: number; trans?: { 
 	};
 };
 
+// Octaves an octave clef folds into each note's @oct: -1 for "treble_8", +1 for
+// "treble^8", 0 for a plain or non-octave clef (those keep written @oct).
+const clefOctaveShift = (clefStr: string | undefined): number =>
+	clefStr ? resolveClef(clefStr).dis?.octaves ?? 0 : 0;
+
 // Attributes for a standalone <clef> element (mid-measure clef change).
 // A mid-measure <clef> cannot carry att.transposition (that is a staff-level
-// property Verovio only reads from <staffDef>); the visible clef shape/line is
-// emitted here, and a sounding-pitch transposition change is mirrored by a
-// between-measure <scoreDef>/<staffDef trans.*> emitted in the measure loop
-// (see emitClefTranspositionScoreDef). So only shape/line are emitted here.
+// property Verovio only reads from <staffDef>); a sounding-pitch transposition
+// change is mirrored by a between-measure <scoreDef>/<staffDef trans.*> emitted in
+// the measure loop. An octave clef's glyph IS a clef property, so dis/dis.place
+// is emitted here alongside shape/line.
 const clefElementAttrs = (clefStr: string): string => {
 	const c = resolveClef(clefStr);
-	return `shape="${c.shape}" line="${c.line}"`;
+	let attrs = `shape="${c.shape}" line="${c.line}"`;
+	if (c.dis) attrs += ` dis="${c.dis.dis}" dis.place="${c.dis.place}"`;
+	return attrs;
 };
 
 // The written→sounding transposition a clef declares, as {diat, semi}; {0,0}
-// when the clef declares none. Used to detect mid-piece transposition changes
+// when the clef declares none — including an octave clef, whose shift lives in
+// @oct instead (see resolveClef). Used to detect mid-piece transposition changes
 // and to emit the resetting <staffDef> when a transposing clef is replaced by a
 // plain one (Verovio retains a prior trans.* until an explicit 0/0 overrides it).
 const clefTransOf = (clefStr: string): { diat: number; semi: number } => {
@@ -137,11 +169,13 @@ const clefTransOf = (clefStr: string): { diat: number; semi: number } => {
 	return c.trans || { diat: 0, semi: 0 };
 };
 
-// Attributes for a <staffDef> clef (clef.* namespace), plus att.transposition
-// (trans.diat / trans.semi) when the clef declares a transposition.
+// Attributes for a <staffDef> clef (clef.* namespace): clef.dis / clef.dis.place
+// for an octave clef, att.transposition (trans.diat / trans.semi) for any other
+// declared transposition.
 const staffDefClefAttrs = (clefStr: string): string => {
 	const c = resolveClef(clefStr);
 	let attrs = `clef.shape="${c.shape}" clef.line="${c.line}"`;
+	if (c.dis) attrs += ` clef.dis="${c.dis.dis}" clef.dis.place="${c.dis.place}"`;
 	if (c.trans) attrs += ` trans.diat="${c.trans.diat}" trans.semi="${c.trans.semi}"`;
 	return attrs;
 };
@@ -245,13 +279,16 @@ const getKeyAccidentals = (fifths: number): Record<string, string> => {
 // Convert Pitch to MEI attributes, checking against key signature and in-measure accidentals
 // ottavaShift: current ottava level (1 = 8va up, -1 = 8vb down, 2 = 15ma up, etc.)
 // The written pitch should be adjusted by subtracting the ottava shift
+// clefOctave: octaves an octave clef (treble_8 = -1) adds to the sounding pitch.
+//   Lilylet pitch under such a clef is the WRITTEN pitch; MEI @oct under clef.dis is
+//   read relative to the displaced clef, i.e. it is the sounding octave.
 // measureAccidentals: tracks accidentals used earlier in the same measure (keyed by "pname-oct")
 //   - mutated to record new accidentals; used to add cancellation naturals
-const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>): { pname: string; oct: number; octGes?: number; accid?: string; accidGes?: string } => {
+const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, clefOctave: number = 0): { pname: string; oct: number; octGes?: number; accid?: string; accidGes?: string } => {
 	// Lilylet octave: 0 = middle C octave (C4), positive = higher, negative = lower
 	// When ottava is active, the source pitch is the sounding pitch, but we need to output the written pitch
 	// For 8va up (ottavaShift=1), written pitch is one octave lower than sounding
-	const soundingOct = 4 + pitch.octave;
+	const soundingOct = 4 + pitch.octave + clefOctave;
 	const oct = soundingOct - ottavaShift;
 	const octGes = ottavaShift !== 0 ? soundingOct : undefined;
 
@@ -331,12 +368,15 @@ interface LyricCursor {
 	consumeRest(): void;
 }
 
-const lyricWordPosition = (syllables: LyricSyllable[], index: number): 'i' | 'm' | 't' | 'u' => {
+// MEI att.syl.log@wordpos: i (initial), m (medial), t (terminal), s (single — a
+// whole one-syllable word). A syllable continues a word when its predecessor ends
+// in a hyphen, and continues into the next when it ends in one itself.
+// Not to be confused with @con, whose 'u' (underscore) marks an extender line.
+const lyricWordPosition = (syllables: LyricSyllable[], index: number): 'i' | 'm' | 't' | 's' => {
 	const syllable = syllables[index];
-	if (!syllable?.text) return 'u';
 	const previous = index > 0 ? syllables[index - 1] : undefined;
-	if (previous?.text && previous.hyphen) return syllable.hyphen ? 'm' : 't';
-	return syllable.hyphen ? 'i' : 'u';
+	if (previous?.text && previous.hyphen) return syllable?.hyphen ? 'm' : 't';
+	return syllable?.hyphen ? 'i' : 's';
 };
 
 const lyricSyllableXml = (lane: LyricLane, index: number, indent: string): string => {
@@ -635,7 +675,8 @@ const noteEventToMEI = (
 	keyFifths: number = 0,
 	ottavaShift: number = 0,
 	measureAccidentals?: Map<string, string>,
-	lyricXml: string = ''
+	lyricXml: string = '',
+	clefOctave: number = 0
 ): NoteEventResult => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
@@ -670,7 +711,7 @@ const noteEventToMEI = (
 
 	// Single note
 	if (event.pitches.length === 1) {
-		const pitch = encodePitch(event.pitches[0], keyFifths, ottavaShift, measureAccidentals);
+		const pitch = encodePitch(event.pitches[0], keyFifths, ottavaShift, measureAccidentals, clefOctave);
 		const noteId = generateId('note');
 		return {
 			xml: buildNoteElement(pitch, dur, dots, indent, false, { ...noteOptions, lyricXml }, noteId),
@@ -715,7 +756,7 @@ const noteEventToMEI = (
 	let result = `${indent}<chord ${chordAttrs}>\n`;
 
 	for (const p of event.pitches) {
-		const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals);
+		const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals, clefOctave);
 		result += buildNoteElement(pitch, dur, dots, indent + '    ', true);
 	}
 
@@ -765,7 +806,7 @@ const noteEventToMEI = (
 
 
 // Convert RestEvent to MEI
-const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, crossStaff?: number): { xml: string; elementId: string; fermata?: 'normal' | 'short' } => {
+const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, crossStaff?: number, clefOctave: number = 0): { xml: string; elementId: string; fermata?: 'normal' | 'short' } => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const restId = generateId('rest');
 	let attrs = `xml:id="${restId}" dur="${dur}"`;
@@ -785,7 +826,7 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0,
 
 	// Pitched rest (positioned at specific pitch)
 	if (event.pitch) {
-		const pitch = encodePitch(event.pitch, keyFifths, ottavaShift);
+		const pitch = encodePitch(event.pitch, keyFifths, ottavaShift, undefined, clefOctave);
 		attrs += ` ploc="${pitch.pname}" oloc="${pitch.oct}"`;
 	}
 
@@ -892,7 +933,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 				? { ...noteEvent, staff: effectiveStaff }
 				: noteEvent;
 			const lyricXml = lyricCursors.length ? lyricXmlForEvent(lyricCursors, noteIndent + '    ') : '';
-				const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, false, undefined, keyFifths, ottavaShift, measureAccidentals, lyricXml);
+				const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, false, undefined, keyFifths, ottavaShift, measureAccidentals, lyricXml, clefOctaveShift(activeClef));
 			xml += result.xml;
 
 			if (!firstNoteId) firstNoteId = result.elementId;
@@ -925,7 +966,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			}
 		} else if (e.type === 'rest') {
 			const restIndent = beamOpen ? baseIndent + '    ' : baseIndent;
-			const restResult = restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift, measureAccidentals);
+			const restResult = restEventToMEI(e as RestEvent, restIndent, keyFifths, ottavaShift, measureAccidentals, undefined, clefOctaveShift(activeClef));
 			xml += restResult.xml;
 			lastNoteId = restResult.elementId;
 			if (restResult.fermata) fermatas.push({ startid: restResult.elementId, shape: restResult.fermata === 'short' ? 'angular' : undefined });
@@ -955,7 +996,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 
 // Convert TremoloEvent to MEI (fingered tremolo - alternating between two notes)
-const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>): string => {
+const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, clefOctave: number = 0): string => {
 	const ftremId = generateId('fTrem');
 
 	// For \repeat tremolo 4 { c16 d16 }:
@@ -979,7 +1020,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 
 	// First note (or chord)
 	if (event.pitchA.length === 1) {
-		const pitch = encodePitch(event.pitchA[0], keyFifths, ottavaShift, measureAccidentals);
+		const pitch = encodePitch(event.pitchA[0], keyFifths, ottavaShift, measureAccidentals, clefOctave);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		if (pitch.octGes !== undefined) attrs += ` oct.ges="${pitch.octGes}"`;
@@ -988,7 +1029,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 	} else if (event.pitchA.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
 		for (const p of event.pitchA) {
-			const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals);
+			const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals, clefOctave);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 			if (pitch.octGes !== undefined) attrs += ` oct.ges="${pitch.octGes}"`;
@@ -1000,7 +1041,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 
 	// Second note (or chord)
 	if (event.pitchB.length === 1) {
-		const pitch = encodePitch(event.pitchB[0], keyFifths, ottavaShift, measureAccidentals);
+		const pitch = encodePitch(event.pitchB[0], keyFifths, ottavaShift, measureAccidentals, clefOctave);
 		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		if (pitch.octGes !== undefined) attrs += ` oct.ges="${pitch.octGes}"`;
@@ -1009,7 +1050,7 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 	} else if (event.pitchB.length > 1) {
 		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
 		for (const p of event.pitchB) {
-			const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals);
+			const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals, clefOctave);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
 			if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 			if (pitch.octGes !== undefined) attrs += ` oct.ges="${pitch.octGes}"`;
@@ -1375,7 +1416,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					: noteEvent;
 
 				const eventLyricXml = isGraceNote ? '' : lyricXmlForEvent(lyricCursors, currentIndent + '    ');
-			const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift, measureAccidentals, eventLyricXml);
+			const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift, measureAccidentals, eventLyricXml, clefOctaveShift(currentClef));
 				xml += result.xml;
 				lastNoteId = result.elementId;
 				extendOttavaEnd(result.elementId);
@@ -1500,7 +1541,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				const restCrossStaff = currentStaff !== (voice.staff || 1) ? currentStaff : undefined;
 				// A pending ottava shift applies to a rest's gestural octave too.
 				applyPendingOttavaShift();
-				const restResult = restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals, restCrossStaff);
+				const restResult = restEventToMEI(event as RestEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals, restCrossStaff, clefOctaveShift(currentClef));
 				xml += restResult.xml;
 				lastNoteId = restResult.elementId;
 				// An ottava span may open on, run through, or close at a rest (e.g. a
@@ -1573,7 +1614,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				break;
 			}
 			case 'tremolo':
-				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals);
+				xml += tremoloEventToMEI(event as TremoloEvent, currentIndent, keyFifths, currentOttavaShift, measureAccidentals, clefOctaveShift(currentClef));
 				break;
 			case 'context': {
 				const ctx = event as ContextChange;
@@ -3005,8 +3046,9 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 				if (transState[si] === undefined) { transState[si] = key; continue; }
 				if (key !== transState[si]) {
 					transState[si] = key;
-					const c = resolveClef(startClef);
-					changed.push(`${indent}${indent}${indent}${indent}${indent}${indent}${indent}${indent}<staffDef xml:id="${generateId('staffdef')}" n="${si}" lines="5" clef.shape="${c.shape}" clef.line="${c.line}" trans.diat="${t.diat}" trans.semi="${t.semi}" />`);
+					// Always state trans.* explicitly: "0,0" is what clears a prior one.
+					const clefAttrs = staffDefClefAttrs(startClef).replace(/ trans\.diat="[^"]*" trans\.semi="[^"]*"/, '');
+					changed.push(`${indent}${indent}${indent}${indent}${indent}${indent}${indent}${indent}<staffDef xml:id="${generateId('staffdef')}" n="${si}" lines="5" ${clefAttrs} trans.diat="${t.diat}" trans.semi="${t.semi}" />`);
 				}
 			}
 			if (changed.length > 0) {

@@ -3,7 +3,8 @@
  * the .lyl round trip. The suffix means a written→sounding shift, and each target
  * format states that differently:
  *
- *   MEI         att.transposition — trans.diat + trans.semi, a signed pair
+ *   MEI         clef.dis for a whole octave (octave folded into @oct), otherwise
+ *               att.transposition — trans.diat + trans.semi, a signed pair
  *   MusicXML    <transpose> — diatonic + chromatic + octave-change
  *   LilyPond    \transposition <pitch> — a pitch, NOT the clef suffix
  *
@@ -83,7 +84,7 @@ console.log('\nCase 1 — .lyl round trip preserves every suffix verbatim');
 // ── Case 2 ────────────────────────────────────────────────────────────────────
 // MEI carries the shift as a signed {diat, semi} pair, which is what lets a minor
 // interval be exact: a minor third is diat -2 with semi -3, and the two differ.
-console.log('\nCase 2 — MEI states the shift as trans.diat + trans.semi');
+console.log('\nCase 2 — MEI states the shift as clef.dis (octaves) or trans.diat + trans.semi');
 {
 	for (const [props, shift, expected] of CASES) {
 		const mei = meiEncoder.encode(docFor(props));
@@ -91,6 +92,15 @@ console.log('\nCase 2 — MEI states the shift as trans.diat + trans.semi');
 		if (shift === 0) {
 			assert(!/trans\.semi/.test(staffDef),
 				`${expected} declares no transposition (correctly absent)`);
+			continue;
+		}
+		// A whole-octave shift is an octave clef: clef.dis carries it (with the
+		// octave folded into @oct), so trans.* is absent. Anything else is trans.*.
+		if (shift % 12 === 0) {
+			const dis = (staffDef.match(/clef\.dis="(\d+)"/) || [, 'missing'])[1];
+			const want = String(Math.abs(shift) / 12 * 7 + 1);
+			assert(dis === want && !/trans\.semi/.test(staffDef),
+				`${expected} → clef.dis=${want}, no trans.semi (got clef.dis=${dis}${/trans\.semi/.test(staffDef) ? ' + trans.semi' : ''})`);
 			continue;
 		}
 		const semi = (staffDef.match(/trans\.semi="(-?\d+)"/) || [, 'missing'])[1];

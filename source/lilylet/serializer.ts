@@ -658,6 +658,14 @@ const serializeEvent = (
 };
 
 
+// Key / time-signature equality, for dropping a declaration that restates the
+// one already in force. Time compares the display symbol too (C vs 4/4).
+const sameKey = (a?: KeySignature, b?: KeySignature): boolean =>
+	!!a && !!b && a.pitch === b.pitch && (a.accidental || null) === (b.accidental || null) && a.mode === b.mode;
+
+const sameTime = (a?: MeasureContext['time'], b?: MeasureContext['time']): boolean =>
+	!!a && !!b && a.numerator === b.numerator && a.denominator === b.denominator && (a.symbol || null) === (b.symbol || null);
+
 // Key/time/clef signature info to inject into voices
 interface MeasureContext {
 	key?: KeySignature;
@@ -822,6 +830,15 @@ const serializeVoice = (
 	let activeStemDir: StemDirection | undefined;
 	let graceGroupOpen = false;  // whether a scoped \grace { ... } is currently open
 
+	// Key/time already stated for this voice — by the head above, or by an earlier
+	// inline event. The voice's own events still carry the measure's key/time
+	// declaration, so emitting both would double it, and the next parse→serialize
+	// would see two declarations and emit three: the output must be a fixed point.
+	// A key/time event that restates the active one is dropped, exactly like a
+	// redundant clef; one that differs is a genuine change and is kept.
+	let statedKey = measureContext && isFirstVoice ? measureContext.key : undefined;
+	let statedTime = measureContext && isFirstVoice ? measureContext.time : undefined;
+
 	for (let eventIdx = 0; eventIdx < voice.events.length; eventIdx++) {
 		const event = voice.events[eventIdx];
 		// Skip leading context-staff events already absorbed into effectiveInitialStaff
@@ -852,6 +869,20 @@ const serializeVoice = (
 				ctx.clef && !ctx.key && !ctx.time && !ctx.ottava && !ctx.stemDirection && !ctx.tempo &&
 				emittedClefs?.[ctx.staff || activeStaff] === ctx.clef
 			) {
+				continue;
+			}
+			// Drop a key/time that restates the one already in force; serialize what remains.
+			const keyRedundant = !!ctx.key && sameKey(ctx.key, statedKey);
+			const timeRedundant = !!ctx.time && sameTime(ctx.time, statedTime);
+			if (ctx.key && !keyRedundant) statedKey = ctx.key;
+			if (ctx.time && !timeRedundant) statedTime = ctx.time;
+			if (keyRedundant || timeRedundant) {
+				const rest: ContextChange = { ...ctx };
+				if (keyRedundant) delete rest.key;
+				if (timeRedundant) delete rest.time;
+				const restStr = serializeContextChange(rest);
+				if (restStr) parts.push(restStr);
+				if (rest.clef && emittedClefs) emittedClefs[rest.staff || activeStaff] = rest.clef;
 				continue;
 			}
 		}
