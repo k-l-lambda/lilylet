@@ -28,6 +28,7 @@ import {
 	InstrumentName,
 	LyricLane,
 	LyricSyllable,
+	DYNAMIC_NAMES,
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { gmProgramOf } from "./gmInstruments";
@@ -238,6 +239,8 @@ const DYNAMIC_MAP: Record<string, string> = {
 	sfz: "sfz",
 	rfz: "rfz",
 	fp: "fp",
+	// <dynam> text is the name itself; Verovio draws it from SMuFL dynamic glyphs.
+	...Object.fromEntries(DYNAMIC_NAMES.map((d) => [d, d])),
 };
 
 

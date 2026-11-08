@@ -18,6 +18,7 @@ import {
 	Pitch,
 	Duration,
 	Fraction,
+	DYNAMIC_NAMES,
 } from './types';
 
 // ============ XML Element Helpers ============
@@ -411,13 +412,10 @@ const DYNAMIC_MAP: Record<string, DynamicType> = {
 	ff: DynamicType.ff,
 	fff: DynamicType.fff,
 	sfz: DynamicType.sfz,
-	sf: DynamicType.sfz,
 	rfz: DynamicType.rfz,
-	rf: DynamicType.rfz,
-	fz: DynamicType.sfz,
-	sfp: DynamicType.sfz,
-	sfpp: DynamicType.sfz,
 	fp: DynamicType.fp, // forte-piano
+	// every other name maps to itself (sf, fz, sfp, sfpp, rf … used to fold into sfz / rfz)
+	...Object.fromEntries(DYNAMIC_NAMES.map((d) => [d, d as DynamicType])),
 };
 
 export const convertDynamic = (name: string): DynamicType | undefined => {

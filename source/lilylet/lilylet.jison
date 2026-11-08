@@ -373,6 +373,7 @@
 "\\breathe"						return 'ORN_BREATHE'
 "\\glissando"					return 'CMD_GLISSANDO'
 
+\\(?:fffff|ppppp|ffff|pppp|sffz|sfpp|sfzp|mfp|sff|sfp|spp|fz|pf|rf|sf|sp|n)(?![a-zA-Z])	return 'DYN_OTHER'
 "\\ppp"							return 'DYN_PPP'
 "\\pp"							return 'DYN_PP'
 "\\mp"							return 'DYN_MP'
@@ -843,7 +844,8 @@ dynamic_mark
 	| DYN_FFF									-> dynamic('fff')
 	| DYN_SFZ									-> dynamic('sfz')
 	| DYN_RFZ									-> dynamic('rfz')
-	| DYN_SF									-> dynamic('sfz')
+	| DYN_SF									-> dynamic('sf')
+	| DYN_OTHER									-> dynamic($1.slice(1).toLowerCase())
 	| DYN_FP									-> dynamic('fp')
 	;
 

@@ -84,6 +84,7 @@ dots-single-dot.lyl: 87fa13ee6932358e03df35e70e6f25e2
 durations-16th-note.lyl: f8add798b8ddfc51747fba43ecd12208
 durations-32nd-note.lyl: fb6e06ecb1eb05663e9995e4f9e5c569
 durations-64th-note.lyl: cd451b320dcd69238ad4a7471f2fa0de
+dynamics-extended.lyl: 2d08ddce26a7f1c7380205cff6f1bc6a
 dynamics-forte.lyl: b2e3b00bd2c064847584a2b0d4ddbaf6
 dynamics-fortepiano.lyl: d0e04ab549e868bbd1a893a649b90c26
 dynamics-fortissimo.lyl: 084a6ff37e8261d656d7f3c2463daa51

@@ -38,6 +38,7 @@ import {
 	Fraction,
 	LyricLane,
 	LyricSyllable,
+	DYNAMIC_NAMES,
 } from "./types";
 
 import {
@@ -131,6 +132,8 @@ const DYNAMIC_TO_XML: Record<string, string> = {
 	sfz: 'sfz',
 	rfz: 'rfz',
 	fp: 'fp',
+	// MusicXML has an element for these; the rest go in <other-dynamics> (see encodeDirection).
+	...Object.fromEntries(['pppp', 'ppppp', 'ffff', 'fffff', 'sf', 'sfp', 'sfpp', 'sffz', 'sfzp', 'fz', 'rf', 'pf', 'n'].map((d) => [d, d])),
 };
 
 // Barline style to MusicXML
@@ -629,12 +632,14 @@ const encodeDirection = (
 
 	for (const mark of marks) {
 		if (mark.markType === 'dynamic') {
-			const dynXml = DYNAMIC_TO_XML[mark.type];
+			// MusicXML has no element for some names (sff sp spp mfp): <other-dynamics>name</other-dynamics>
+			const dynXml = DYNAMIC_TO_XML[mark.type] ? `<${DYNAMIC_TO_XML[mark.type]}/>`
+				: DYNAMIC_NAMES.includes(mark.type) ? `<other-dynamics>${mark.type}</other-dynamics>` : undefined;
 			if (dynXml) {
 				xml += `${indent(level)}<direction placement="below">\n`;
 				xml += `${indent(level + 1)}<direction-type>\n`;
 				xml += `${indent(level + 2)}<dynamics>\n`;
-				xml += `${indent(level + 3)}<${dynXml}/>\n`;
+				xml += `${indent(level + 3)}${dynXml}\n`;
 				xml += `${indent(level + 2)}</dynamics>\n`;
 				xml += `${indent(level + 1)}</direction-type>\n`;
 				xml += staffTag;

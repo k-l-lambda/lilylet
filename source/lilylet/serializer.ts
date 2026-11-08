@@ -37,6 +37,7 @@ import {
 	Tempo,
 	Placement,
 	Metadata,
+	DYNAMIC_NAMES,
 } from "./types";
 import { parseMeasureLayout, MeasureLayout } from "./measureLayout";
 
@@ -186,6 +187,7 @@ const DYNAMIC_MAP: Record<string, string> = {
 	sfz: '\\sfz',
 	rfz: '\\rfz',
 	fp: '\\fp',
+	...Object.fromEntries(DYNAMIC_NAMES.map((d) => [d, '\\' + d])),
 };
 
 

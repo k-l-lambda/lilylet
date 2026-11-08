@@ -41,6 +41,7 @@ import {
 	Placement,
 	Metadata,
 	Tempo,
+	DYNAMIC_NAMES,
 } from "./types";
 
 import { clefBaseName, parseClefSuffix, withClefTransposition } from "./clefTransposition";
@@ -190,7 +191,7 @@ const ORNAMENT_MAP: Record<string, OrnamentType> = {
 
 
 // Dynamic regex and mapping
-const DYNAMIC_REGEX = /^[fpmrsz]+$/;
+const DYNAMIC_REGEX = /^[fpmrszn]+$/;
 const DYNAMIC_MAP: Record<string, DynamicType> = {
 	ppp: DynamicType.ppp,
 	pp: DynamicType.pp,
@@ -202,6 +203,7 @@ const DYNAMIC_MAP: Record<string, DynamicType> = {
 	fff: DynamicType.fff,
 	sfz: DynamicType.sfz,
 	rfz: DynamicType.rfz,
+	...Object.fromEntries(DYNAMIC_NAMES.map((d) => [d, d as DynamicType])),
 };
 
 

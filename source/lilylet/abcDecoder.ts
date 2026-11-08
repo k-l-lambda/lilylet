@@ -39,6 +39,7 @@ import {
 	DynamicEvent,
 	Placement,
 	InstrumentName,
+	DYNAMIC_NAMES,
 } from "./types";
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { MeasureRepeatInfo, buildMeasureLayout, applyNavText } from "./measureLayoutFromXml";
@@ -113,6 +114,8 @@ const DYNAMIC_MAP: Record<string, DynamicType> = {
 	"ff": DynamicType.ff,
 	"fff": DynamicType.fff,
 	"sfz": DynamicType.sfz,
+	// !pppp! !ffff! are standard ABC; the rest are accepted the same way (!sfp! !fz! …)
+	...Object.fromEntries(DYNAMIC_NAMES.filter((d) => d !== "n").map((d) => [d, d as DynamicType])),
 };
 
 

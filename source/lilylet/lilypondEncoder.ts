@@ -36,6 +36,7 @@ import {
 	Tempo,
 	Metadata,
 	Placement,
+	DYNAMIC_NAMES,
 } from "./types";
 
 import { clefBaseName, clefSuffixSemitones, isLilyPondClefSuffix, lilyPondTranspositionPitch } from "./clefTransposition";
@@ -103,6 +104,9 @@ const ORNAMENT_MAP: Record<string, string> = {
 };
 
 // Dynamic to LilyPond notation
+const LILYPOND_DYNAMICS = new Set(["ppppp", "pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "fffff",
+	"fp", "sf", "sff", "sfp", "sfz", "sp", "spp", "fz", "rfz", "n"]);
+
 const DYNAMIC_MAP: Record<string, string> = {
 	ppp: "\\ppp",
 	pp: "\\pp",
@@ -114,6 +118,10 @@ const DYNAMIC_MAP: Record<string, string> = {
 	fff: "\\fff",
 	sfz: "\\sfz",
 	rfz: "\\rfz",
+	// LilyPond 2.22 predefines these; any other name (sfpp sffz sfzp rf mfp pf) is
+	// written as an inline dynamic script, which needs no definition in the file.
+	...Object.fromEntries(DYNAMIC_NAMES.map((d) => [d,
+		LILYPOND_DYNAMICS.has(d) ? `\\${d}` : `-#(make-dynamic-script "${d}")`])),
 };
 
 // Hairpin to LilyPond notation

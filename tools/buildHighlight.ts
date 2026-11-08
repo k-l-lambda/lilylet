@@ -136,6 +136,7 @@ const SCOPE_MAP: Record<string, string> = {
 	DYN_RFZ: "dynamic",
 	DYN_SF: "dynamic",
 	DYN_FP: "dynamic",
+	DYN_OTHER: "dynamic",
 	DYN_P: "dynamic",
 	DYN_F: "dynamic",
 

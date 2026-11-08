@@ -712,7 +712,8 @@ const parseDirection = (dirEl: Element): MusicXmlDirection => {
 	if (dynamicsEl) {
 		const dynamics: { type: string }[] = [];
 		for (const child of getChildElements(dynamicsEl)) {
-			dynamics.push({ type: child.tagName });
+			// <other-dynamics>sff</other-dynamics> carries its name as text
+			dynamics.push({ type: child.tagName === 'other-dynamics' ? (child.textContent || '').trim() : child.tagName });
 		}
 		if (dynamics.length > 0) {
 			result.dynamics = dynamics;

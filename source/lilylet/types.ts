@@ -63,7 +63,29 @@ export enum DynamicType {
 	sfz = 'sfz',
 	rfz = 'rfz',
 	fp = 'fp',
+	// Every other name LilyPond predefines, plus common ones it does not
+	// (sfpp sffz sfzp rf mfp pf). The value is the written name in every format.
+	pppp = 'pppp',
+	ppppp = 'ppppp',
+	ffff = 'ffff',
+	fffff = 'fffff',
+	sf = 'sf',
+	sff = 'sff',
+	sfp = 'sfp',
+	sfpp = 'sfpp',
+	sffz = 'sffz',
+	sfzp = 'sfzp',
+	sp = 'sp',
+	spp = 'spp',
+	fz = 'fz',
+	rf = 'rf',
+	mfp = 'mfp',
+	pf = 'pf',
+	n = 'n',
 }
+
+/** All dynamic names, for the per-format tables. */
+export const DYNAMIC_NAMES: string[] = Object.values(DynamicType);
 
 export enum HairpinType {
 	crescendoStart = 'crescendoStart',

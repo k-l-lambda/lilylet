@@ -123,6 +123,7 @@ export const HIGHLIGHT_RULES: HighlightRule[] = [
 	{ re: /(?:\\arpeggio\b)/iy, scope: "ornament" },
 	{ re: /(?:\\breathe\b)/iy, scope: "ornament" },
 	{ re: /(?:\\glissando\b)/iy, scope: "ornament" },
+	{ re: /(?:\\(?:fffff|ppppp|ffff|pppp|sffz|sfpp|sfzp|mfp|sff|sfp|spp|fz|pf|rf|sf|sp|n)(?![a-zA-Z]))/iy, scope: "dynamic" },
 	{ re: /(?:\\ppp\b)/iy, scope: "dynamic" },
 	{ re: /(?:\\pp\b)/iy, scope: "dynamic" },
 	{ re: /(?:\\mp\b)/iy, scope: "dynamic" },
