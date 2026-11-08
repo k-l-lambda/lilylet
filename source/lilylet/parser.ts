@@ -158,7 +158,7 @@ const resolveDocumentPitches = (doc: LilyletDoc): void => {
 
 
 export interface ParseWarning {
-	type: 'partial-mismatch';
+	type: 'partial-mismatch' | 'figures-overflow';
 	message: string;
 	declared: number;  // ticks
 	actual: number;    // ticks

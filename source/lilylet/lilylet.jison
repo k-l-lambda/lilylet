@@ -65,7 +65,36 @@
 		mode,
 	});
 
-	const voice = (staff, events, lyrics) => {
+	// Build a \figures lane from parsed groups: resolve sticky durations (quarter to
+	// begin with), and keep it parallel to LyricLane.
+	const figuresLane = (placement, items) => {
+		let dur = { division: 4, dots: 0 };
+		const groups = items.map((it) => {
+			if (it.duration) dur = it.duration;
+			return it.lines ? { duration: dur, lines: it.lines } : { duration: dur };
+		});
+		return { placement, groups };
+	};
+
+	// Drop figure groups that start at or beyond the voice's end, with a warning.
+	const clipFigures = (lane, events) => {
+		const voiceTicks = voiceEventTicks(events);
+		if (!(voiceTicks > 0)) return lane;
+		let at = 0;
+		const kept = [];
+		for (const g of lane.groups) {
+			if (at < voiceTicks) kept.push(g);
+			at += durationTicks(g.duration);
+		}
+		if (at > voiceTicks) {
+			const msg = `\\figures: ${at} ticks of figures but the voice has ${voiceTicks} ticks; ${lane.groups.length - kept.length} group(s) dropped`;
+			console.warn('[lilylet] ' + msg);
+			parseWarnings.push({ type: 'figures-overflow', message: msg, declared: at, actual: voiceTicks });
+		}
+		return { ...lane, groups: kept };
+	};
+
+	const voice = (staff, events, lyrics, figures) => {
 		// Use the first \staff "N" context event that appears before any musical event
 		// (notes/rests/tuplets) as the authoritative voice.staff.
 		// Skip pitchReset events (from NEWLINE tokens at voice-line boundaries).
@@ -84,10 +113,12 @@
 		// \addlyrics lanes are scoped to THIS voice; verse numbers are 1-based by
 		// order of \addlyrics blocks within the voice.
 		const lanes = lyrics && lyrics.length ? lyrics.map((lane, i) => ({ verse: i + 1, ...lane })) : undefined;
+		const figureLanes = figures && figures.length ? figures.map((lane) => clipFigures(lane, events)) : undefined;
 		return {
 			staff: leadingStaff != null ? leadingStaff : 1,
 			events,
 			lyrics: lanes,
+			...(figureLanes ? { figures: figureLanes } : {}),
 		};
 	};
 
@@ -260,6 +291,7 @@
 %option flex unicode case-insensitive
 
 %x lyric
+%x figures
 
 %%
 
@@ -316,6 +348,9 @@
 "\\chords"						return 'CMD_CHORDS'
 "\\markup"						return 'CMD_MARKUP'
 "\\addlyrics"					{ this.pushState('lyric'); return 'CMD_ADDLYRICS'; }
+"^\\figures"					{ this.pushState('figures'); return 'CMD_FIGURES_ABOVE'; }
+"_\\figures"					{ this.pushState('figures'); return 'CMD_FIGURES_BELOW'; }
+"\\figures"					{ this.pushState('figures'); return 'CMD_FIGURES'; }
 
 "\\<"							return 'CMD_CRESC_BEGIN'
 "\\>"							return 'CMD_DIM_BEGIN'
@@ -403,6 +438,21 @@
 <lyric>\"([^\"\\]|\\.)*\"		return 'LYRIC_WORD'
 <lyric>[^ \t\r\n{}\"\\]+		return 'LYRIC_WORD'
 
+<figures>"{"					return '{'
+<figures>"}"					{ this.popState(); return '}'; }
+<figures>[ \t]+					{}
+<figures>(\r?\n)+				{}
+<figures>\%.*					{}
+<figures>"<"					return 'FIG_OPEN'
+<figures>">"					return 'FIG_CLOSE'
+<figures>[0-9]+					return 'FIG_NUMBER'
+<figures>"_"					return 'FIG_BLANK'
+<figures>"+"					return 'FIG_SHARP'
+<figures>"-"					return 'FIG_FLAT'
+<figures>"!"					return 'FIG_NATURAL'
+<figures>"."					return 'FIG_DOT'
+<figures>[sS]					return 'FIG_SKIP'
+
 
 /lex
 
@@ -489,15 +539,18 @@ measure_content
 	%}
 	;
 
-addlyrics_opt
-	: /* empty */								{ $$ = undefined; }
-	| addlyrics_blocks							{ $$ = $1; }
+// \addlyrics and \figures blocks after a voice's events, in any order.
+annotations_opt
+	: /* empty */								{ $$ = { lyrics: [], figures: [] }; }
+	| annotations								{ $$ = $1; }
 	;
 
-addlyrics_blocks
-	: addlyrics_block							{ $$ = [$1]; }
-	| addlyrics_blocks addlyrics_block			{ $$ = $1.concat([$2]); }
-	| addlyrics_blocks NEWLINE					{ $$ = $1; }
+annotations
+	: addlyrics_block							{ $$ = { lyrics: [$1], figures: [] }; }
+	| figures_block								{ $$ = { lyrics: [], figures: [$1] }; }
+	| annotations addlyrics_block				{ $$ = { lyrics: $1.lyrics.concat([$2]), figures: $1.figures }; }
+	| annotations figures_block					{ $$ = { lyrics: $1.lyrics, figures: $1.figures.concat([$2]) }; }
+	| annotations NEWLINE						{ $$ = $1; }
 	;
 
 parts
@@ -510,12 +563,12 @@ part_start
 	;
 
 part_voices
-	: voice_block								{ $$ = [voice(currentStaff, $1.events, $1.lyrics)]; }
-	| part_voices VOICE_SEP voice_block			{ $$ = $1.concat([voice(currentStaff, $3.events, $3.lyrics)]); }
+	: voice_block								{ $$ = [voice(currentStaff, $1.events, $1.lyrics, $1.figures)]; }
+	| part_voices VOICE_SEP voice_block			{ $$ = $1.concat([voice(currentStaff, $3.events, $3.lyrics, $3.figures)]); }
 	;
 
 voice_block
-	: voice_events addlyrics_opt				{ $$ = { events: $1, lyrics: $2 }; }
+	: voice_events annotations_opt				{ $$ = { events: $1, lyrics: $2.lyrics, figures: $2.figures }; }
 	;
 
 voice_events
@@ -851,6 +904,55 @@ glissando_mark
 
 addlyrics_block
 	: CMD_ADDLYRICS '{' lyric_sequence '}'		-> addlyricsLane($3)
+	;
+
+// \figures { <6 4>4 <4 3> s2 }: a LilyPond figuremode subset with its own durations.
+figures_block
+	: CMD_FIGURES '{' figure_sequence '}'			-> figuresLane('below', $3)
+	| CMD_FIGURES_BELOW '{' figure_sequence '}'	-> figuresLane('below', $3)
+	| CMD_FIGURES_ABOVE '{' figure_sequence '}'	-> figuresLane('above', $3)
+	;
+
+figure_sequence
+	: /* empty */								{ $$ = []; }
+	| figure_sequence figure_item				{ $$ = $1.concat([$2]); }
+	;
+
+figure_item
+	: FIG_OPEN figure_lines FIG_CLOSE figure_duration_opt	-> ({ lines: $2, duration: $4 })
+	| FIG_SKIP figure_duration_opt				-> ({ duration: $2 })
+	;
+
+figure_duration_opt
+	: /* empty */								{ $$ = undefined; }
+	| FIG_NUMBER figure_dots					-> ({ division: Number($1), dots: $2 })
+	;
+
+figure_dots
+	: /* empty */								{ $$ = 0; }
+	| figure_dots FIG_DOT						{ $$ = $1 + 1; }
+	;
+
+figure_lines
+	: figure_line								{ $$ = [$1]; }
+	| figure_lines figure_line					{ $$ = $1.concat([$2]); }
+	;
+
+figure_line
+	: FIG_NUMBER figure_accidental_opt			-> ($2 ? { number: Number($1), accidental: $2 } : { number: Number($1) })
+	| FIG_BLANK figure_accidental_opt			-> ($2 ? { accidental: $2 } : {})
+	| figure_accidental							-> ({ accidental: $1 })
+	;
+
+figure_accidental_opt
+	: /* empty */								{ $$ = undefined; }
+	| figure_accidental							{ $$ = $1; }
+	;
+
+figure_accidental
+	: FIG_SHARP									{ $$ = 'sharp'; }
+	| FIG_FLAT									{ $$ = 'flat'; }
+	| FIG_NATURAL								{ $$ = 'natural'; }
 	;
 
 lyric_sequence

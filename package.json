@@ -62,6 +62,7 @@
     "test:transpose": "tsx ./tests/unit/astTranspose.test.ts",
     "test:bug-repro": "tsx ./tests/unit/reportedBugRepro.test.ts",
     "test:omit": "tsx ./tests/unit/omitGrobs.test.ts",
+    "test:figures": "tsx ./tests/unit/figuredBass.test.ts",
     "test:tenor-clef": "tsx ./tests/unit/tenorClef.test.ts",
     "build:tests": "tsc -p tsconfig.tests.json; cp source/lilylet/grammar.jison.js lib-tests/source/lilylet/ && cp source/abc/grammar.jison.js lib-tests/source/abc/ && node tools/fixEsmExtensions.cjs lib-tests && ln -sfn ../../tests/assets lib-tests/tests/assets",
     "test:roundtrip:compiled": "node lib-tests/tests/lilypond-roundtrip.js",

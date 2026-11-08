@@ -1,0 +1,4 @@
+\key c \major \time 4/4 \clef "bass" a,2 e
+\figures { <6+ 4>2 <+> } |
+b,2 c
+\figures { <_->2 <7! 5> } |

@@ -2061,7 +2061,7 @@ const BARLINE_TO_MEI: Record<string, string> = {
 
 // Encode a measure
 // encodeMeasure accepts mutable tieState, slurState, hairpinState, ottavaState and clefState that persist across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}, measureIds?: string[], glissState: GlissState = {}, barHidden: boolean = false): string => {
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}, measureIds?: string[], glissState: GlissState = {}, barHidden: boolean = false, meterUnit: number = 4): string => {
 	const measureId = generateId("measure");
 	if (measureIds) measureIds.push(measureId);
 	let staffContent = '';  // Build staff content first, then add measure tag with barline
@@ -2273,6 +2273,10 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		staffContent += `${indent}    <harm xml:id="${generateId('harm')}" startid="#${harm.startid}">${escapeXml(harm.text)}</harm>\n`;
 	}
 
+	// Figured bass (\\figures): one <harm><fb> per figure group, placed by tstamp in
+	// the current meter's beat unit (6/8 counts eighths: dotted quarters at 1 and 4).
+	staffContent += encodeFigureLanes(measure, partInfos, meterUnit, indent + '    ');
+
 	// Generate dir elements for markups
 	for (const mkup of allMarkups) {
 		const placeAttr = mkup.placement ? ` place="${mkup.placement}"` : '';
@@ -2299,6 +2303,37 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	return xml;
 };
 
+
+const FIGURE_ACCIDENTAL_TEXT: Record<string, string> = { sharp: '♯', flat: '♭', natural: '♮' };
+
+// <harm staff tstamp place><fb><f>…</f></fb></harm> for every \\figures lane of
+// the measure. Accidentals are Unicode ♯ ♭ ♮, which Verovio draws as SMuFL
+// figured-bass glyphs (ASCII #/b/n would stay plain text), placed before the
+// number as LilyPond draws <6+>.
+const encodeFigureLanes = (measure: Measure, partInfos: PartInfo[], meterUnit: number, indent: string): string => {
+	let xml = '';
+	for (let pi = 0; pi < measure.parts.length; pi++) {
+		const partOffset = partInfos[pi]?.staffOffset || 0;
+		for (const voice of measure.parts[pi].voices) {
+			if (!voice.figures) continue;
+			const staffN = partOffset + (voice.staff || 1);
+			for (const lane of voice.figures) {
+				let at = 0;	// whole notes from the start of the measure
+				for (const g of lane.groups) {
+					const len = (1 / g.duration.division) * (2 - 2 ** -(g.duration.dots || 0));
+					if (g.lines) {
+						const tstamp = +(1 + at * meterUnit).toFixed(4);
+						const lines = g.lines.map(l =>
+							`<f>${l.accidental ? FIGURE_ACCIDENTAL_TEXT[l.accidental] : ''}${l.number !== undefined ? l.number : ''}</f>`).join('');
+						xml += `${indent}<harm xml:id="${generateId('harm')}" staff="${staffN}" tstamp="${tstamp}" place="${lane.placement}"><fb>${lines}</fb></harm>\n`;
+					}
+					at += len;
+				}
+			}
+		}
+	}
+	return xml;
+};
 
 // Part structure info for encoding
 interface PartInfo {
@@ -3136,7 +3171,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		const openTag = segOpenAt.get(mIndex);
 		if (openTag) mei += openTag;
 		const measureIndent = segDecomp ? `${mIndent}${indent}` : mIndent;
-		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds, glissState, omitStates.barHidden[mi]);
+		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds, glissState, omitStates.barHidden[mi], currentTimeDen);
 		const closeTag = segCloseAt.get(mIndex);
 		if (closeTag) mei += closeTag;
 	});

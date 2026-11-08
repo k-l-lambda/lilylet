@@ -235,6 +235,28 @@ export interface LyricLane {
 	syllables: LyricSyllable[];
 }
 
+// One line (row) of a figured-bass group: a number, an accidental, both, or
+// neither (a blank line, `_`). The accidental is drawn before the number, as
+// LilyPond does for `<6+>`.
+export interface FigureLine {
+	number?: number;
+	accidental?: 'sharp' | 'flat' | 'natural';
+}
+
+// One figured-bass group with its own duration. `lines` top → bottom; omitted
+// for a span with no figure (`s`).
+export interface FigureGroup {
+	duration: Duration;
+	lines?: FigureLine[];
+}
+
+// A \figures lane scoped to a voice, like a LyricLane, but timed by its own
+// durations rather than by the voice's notes.
+export interface FigureLane {
+	placement: 'above' | 'below';
+	groups: FigureGroup[];
+}
+
 // === Events ===
 
 export interface NoteEvent {
@@ -329,6 +351,8 @@ export interface Voice {
 	// events, so a lane is serialized inside the voice it belongs to (e.g. a
 	// vocal line under staff 1), not as a trailing measure-level block.
 	lyrics?: LyricLane[];
+	// \figures lanes (figured bass) scoped to this voice.
+	figures?: FigureLane[];
 }
 
 export interface Metadata {

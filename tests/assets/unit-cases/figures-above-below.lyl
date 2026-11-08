@@ -1,0 +1,5 @@
+\key c \major \time 2/4 \clef "bass" c2
+^\figures { <6>2 }
+\addlyrics { T1 } |
+f2
+_\figures { <6 4>2 } |

@@ -102,6 +102,9 @@ export const HIGHLIGHT_RULES: HighlightRule[] = [
 	{ re: /(?:\\chords\b)/iy, scope: "keyword" },
 	{ re: /(?:\\markup\b)/iy, scope: "markup" },
 	{ re: /(?:\\addlyrics\b)/iy, scope: "lyric" },
+	{ re: /(?:\^\\figures\b)/iy, scope: "keyword" },
+	{ re: /(?:_\\figures\b)/iy, scope: "keyword" },
+	{ re: /(?:\\figures\b)/iy, scope: "keyword" },
 	{ re: /(?:\\<)/iy, scope: "hairpin" },
 	{ re: /(?:\\>)/iy, scope: "hairpin" },
 	{ re: /(?:\\!)/iy, scope: "hairpin" },
@@ -168,6 +171,18 @@ export const HIGHLIGHT_RULES: HighlightRule[] = [
 	{ re: /(?:_\b)/iy, scope: "lyric" },
 	{ re: /(?:"([^\"\\]|\\.)*")/iy, scope: "string" },
 	{ re: /(?:[^ \t\r\n{}\"\\]+)/iy, scope: "string" },
+	{ re: /(?:\{)/iy, scope: "brace" },
+	{ re: /(?:\})/iy, scope: "brace" },
+	{ re: /(?:%.*)/iy, scope: "comment" },
+	{ re: /(?:<)/iy, scope: "chordBracket" },
+	{ re: /(?:>)/iy, scope: "chordBracket" },
+	{ re: /(?:[0-9]+)/iy, scope: "number" },
+	{ re: /(?:_\b)/iy, scope: "operator" },
+	{ re: /(?:\+)/iy, scope: "operator" },
+	{ re: /(?:-)/iy, scope: "operator" },
+	{ re: /(?:!)/iy, scope: "operator" },
+	{ re: /(?:\.)/iy, scope: "operator" },
+	{ re: /(?:[sS])/iy, scope: "rest" },
 ];
 
 /**

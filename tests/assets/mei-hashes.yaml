@@ -94,6 +94,12 @@ dynamics-pianissimo.lyl: bc16a958b6bb972b29026e0c370182e5
 dynamics-piano.lyl: ff56f3bccffce7e6900cb7c8353f3eeb
 dynamics-rinforzando.lyl: 561e1f840c785456d65690633271a75a
 dynamics-sforzando.lyl: 0aa83b632e7bd7902f1c85a896d52473
+figures-above-below.lyl: e4e37b09d22f9dae94c5122060ef3162
+figures-accidentals.lyl: 50458c563511d175f81a4beb7b1c507d
+figures-basic.lyl: 6bedde9b4c3e40b1bbff2713eace90a8
+figures-compound-meter.lyl: 1e8f4f29d0980f93567dc0cce71a0352
+figures-several-per-note.lyl: 2734df3b82dc879ba142d49f3f52fcfb
+figures-skip-blank.lyl: 1ed071167a8a275e7b034dadd4677fd1
 fingering-basic.lyl: ae4d552b0cd0cdfa82195473b3cf308f
 fingering-with-chord.lyl: 1cc5a0091f831437cfa79da398994bef
 grace-embed-in-beam.lyl: 7eb605451ffdfdcc2389c8743e3d152e

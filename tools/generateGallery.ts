@@ -30,6 +30,7 @@ const getCategory = (name: string): string => {
     if (name.startsWith('durations-')) return 'durations';
     if (name.startsWith('dynamics-')) return 'dynamics';
     if (name.startsWith('fingering-')) return 'fingering';
+    if (name.startsWith('figures-')) return 'figures';
     if (name.startsWith('grace-')) return 'grace';
     if (name.startsWith('hairpins-')) return 'hairpins';
     if (name.startsWith('harmony-')) return 'harmony';

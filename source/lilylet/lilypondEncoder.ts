@@ -930,7 +930,11 @@ export const encode = (doc: LilyletDoc, options: RenderOptions = {}): string => 
 					staffMeasures.push([]);
 				}
 
-				// Encode voice content
+				// Encode voice content.
+				// TODO: voice.figures (\figures) is not emitted. LilyPond needs it as a
+				// separate `\new FiguredBass \figuremode { … }` running across all measures,
+				// but this encoder assembles each staff per measure slot (lyrics are not
+				// emitted either), so it needs a cross-measure figures thread first.
 				let voiceContent = encodeVoice(voice, {
 					key: currentKey,
 					timeSig: currentTimeSig,

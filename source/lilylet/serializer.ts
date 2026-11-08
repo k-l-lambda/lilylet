@@ -29,6 +29,7 @@ import {
 	Accidental,
 	ArticulationType,
 	LyricLane,
+	FigureLane,
 	OrnamentType,
 	DynamicType,
 	HairpinType,
@@ -976,6 +977,11 @@ const serializeVoice = (
 	// \addlyrics lanes are scoped to this voice; emit them inside the voice so
 	// they bind to THIS voice's notes (e.g. lyrics under staff 1 serialize
 	// within staff 1's voice, not as a trailing measure-level block).
+	if (voice.figures && voice.figures.length) {
+		for (const lane of voice.figures) {
+			parts.push(serializeFigureLane(lane));
+		}
+	}
 	if (voice.lyrics && voice.lyrics.length) {
 		for (const lane of voice.lyrics) {
 			parts.push(serializeLyricLane(lane));
@@ -1028,6 +1034,27 @@ const serializePart = (
 // reserved characters, otherwise they are quoted and escaped. A syllable may
 // carry text AND a connector: the text is emitted first, then `--`/`__`, so
 // melismas (`text __`) and hyphenation (`text --`) never lose the syllable text.
+// \figures lane: write each group's duration where it changes (always the first),
+// so serialize → parse is a fixed point.
+const FIGURE_ACCIDENTAL: Record<string, string> = { sharp: '+', flat: '-', natural: '!' };
+const serializeFigureLane = (lane: FigureLane): string => {
+	const out: string[] = [];
+	let prev: Duration | undefined;
+	for (const g of lane.groups) {
+		const same = prev && prev.division === g.duration.division && (prev.dots || 0) === (g.duration.dots || 0);
+		const dur = same ? '' : String(g.duration.division) + '.'.repeat(g.duration.dots || 0);
+		prev = g.duration;
+		if (!g.lines) { out.push('s' + dur); continue; }
+		const lines = g.lines.map(l => {
+			const acc = l.accidental ? FIGURE_ACCIDENTAL[l.accidental] : '';
+			return l.number !== undefined ? `${l.number}${acc}` : `_${acc}`;
+		});
+		out.push(`<${lines.join(' ')}>${dur}`);
+	}
+	const cmd = lane.placement === 'above' ? '^\\figures' : '\\figures';
+	return `${cmd} { ${out.join(' ')} }`;
+};
+
 const serializeLyricLane = (lane: LyricLane): string => {
 	const out: string[] = [];
 	for (const s of lane.syllables) {
