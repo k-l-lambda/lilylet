@@ -76,6 +76,7 @@ const LILYPOND_CLEF_MAP: Record<string, Clef> = {
 	F: Clef.bass,
 	alto: Clef.alto,
 	C: Clef.alto,
+	tenor: Clef.tenor,
 };
 
 

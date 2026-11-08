@@ -80,6 +80,7 @@ const CLEF_SHAPES: Record<string, { shape: string; line: number }> = {
 	treble: { shape: "G", line: 2 },
 	bass: { shape: "F", line: 4 },
 	alto: { shape: "C", line: 3 },
+	tenor: { shape: "C", line: 4 },
 	// Also support uppercase letter clef names
 	G: { shape: "G", line: 2 },
 	F: { shape: "F", line: 4 },
@@ -126,8 +127,15 @@ interface ResolvedClef {
 //     att.transposition (trans.diat / trans.semi) on <staffDef>: notes keep their
 //     written @oct and only the sounding pitch moves. A minor interval is why both
 //     fields are needed: a minor third is {diat:-2, semi:-3}.
+const warnedClefs = new Set<string>();
 const resolveClef = (clefStr: string): ResolvedClef => {
-	const clefInfo = CLEF_SHAPES[clefBaseName(clefStr)] || CLEF_SHAPES.treble;
+	const base = clefBaseName(clefStr);
+	if (!CLEF_SHAPES[base] && !warnedClefs.has(base)) {
+		// The grammar accepts any \clef string; an unknown one is drawn as treble.
+		warnedClefs.add(base);
+		console.warn(`[lilylet] unknown clef "${base}", encoded as treble`);
+	}
+	const clefInfo = CLEF_SHAPES[base] || CLEF_SHAPES.treble;
 	const trans = clefSuffixTransposition(clefStr);
 	if (trans && trans.semi % 12 === 0 && trans.diat === 7 * (trans.semi / 12)) {
 		const octaves = trans.semi / 12;

@@ -69,6 +69,7 @@ const CLEF_MAP: Record<string, string> = {
 	treble: "treble",
 	bass: "bass",
 	alto: "alto",
+	tenor: "tenor",
 };
 
 // Accidental to LilyPond notation

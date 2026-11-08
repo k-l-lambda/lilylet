@@ -97,6 +97,7 @@ const CLEF_TO_SIGN: Record<string, { sign: string; line: number }> = {
 	treble: { sign: 'G', line: 2 },
 	bass: { sign: 'F', line: 4 },
 	alto: { sign: 'C', line: 3 },
+	tenor: { sign: 'C', line: 4 },
 };
 
 // Articulation to MusicXML element name

@@ -64,6 +64,7 @@ clefs-change-in-voice.lyl: 811cc0e83f8cc86bec29d8b798e74c2a
 clefs-inside-tuplet.lyl: ae358340f14a3d2b022fec397f3eeee6
 clefs-multivoice-shared-staff-change.lyl: aa2208298a0b188810b8e6c7e00f9d28
 clefs-octave-shift.lyl: 0a69c149d5c56d78ac8d8b9b8a66ff7b
+clefs-tenor.lyl: 4d96126d6ca26d0185b57b181502620e
 clefs-transpose-arbitrary.lyl: c77987bdccf944acd5da95662dc09c9a
 clefs-transpose-minor.lyl: 26bfcb0c840c2db1ded2d9cec5e19b78
 clefs-transpose-octave-glyph.lyl: 9f0d34c34e4c660ca1677ec1e935e16d

@@ -346,8 +346,9 @@ export const convertClef = (sign: string, line?: number): Clef | undefined => {
 	} else if (upperSign === 'F') {
 		return Clef.bass;
 	} else if (upperSign === 'C') {
-		// C clef - alto clef on line 3, tenor on line 4
-		return Clef.alto;
+		// C clef: tenor on line 4, alto on line 3. Other lines (soprano, mezzo,
+		// baritone) are not modelled yet and fall back to alto.
+		return Number(line) === 4 ? Clef.tenor : Clef.alto;
 	}
 
 	console.warn(`Unknown clef: sign=${sign}, line=${line}`);

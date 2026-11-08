@@ -468,7 +468,8 @@ const convertClef = (clefStr: string): Clef | undefined => {
 	switch (base?.toLowerCase()) {
 		case "treble": resolved = "treble"; break;
 		case "bass": resolved = "bass"; break;
-		case "alto": case "tenor": resolved = "alto"; break;
+		case "alto": resolved = "alto"; break;
+		case "tenor": resolved = "tenor"; break;
 		default: return undefined;
 	}
 	if (shift) resolved += (shift[2] === "-" ? "_" : "^") + shift[3];

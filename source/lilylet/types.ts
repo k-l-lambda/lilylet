@@ -22,6 +22,7 @@ export enum Clef {
 	treble = 'treble',
 	bass = 'bass',
 	alto = 'alto',
+	tenor = 'tenor',		// C clef on the 4th line
 }
 
 export enum StemDirection {
