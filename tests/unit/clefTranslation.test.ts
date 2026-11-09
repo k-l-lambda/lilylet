@@ -5,7 +5,8 @@
  *
  *   MEI         clef.dis for a whole octave (octave folded into @oct), otherwise
  *               att.transposition — trans.diat + trans.semi, a signed pair
- *   MusicXML    <transpose> — diatonic + chromatic + octave-change
+ *   MusicXML    an octave clef (<clef-octave-change>) over sounding pitch for whole
+ *               octaves; otherwise <transpose> — diatonic + chromatic + octave-change
  *   LilyPond    \transposition <pitch> — a pitch, NOT the clef suffix
  *
  * The LilyPond case is the one that bites. There a clef suffix is purely
@@ -132,6 +133,12 @@ console.log('\nCase 3 — MusicXML emits the clef plus <transpose>, and reads bo
 
 		if (shift === 0) {
 			assert(!/<transpose>/.test(xml), `${expected}: no <transpose> for a plain clef`);
+		} else if (shift % 12 === 0) {
+			// A whole-octave shift is an octave clef: <clef-octave-change> over the
+			// sounding pitch, and no <transpose> (both would make readers count it twice).
+			const oc = parseInt((xml.match(/<clef-octave-change>(-?\d+)</) || [, 'NaN'])[1], 10);
+			assert(oc * 12 === shift && !/<transpose>/.test(xml),
+				`${expected}: <clef-octave-change>${shift / 12}, no <transpose> (got ${oc}${/<transpose>/.test(xml) ? ' + <transpose>' : ''})`);
 		} else {
 			const trans = (xml.match(/<transpose>[\s\S]*?<\/transpose>/) || [''])[0];
 			const chromatic = parseInt((trans.match(/<chromatic>(-?\d+)</) || [, 'NaN'])[1], 10);
@@ -146,14 +153,17 @@ console.log('\nCase 3 — MusicXML emits the clef plus <transpose>, and reads bo
 		assert(clefShift(back ?? '') === shift, `${expected}: shift intact at ${shift}`);
 	}
 
-	// An octave clef declares BOTH the glyph and the sounding shift, which are
-	// separate things in MusicXML. Reading them additively would say two octaves, so
-	// <transpose> alone is authoritative.
+	// An octave clef is written as <clef-octave-change> alone. Files from lilylet up to
+	// 0.1.94 also carry a <transpose> of the same octave; reading the two additively
+	// would say two octaves, so <transpose> is authoritative when present.
 	const octave = musicXmlEncoder.encode(docFor('treble-8'));
 	assert(/<clef-octave-change>-1<\/clef-octave-change>/.test(octave),
-		'an octave clef still draws its "8" via <clef-octave-change>');
+		'an octave clef draws its "8" via <clef-octave-change>');
 	assert(clefShift(clefsOf(musicXmlDecoder.decode(octave))[0] ?? '') === -12,
 		'and reads back as ONE octave, not two');
+	const legacy = octave.replace(/(<\/clef>)/, '$1<transpose><diatonic>0</diatonic><chromatic>0</chromatic><octave-change>-1</octave-change></transpose>');
+	assert(clefShift(clefsOf(musicXmlDecoder.decode(legacy))[0] ?? '') === -12,
+		'the 0.1.94 shape (clef-octave-change + <transpose>) still reads back as ONE octave');
 
 	// MusicXML holds whole octaves separately, so diatonic must be reduced by 7 per
 	// octave alongside chromatic by 12 — reducing only one made an octave read double.

@@ -1282,15 +1282,17 @@ const forwardGapToRests = (gapTicks: number, divisions: number): RestEvent[] => 
 /**
  * Fold a MusicXML transposition onto a lilylet clef as a suffix.
  *
- * MusicXML keeps the two apart: <transpose> is the sounding shift and moves pitch,
- * <clef-octave-change> is the "8" glyph under the clef and moves nothing. A lilylet
- * suffix means sounding shift, so only ONE of them may be folded in — adding both
- * would double an octave clef that also declares <transpose> (the shape this
- * encoder itself now emits) into two octaves.
+ * A lilylet suffix means sounding shift. MusicXML states it one of two ways:
+ * <transpose> over the written pitch, or an octave clef (<clef-octave-change>)
+ * over the SOUNDING pitch — the shape MuseScore, Finale and music21 write, and the
+ * one lilylet's encoder writes for whole octaves. Only ONE of them may be folded in:
+ * lilylet's encoder up to 0.1.94 wrote both for an octave clef, which read
+ * additively would be two octaves.
  *
  * <transpose> wins when present, being the explicit statement of sounding pitch.
  * Absent it, an octave clef is read as implying its own shift, which is what a
- * tenor-voice or guitar treble_8 part means.
+ * tenor-voice or guitar treble_8 part means; the caller then also moves each pitch
+ * back by that shift (octaveFold), since <pitch> under it is the sounding one.
  *
  * A shift with no exact suffix (only the tritone) leaves the clef plain rather than
  * rounding: a silently wrong sounding pitch is worse than a visibly absent shift.
@@ -1335,7 +1337,9 @@ const convertMeasure = (
 	tupletTracker: TupletTracker,
 	// A part's <transpose> is declared once, usually in measure 1, and stays in force
 	// for the whole part, so it has to survive across measures like the ottava does.
-	transposeTracker: { semitones: number }
+	transposeTracker: { semitones: number },
+	// Octaves to take off each <pitch> per staff, set by the clef in force (see below).
+	octaveFold: Map<number, number> = new Map()
 ): MeasureConversionResult => {
 	let key: KeySignature | undefined;
 	let timeSig: Fraction | undefined;
@@ -1432,6 +1436,14 @@ const convertMeasure = (
 			// Clefs - store by staff number
 			if (attrs.clefs) {
 				for (const clefEntry of attrs.clefs) {
+					// An octave clef with no <transpose> (MuseScore, Finale, music21: G8vb,
+					// F8vb, G15mb, G8va) states <pitch> as SOUNDING pitch, while a lilylet
+					// "treble_8" pitch is the WRITTEN one (an octave above). clefWithShift
+					// below turns the clef into that suffix, so each pitch under it must move
+					// back by the clef's own octaves, or it is lowered twice. With a
+					// <transpose> in force <pitch> is already written: nothing to fold.
+					octaveFold.set(clefEntry.staff,
+						transposeTracker.semitones === 0 ? (clefEntry.clef.clefOctaveChange ?? 0) : 0);
 					const clef = clefWithShift(
 						convertClef(clefEntry.clef.sign, clefEntry.clef.line),
 						transposeTracker.semitones,
@@ -1571,6 +1583,7 @@ const convertMeasure = (
 			} else if (note.pitch) {
 				// Note or chord - convert MusicXmlPitch to Lilylet Pitch
 				const lilyletPitch = musicXmlPitchToLilylet(note.pitch);
+				lilyletPitch.octave -= octaveFold.get(staffNum) ?? 0;
 
 				// Get marks from notations
 				const notationMarks = notationsToMarks(note.notations, spannerTracker, [lilyletPitch]);
@@ -1826,6 +1839,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 	const spannerTracker = new SpannerTracker();
 	const ottavaTracker = { current: 0 };
 	const transposeTracker = { semitones: 0 };
+	const octaveFold: Map<number, number> = new Map();
 	const tupletTracker = new TupletTracker();
 
 	let lastKey: KeySignature | undefined;
@@ -1844,7 +1858,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 
 	for (const measureEl of measureEls) {
 		voiceTracker.reset();
-		const { voiceMap, key, timeSig, barline, leadingBarline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker, tupletTracker, transposeTracker);
+		const { voiceMap, key, timeSig, barline, leadingBarline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker, tupletTracker, transposeTracker, octaveFold);
 
 		// A forward-repeat (or any `location="left"`) barline belongs at the END of
 		// the PREVIOUS measure in lilylet's "\bar = current measure's end bar" model.

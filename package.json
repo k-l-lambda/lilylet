@@ -58,6 +58,7 @@
     "test:abc-transpose": "tsx ./tests/unit/abcTransposingClef.test.ts",
     "test:clef-transposition": "tsx ./tests/unit/clefTransposition.test.ts",
     "test:clef-translation": "tsx ./tests/unit/clefTranslation.test.ts",
+    "test:xml-octave-clef": "tsx ./tests/unit/musicXmlOctaveClef.test.ts",
     "test:fine-rhythm-onset": "tsx ./tests/unit/fineRhythmOnset.test.ts",
     "test:transpose": "tsx ./tests/unit/astTranspose.test.ts",
     "test:bug-repro": "tsx ./tests/unit/reportedBugRepro.test.ts",

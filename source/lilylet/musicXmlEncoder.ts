@@ -203,9 +203,11 @@ const lyricXmlForNote = (cursors: MusicXmlLyricCursor[], level: number, grace?: 
 /**
  * Encode pitch to MusicXML
  */
-const encodePitch = (pitch: Pitch, level: number): string => {
+// octaveShift: whole octaves an octave clef adds (treble_8 = -1). Under such a clef
+// MusicXML <pitch> is the sounding pitch while lilylet's is the written one.
+const encodePitch = (pitch: Pitch, level: number, octaveShift: number = 0): string => {
 	const step = PHONET_TO_STEP[pitch.phonet] || 'C';
-	const octave = pitch.octave + 4;  // Lilylet octave 0 = MusicXML octave 4
+	const octave = pitch.octave + 4 + octaveShift;  // Lilylet octave 0 = MusicXML octave 4
 	const alter = pitch.accidental ? ACCIDENTAL_TO_ALTER[pitch.accidental] : undefined;
 
 	let xml = `${indent(level)}<pitch>\n`;
@@ -271,6 +273,21 @@ const getKeyFifths = (key: KeySignature): number => {
 };
 
 
+// A whole-octave clef suffix (treble_8, bass_8, treble^8, treble_15) is written as an
+// octave clef, <clef-octave-change>, over the SOUNDING pitch, as MuseScore, Finale and
+// music21 do; readers then draw the notes where the plain clef would. Any other
+// suffix (treble_m3, treble_5, treble_9 …) has no clef form and is <transpose> over
+// the written pitch. Writing both for an octave clef, as up to 0.1.94, made readers
+// count the octave twice: Verovio drew `\clef "treble_8" c4` an octave high.
+const clefOctaves = (clef: Clef | undefined): number => {
+	const semitones = clef ? clefSuffixSemitones(clef as string) : 0;
+	return semitones % 12 === 0 ? semitones / 12 : 0;
+};
+const clefTransposeSemitones = (clef: Clef | undefined): number => {
+	const semitones = clef ? clefSuffixSemitones(clef as string) : 0;
+	return semitones % 12 === 0 ? 0 : semitones;
+};
+
 /**
  * Encode attributes element (key, time, clef, divisions)
  */
@@ -280,7 +297,12 @@ const encodeAttributes = (
 		divisions?: boolean;
 		key?: KeySignature;
 		time?: Fraction;
-		clef?: Clef;
+		// clefs to state, by staff; `number` is written when the part has several staves
+		clefs?: { staff: number; clef: Clef }[];
+		multiStaff?: boolean;
+		// the clef whose <transpose> to state (the part's new transposition); a plain or
+		// octave clef here writes a zero <transpose>, which clears a previous one
+		transposeClef?: Clef | null;
 		staves?: number;
 	}
 ): string => {
@@ -309,46 +331,47 @@ const encodeAttributes = (
 		xml += `${indent(level + 1)}<staves>${options.staves}</staves>\n`;
 	}
 
-	if (options.clef) {
+	for (const { staff, clef } of options.clefs || []) {
 		// Look the sign/line up under the BASE name. A lilylet clef may carry a
 		// transposition suffix ("treble_8", "treble_m3"), and keying the table on the
 		// whole string missed every one of them — `clefInfo` came back undefined and
 		// the <clef> element was dropped entirely, sign and line with it.
-		const clefStr = options.clef as string;
-		const clefInfo = CLEF_TO_SIGN[clefBaseName(clefStr)];
-		if (clefInfo) {
-			xml += `${indent(level + 1)}<clef>\n`;
-			xml += `${indent(level + 2)}<sign>${clefInfo.sign}</sign>\n`;
-			xml += `${indent(level + 2)}<line>${clefInfo.line}</line>\n`;
-			// A whole-octave shift also has a notational form: the "8" drawn under or
-			// over the clef. This is the glyph only — sounding pitch rides on
-			// <transpose> below, exactly as in LilyPond.
-			const semitones = clefSuffixSemitones(clefStr);
-			if (semitones % 12 === 0 && semitones !== 0)
-				xml += `${indent(level + 2)}<clef-octave-change>${semitones / 12}</clef-octave-change>\n`;
-			xml += `${indent(level + 1)}</clef>\n`;
-		}
+		const clefInfo = CLEF_TO_SIGN[clefBaseName(clef as string)];
+		if (!clefInfo) continue;
+		const numberAttr = options.multiStaff || staff !== 1 ? ` number="${staff}"` : '';
+		xml += `${indent(level + 1)}<clef${numberAttr}>\n`;
+		xml += `${indent(level + 2)}<sign>${clefInfo.sign}</sign>\n`;
+		xml += `${indent(level + 2)}<line>${clefInfo.line}</line>\n`;
+		// An octave clef: the "8" drawn under or over it, and the notes under it are
+		// written at sounding pitch (see clefOctaves / encodePitch).
+		const octaves = clefOctaves(clef);
+		if (octaves !== 0)
+			xml += `${indent(level + 2)}<clef-octave-change>${octaves}</clef-octave-change>\n`;
+		xml += `${indent(level + 1)}</clef>\n`;
+	}
 
-		// The written->sounding transposition. MusicXML carries the diatonic step count
-		// and the chromatic semitone count separately, which is what lets a minor third
-		// (-2 steps, -3 semitones) be expressed exactly. <transpose> follows <clef> in
-		// the attributes content order.
-		const trans = clefSuffixTransposition(clefStr);
-		if (trans) {
-			// <diatonic> and <chromatic> hold the WITHIN-OCTAVE remainder and whole
-			// octaves go in <octave-change>, so both must be reduced by the same octave
-			// count: 7 diatonic steps and 12 semitones each. Reducing only the semitones
-			// would make an octave clef read as two octaves.
-			const octaveChange = Math.trunc(trans.semi / 12);
-			const diatonic = trans.diat - 7 * octaveChange;
-			const chromatic = trans.semi - 12 * octaveChange;
-			xml += `${indent(level + 1)}<transpose>\n`;
-			xml += `${indent(level + 2)}<diatonic>${diatonic}</diatonic>\n`;
-			xml += `${indent(level + 2)}<chromatic>${chromatic}</chromatic>\n`;
-			if (octaveChange !== 0)
-				xml += `${indent(level + 2)}<octave-change>${octaveChange}</octave-change>\n`;
-			xml += `${indent(level + 1)}</transpose>\n`;
-		}
+	if (options.transposeClef !== undefined) {
+		// The written->sounding transposition of a non-octave clef suffix. MusicXML carries
+		// the diatonic step count and the chromatic semitone count separately, which is
+		// what lets a minor third (-2 steps, -3 semitones) be expressed exactly.
+		// <transpose> follows <clef> in the attributes content order.
+		const trans = options.transposeClef && clefTransposeSemitones(options.transposeClef) !== 0
+			? clefSuffixTransposition(options.transposeClef as string)
+			: undefined;
+		const t = trans ?? { diat: 0, semi: 0 };
+		// <diatonic> and <chromatic> hold the WITHIN-OCTAVE remainder and whole octaves go
+		// in <octave-change>, so both must be reduced by the same octave count: 7 diatonic
+		// steps and 12 semitones each. Reducing only the semitones would make a compound
+		// interval (a ninth) read as two octaves.
+		const octaveChange = Math.trunc(t.semi / 12);
+		const diatonic = t.diat - 7 * octaveChange;
+		const chromatic = t.semi - 12 * octaveChange;
+		xml += `${indent(level + 1)}<transpose>\n`;
+		xml += `${indent(level + 2)}<diatonic>${diatonic}</diatonic>\n`;
+		xml += `${indent(level + 2)}<chromatic>${chromatic}</chromatic>\n`;
+		if (octaveChange !== 0)
+			xml += `${indent(level + 2)}<octave-change>${octaveChange}</octave-change>\n`;
+		xml += `${indent(level + 1)}</transpose>\n`;
 	}
 
 	xml += `${indent(level)}</attributes>\n`;
@@ -469,7 +492,8 @@ const encodeNote = (
 	staff: number,
 	level: number,
 	isChord: boolean = false,
-	lyricXml: string = ''
+	lyricXml: string = '',
+	octaveShift: number = 0
 ): string => {
 	let xml = `${indent(level)}<note>\n`;
 
@@ -483,7 +507,7 @@ const encodeNote = (
 
 	// Pitch (use first pitch, additional pitches become chord notes)
 	const pitch = isChord ? event.pitches[0] : event.pitches[0];
-	xml += encodePitch(pitch, level + 1);
+	xml += encodePitch(pitch, level + 1, octaveShift);
 
 	// Duration (not for grace notes)
 	if (!event.grace) {
@@ -787,7 +811,11 @@ const encodeMeasure = (
 	isFirst: boolean,
 	prevKey: KeySignature | undefined,
 	prevTime: Fraction | undefined,
-	level: number
+	level: number,
+	// clef in force per staff, carried across measures (updated here)
+	clefState: Map<number, Clef> = new Map(),
+	// the part's current <transpose>, in semitones (updated here)
+	transposeState: { semitones: number } = { semitones: 0 }
 ): string => {
 	let xml = `${indent(level)}<measure number="${measureNumber}">\n`;
 
@@ -797,39 +825,58 @@ const encodeMeasure = (
 		return xml;
 	}
 
-	// Determine if we need attributes
-	const needAttributes = isFirst ||
-		(measure.key && JSON.stringify(measure.key) !== JSON.stringify(prevKey)) ||
-		(measure.timeSig && JSON.stringify(measure.timeSig) !== JSON.stringify(prevTime));
-
 	// Find max staff number within this part
 	let maxStaff = 1;
 	for (const voice of part.voices) {
 		maxStaff = Math.max(maxStaff, voice.staff || 1);
 	}
 
-	// Encode attributes if needed
-	if (needAttributes) {
-		// Find clef from first voice of this part
-		let clef: Clef | undefined;
-		for (const voice of part.voices) {
-			for (const event of voice.events) {
-				if (event.type === 'context' && event.clef) {
-					clef = event.clef;
-					break;
-				}
-			}
-			if (clef) break;
-		}
+	const MUSICAL = new Set(['note', 'rest', 'tuplet', 'times', 'tremolo']);
 
+	// Leading clefs: a clef before a voice's first musical event belongs at the bar start,
+	// on the staff the voice is on at that point.
+	const leadingClefs = new Map<number, Clef>();
+	for (const voice of part.voices) {
+		let staff = voice.staff || 1;
+		for (const event of voice.events) {
+			if (MUSICAL.has(event.type)) break;
+			if (event.type === 'context') {
+				if (event.staff) staff = event.staff;
+				if (event.clef) leadingClefs.set(staff, event.clef);
+			}
+		}
+	}
+	const changedClefs = [...leadingClefs]
+		.filter(([staff, clef]) => isFirst || clefState.get(staff) !== clef)
+		.sort((a, b) => a[0] - b[0])
+		.map(([staff, clef]) => ({ staff, clef }));
+
+	const keyChanged = !!measure.key && JSON.stringify(measure.key) !== JSON.stringify(prevKey);
+	const timeChanged = !!measure.timeSig && JSON.stringify(measure.timeSig) !== JSON.stringify(prevTime);
+
+	// A clef change also changes the part's transposition when its suffix is not a
+	// whole octave (or when it clears one).
+	const transposeClef = changedClefs.map(c => c.clef).find(c => clefTransposeSemitones(c) !== transposeState.semitones);
+	const newTranspose = transposeClef !== undefined ? clefTransposeSemitones(transposeClef) : transposeState.semitones;
+
+	if (isFirst || keyChanged || timeChanged || changedClefs.length > 0) {
 		xml += encodeAttributes(level + 1, {
 			divisions: isFirst,
-			key: measure.key || prevKey,
-			time: measure.timeSig || prevTime,
-			clef: clef,
-			staves: maxStaff > 1 ? maxStaff : undefined,
+			key: isFirst ? measure.key || prevKey : keyChanged ? measure.key : undefined,
+			time: isFirst ? measure.timeSig || prevTime : timeChanged ? measure.timeSig : undefined,
+			clefs: changedClefs,
+			multiStaff: maxStaff > 1,
+			transposeClef: newTranspose !== transposeState.semitones ? transposeClef : undefined,
+			staves: isFirst && maxStaff > 1 ? maxStaff : undefined,
 		});
 	}
+	for (const [staff, clef] of leadingClefs) clefState.set(staff, clef);
+	transposeState.semitones = newTranspose;
+
+	// Each voice starts from the bar-start clefs; a clef after its first note is a
+	// mid-measure change, written inline at that point and in force for the rest of
+	// that voice. The bar-end state is what the last change on each staff leaves.
+	const barStartClefs = new Map(clefState);
 
 	// Encode voices (voice numbering starts at 1 for each part)
 	let voiceNum = 1;
@@ -839,6 +886,10 @@ const encodeMeasure = (
 		let currentStaff = voice.staff || 1;
 		let voicePosition = 0;
 		const lyricCursors = makeLyricCursors(voice.lyrics);
+		// clef in force per staff for THIS voice, from the bar start
+		const voiceClefs = new Map(barStartClefs);
+		const shiftOn = (staff: number): number => clefOctaves(voiceClefs.get(staff));
+		let started = false;
 
 		// Backup if needed
 		if (currentPosition > 0 && voiceNum > 1) {
@@ -862,8 +913,10 @@ const encodeMeasure = (
 					}
 
 					// Encode main note
+					started = true;
+					const noteStaff = event.staff || currentStaff;
 					xml += encodeNote(event, voiceNum, currentStaff, level + 1, false,
-						lyricXmlForNote(lyricCursors, level + 2, event.grace));
+						lyricXmlForNote(lyricCursors, level + 2, event.grace), shiftOn(noteStaff));
 					const dur = calculateDuration(event.duration);
 					voicePosition += dur;
 
@@ -877,12 +930,13 @@ const encodeMeasure = (
 							pitches: [event.pitches[i]],
 							marks: undefined,
 						};
-						xml += encodeNote(chordEvent, voiceNum, currentStaff, level + 1, true);
+						xml += encodeNote(chordEvent, voiceNum, currentStaff, level + 1, true, '', shiftOn(noteStaff));
 					}
 					break;
 				}
 
 				case 'rest': {
+					started = true;
 					xml += encodeRest(event, voiceNum, currentStaff, level + 1);
 					const dur = calculateDuration(event.duration);
 					voicePosition += dur;
@@ -896,12 +950,29 @@ const encodeMeasure = (
 					if (event.staff) {
 						currentStaff = event.staff;
 					}
-					// Other context changes are handled in attributes
+					if (event.clef) {
+						const staff = event.staff || currentStaff;
+						// A clef after this voice's first note is a mid-measure change: state it
+						// here. (A leading one was written in the bar's <attributes>.)
+						if (started && voiceClefs.get(staff) !== event.clef) {
+							const trans = clefTransposeSemitones(event.clef);
+							xml += encodeAttributes(level + 1, {
+								clefs: [{ staff, clef: event.clef }],
+								multiStaff: maxStaff > 1,
+								transposeClef: trans !== transposeState.semitones ? event.clef : undefined,
+							});
+							transposeState.semitones = trans;
+						}
+						voiceClefs.set(staff, event.clef);
+						clefState.set(staff, event.clef);
+					}
+					// Other context changes (key, time) are handled in attributes
 					break;
 				}
 
 				case 'times':
 				case 'tuplet': {
+					started = true;
 					const tupletEvents = event.events.filter(e => e.type === 'note' || e.type === 'rest') as (NoteEvent | RestEvent)[];
 					for (let ti = 0; ti < tupletEvents.length; ti++) {
 						const subEvent = tupletEvents[ti];
@@ -933,11 +1004,11 @@ const encodeMeasure = (
 								const origMarks = subEvent.marks;
 								subEvent.marks = [...(subEvent.marks || []), ...tupletMarks];
 									xml += encodeNote(subEvent, voiceNum, currentStaff, level + 1, false,
-										lyricXmlForNote(lyricCursors, level + 2, subEvent.grace));
+										lyricXmlForNote(lyricCursors, level + 2, subEvent.grace), shiftOn(subEvent.staff || currentStaff));
 								subEvent.marks = origMarks;
 							} else {
 									xml += encodeNote(subEvent, voiceNum, currentStaff, level + 1, false,
-										lyricXmlForNote(lyricCursors, level + 2, subEvent.grace));
+										lyricXmlForNote(lyricCursors, level + 2, subEvent.grace), shiftOn(subEvent.staff || currentStaff));
 							}
 							const dur = calculateDuration(subEvent.duration);
 							voicePosition += dur;
@@ -1175,12 +1246,14 @@ export const encode = (doc: LilyletDoc): string => {
 
 		let prevKey: KeySignature | undefined;
 		let prevTime: Fraction | undefined;
+		const clefState = new Map<number, Clef>();
+		const transposeState = { semitones: 0 };
 
 		for (let i = 0; i < doc.measures.length; i++) {
 			const measure = doc.measures[i];
 			const isFirst = i === 0;
 
-			xml += encodeMeasure(measure, pi, i + 1, isFirst, prevKey, prevTime, 2);
+			xml += encodeMeasure(measure, pi, i + 1, isFirst, prevKey, prevTime, 2, clefState, transposeState);
 
 			if (measure.key) prevKey = measure.key;
 			if (measure.timeSig) prevTime = measure.timeSig;
