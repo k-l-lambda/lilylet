@@ -23,6 +23,7 @@ import {
 	KeySignature,
 	Metadata,
 	Fraction,
+	TimeSig,
 	HairpinType,
 	PedalType,
 	NavigationMarkType,
@@ -178,6 +179,15 @@ class TupletTracker {
 	 * the most-recently-started same-voice tuplet (the innermost): when the inner one
 	 * closes, later events fall back to the still-open outer one.
 	 */
+	/** The most recent event added to this voice's innermost open tuplet. */
+	getLastEvent(voice: number): NoteEvent | RestEvent | undefined {
+		let target: { events: (NoteEvent | RestEvent)[]; voice: number } | undefined;
+		for (const [, tuplet] of this.activeTuplets) {
+			if (tuplet.voice === voice) target = tuplet;
+		}
+		return target?.events[target.events.length - 1];
+	}
+
 	addEvent(event: NoteEvent | RestEvent, voice: number): boolean {
 		if (this.activeTuplets.size === 0) return false;
 
@@ -491,6 +501,21 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 	const pitchEl = noteEl.getElementsByTagName('pitch')[0];
 	if (pitchEl) {
 		pitch = parsePitchRaw(pitchEl);
+	} else {
+		// An <unpitched> hit (percussion) still has a display position. Read it so the
+		// note keeps a staff slot instead of vanishing.
+		const unpitchedEl = noteEl.getElementsByTagName('unpitched')[0];
+		if (unpitchedEl) {
+			const step = getElementText(unpitchedEl, 'display-step');
+			const octave = getElementInt(unpitchedEl, 'display-octave');
+			if (step) {
+				pitch = {
+					step: step.toUpperCase(),
+					alter: getElementInt(unpitchedEl, 'display-alter'),
+					octave: octave !== undefined ? octave - 4 : undefined,
+				};
+			}
+		}
 	}
 
 	// Duration
@@ -628,7 +653,11 @@ const parseAttributes = (attrEl: Element): MusicXmlAttributes => {
 		const beats = getElementInt(timeEl, 'beats');
 		const beatType = getElementInt(timeEl, 'beat-type');
 		if (beats !== undefined && beatType !== undefined) {
-			result.time = { beats, beatType };
+			// symbol="common" is C, symbol="cut" is C|. Carrying it keeps the glyph
+			// instead of forcing a numeric signature.
+			const symbol = timeEl.getAttribute('symbol');
+			const sym = symbol === 'common' || symbol === 'cut' ? symbol : undefined;
+			result.time = sym ? { beats, beatType, symbol: sym } : { beats, beatType };
 		}
 	}
 
@@ -827,6 +856,23 @@ const parseBarline = (barlineEl: Element): MusicXmlBarline => {
  * Parse <harmony> element
  */
 const parseHarmony = (harmonyEl: Element): MusicXmlHarmony | undefined => {
+	// <numeral> instead of <root>: an analysis label (Roman numeral), not a chord
+	// symbol. Read before <root> because a numeral harmony has no root at all.
+	const numeralEl = harmonyEl.getElementsByTagName('numeral')[0];
+	if (numeralEl) {
+		const rootEl = numeralEl.getElementsByTagName('numeral-root')[0];
+		// <numeral-root text="V">5</numeral-root>: the element value is the scale
+		// degree, the `text` attribute the Roman numeral to display.
+		const rootTxt = rootEl?.getAttribute('text') || getElementText(numeralEl, 'numeral-root');
+		const alterEl = numeralEl.getElementsByTagName('numeral-alter')[0];
+		const alterTxt = alterEl?.getAttribute('text') || getElementText(numeralEl, 'numeral-alter');
+		const kind = getElementText(harmonyEl, 'kind') || '';
+		if (rootTxt) {
+			const accidental = alterTxt === '1' || alterTxt === 's' ? '#' : alterTxt === '-1' || alterTxt === 'f' ? 'b' : alterTxt === '0' || alterTxt === 'n' ? 'n' : '';
+			return { numeral: `${accidental}${rootTxt}` + (kind ? convertHarmonyToText('C', undefined, kind).slice(1) : ''), kind };
+		}
+	}
+
 	const rootEl = harmonyEl.getElementsByTagName('root')[0];
 	if (!rootEl) {
 		return undefined;
@@ -1235,7 +1281,7 @@ const directionToMarks = (
 interface MeasureConversionResult {
 	voiceMap: Map<number, { events: Event[]; staff: number; lyrics: Map<number, LyricSyllable[]> }>;
 	key?: KeySignature;
-	timeSig?: Fraction;
+	timeSig?: TimeSig;
 	barline?: BarlineEvent;
 	// A `location="left"` repeat (e.g. forward-repeat `.|:`) belongs at the FRONT
 	// of this measure, but lilylet models a `\bar` as the END bar of its measure.
@@ -1342,7 +1388,7 @@ const convertMeasure = (
 	octaveFold: Map<number, number> = new Map()
 ): MeasureConversionResult => {
 	let key: KeySignature | undefined;
-	let timeSig: Fraction | undefined;
+	let timeSig: TimeSig | undefined;
 	let barline: BarlineEvent | undefined;
 	let leadingBarline: BarlineEvent | undefined;
 	const harmonies: HarmonyEvent[] = [];
@@ -1384,6 +1430,9 @@ const convertMeasure = (
 	// which voice the gap belongs to. Flushed as invisible rests before that note,
 	// or onto currentVoice at a <backup>/measure end (a trailing gap in this voice).
 	let pendingForward = 0;
+	// Set by <backup>, cleared by the next element: a <forward> right after a
+	// <backup> is cursor repositioning, not a gap in the music.
+	let justBackedUp = false;
 	// Pending context changes (tempo, ottava) to insert before next note. Each may
 	// carry a target staff: an ottava (<octave-shift>) start and its stop both name
 	// the same <staff>, but in piano scores the stop direction often follows a
@@ -1392,6 +1441,9 @@ const convertMeasure = (
 	// layer (otherwise the encoder can't pair them and drops the span).
 	const pendingContextChanges: { ctx: ContextChange; staff?: number }[] = [];
 	let currentVoice = 1;  // Track current voice for directions
+	// <harmony> queued for the next note of its voice (see the harmony branch).
+	const pendingHarmonies: { voice: number; staff: number; text: string }[] = [];
+	const currentStaffForVoice: Map<number, number> = new Map();
 	// Mid-measure clef support: a staff can change clef partway through a measure
 	// (common in scale/arpeggio études where the LH crosses up). Such a clef arrives
 	// in an <attributes> block AFTER notes on that staff. We must attach it inline at
@@ -1424,7 +1476,9 @@ const convertMeasure = (
 
 			// Time signature
 			if (attrs.time) {
-				timeSig = createFraction(attrs.time.beats, attrs.time.beatType);
+				timeSig = attrs.time.symbol
+					? { ...createFraction(attrs.time.beats, attrs.time.beatType), symbol: attrs.time.symbol }
+					: createFraction(attrs.time.beats, attrs.time.beatType);
 			}
 
 			// Instrument transposition, in force from here to the end of the part.
@@ -1483,6 +1537,7 @@ const convertMeasure = (
 			const staffNum = note.staff || 1;
 			lyricForNote(note, voiceNum, staffNum);
 			currentVoice = voiceNum;
+			currentStaffForVoice.set(voiceNum, staffNum);
 			// Record that this staff now has notes this measure and which voice is
 			// active on it, so a subsequent mid-measure <clef> attaches inline here.
 			staffHasNotes.add(staffNum);
@@ -1530,7 +1585,22 @@ const convertMeasure = (
 			// for the next real note or the end-of-measure flush. Otherwise a pedal/
 			// hairpin stop that lands just before a rest (common in piano scores:
 			// `<pedal stop/>` followed by rests filling the voice) is silently dropped.
-			const marks: Mark[] = note.isRest ? [] : (pendingMarks.get(voiceNum) || []);
+			// A rest CAN host marks (RestEvent.marks exists for a fermata over a rest,
+			// and text/dynamics on an empty answer bar), so a direction written before
+			// a rest stays on that rest instead of sliding onto the next note.
+			const isSpaceRest = note.isRest && note.duration?.divisions === 0;
+			const marks: Mark[] = (note.isRest && !isSpaceRest) ? [] : (pendingMarks.get(voiceNum) || []);
+			if (note.isRest && !isSpaceRest) {
+				// ...but a pedal/hairpin STOP that lands just before rests in piano LH still
+				// belongs to the next real note, so leave those queued: only the marks that
+				// make sense over silence are consumed here.
+				const queued = pendingMarks.get(voiceNum) || [];
+				const transferable = queued.filter(
+					(m): m is Mark => m.markType === 'markup' || m.markType === 'dynamic' || m.markType === 'ornament',
+				);
+				pendingMarks.set(voiceNum, queued.filter(m => !transferable.includes(m)));
+				marks.push(...transferable);
+			}
 			if (!note.isRest) {
 				pendingMarks.delete(voiceNum);
 				// Drain directions that named this note's staff but had no known voice
@@ -1596,9 +1666,22 @@ const convertMeasure = (
 					}
 				}
 
-				// Handle chord: merge with previous note in same voice
+				// Handle chord: merge with previous note in same voice. Inside a tuplet the
+				// previous note is the tuplet's last event, not the voice's.
 				if (note.isChord) {
-					const lastEvent = voiceTracker.getLastEvent(voiceNum);
+					let lastEvent: Event | undefined = tupletTracker.isActive(voiceNum)
+						? tupletTracker.getLastEvent(voiceNum)
+						: voiceTracker.getLastEvent(voiceNum);
+					// The chord member may arrive after the tuplet bracket closed (the
+					// <tuplet type="stop"> sits on the chord's first note): reach into the
+					// tuplet the voice just ended.
+					if (!lastEvent || lastEvent.type !== 'note') {
+						const tail = voiceTracker.getLastEvent(voiceNum);
+						if (tail && (tail.type === 'tuplet' || tail.type === 'times')) {
+							const inner = (tail as TupletEvent).events;
+							lastEvent = inner[inner.length - 1] as Event | undefined;
+						}
+					}
 					if (lastEvent && lastEvent.type === 'note') {
 						lastEvent.pitches.push(lilyletPitch);
 						// Merge marks
@@ -1669,6 +1752,14 @@ const convertMeasure = (
 					voiceTracker.addEvent(voiceNum, tupletEvent, totalDuration, staffNum);
 				}
 			}
+
+			// A queued <harmony> belongs to this note (`\chords` binds backwards).
+			for (let hi = pendingHarmonies.length - 1; hi >= 0; hi--) {
+				if (pendingHarmonies[hi].voice !== voiceNum) continue;
+				const h = pendingHarmonies[hi];
+				pendingHarmonies.splice(hi, 1);
+				voiceTracker.addEvent(h.voice, { type: 'harmony', text: h.text }, 0, h.staff);
+			}
 		} else if (tagName === 'direction') {
 			const direction = parseDirection(child);
 
@@ -1701,12 +1792,20 @@ const convertMeasure = (
 			// (the common `backup N / forward N` measure-end idiom would otherwise
 			// double the bar). Only note→forward→note gaps become invisible rests.
 			pendingForward = 0;
+			justBackedUp = true;
 			const duration = getElementInt(child, 'duration') || 0;
 			voiceTracker.backup(duration);
 		} else if (tagName === 'forward') {
 			const duration = getElementInt(child, 'duration') || 0;
 			voiceTracker.forward(duration);
-			pendingForward += duration;  // materialised as invisible rests only if a note follows in-voice
+			// A <forward> immediately after a <backup> walks the cursor to another
+			// voice's position (often with a <direction> between them); it opens no
+			// content gap, so it must not become a spacer rest.
+			if (justBackedUp) {
+				justBackedUp = false;
+			} else {
+				pendingForward += duration;  // materialised as invisible rests only if a note follows in-voice
+			}
 		} else if (tagName === 'barline') {
 			const barlineData = parseBarline(child);
 			const style = convertBarlineStyle(barlineData.barStyle, barlineData.repeat?.direction);
@@ -1723,17 +1822,28 @@ const convertMeasure = (
 		} else if (tagName === 'harmony') {
 			const harmonyData = parseHarmony(child);
 			if (harmonyData) {
-				const text = convertHarmonyToText(
-					harmonyData.root.step,
-					harmonyData.root.alter,
-					harmonyData.kind,
-					harmonyData.bass?.step,
-					harmonyData.bass?.alter
-				);
-				harmonies.push({ type: 'harmony', text });
+				const text = harmonyData.numeral
+					? harmonyData.numeral
+					: convertHarmonyToText(
+						harmonyData.root!.step,
+						harmonyData.root!.alter,
+						harmonyData.kind,
+						harmonyData.bass?.step,
+						harmonyData.bass?.alter
+					);
+				// `\chords "…"` binds to the PRECEDING note, and MusicXML puts <harmony>
+				// BEFORE the note it labels. So queue it and emit it right after that
+				// note, rather than after every voice at the end of the measure.
+				pendingHarmonies.push({ voice: currentVoice, staff: currentStaffForVoice.get(currentVoice) || 1, text });
 			}
 		}
 	}
+
+	// Harmonies with no following note still belong to the measure.
+	for (const h of pendingHarmonies) {
+		voiceTracker.addEvent(h.voice, { type: 'harmony', text: h.text }, 0, h.staff);
+	}
+	pendingHarmonies.length = 0;
 
 	// A <forward> at the very end of the measure with no following note is cursor
 	// positioning (e.g. the `backup N / forward N` idiom), not a content gap — drop

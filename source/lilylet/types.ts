@@ -23,6 +23,13 @@ export enum Clef {
 	bass = 'bass',
 	alto = 'alto',
 	tenor = 'tenor',		// C clef on the 4th line
+	// The rest of LilyPond's clef table (scm/parser-clef.scm). The comment gives
+	// the C/F clef line, which is what MEI's clef.line counts.
+	soprano = 'soprano',			// C clef on line 1
+	mezzosoprano = 'mezzosoprano',	// C clef on line 2
+	baritone = 'baritone',			// C clef on line 5
+	varbaritone = 'varbaritone',	// F clef on line 3
+	percussion = 'percussion',		// neutral clef, no pitch
 }
 
 export enum StemDirection {
@@ -49,6 +56,7 @@ export enum OrnamentType {
 	shortFermata = 'shortFermata',
 	arpeggio = 'arpeggio',
 	breath = 'breath',	// breath mark (\breathe) — MusicXML <breath-mark>
+	caesura = 'caesura',	// caesura (railroad tracks) — MEI <caesura>
 }
 
 export enum DynamicType {
@@ -67,6 +75,7 @@ export enum DynamicType {
 	// (sfpp sffz sfzp rf mfp pf). The value is the written name in every format.
 	pppp = 'pppp',
 	ppppp = 'ppppp',
+	fpp = 'fpp',
 	ffff = 'ffff',
 	fffff = 'fffff',
 	sf = 'sf',
@@ -290,6 +299,8 @@ export interface NoteEvent {
 	tremolo?: number;			 // Tremolo division (8, 16, 32, etc.)
 	staff?: number;				 // For cross-staff notation
 	stemDirection?: StemDirection;
+	/** Notehead shape: 'x' (\xNote) or 'slash' (\improvisationOn … Off) → MEI head.shape. */
+	headShape?: 'x' | 'slash';
 }
 
 export interface RestEvent {
@@ -297,6 +308,7 @@ export interface RestEvent {
 	duration: Duration;
 	invisible?: boolean;		// space rest (s)
 	fullMeasure?: boolean;	// full measure rest (R)
+	multiMeasure?: number;	// R1*N: N whole bars of rest, drawn as one multi-measure rest
 	pitch?: Pitch;					// positioned rest (e.g., g'\rest)
 	marks?: Mark[];					// control-event marks a rest can host (e.g. fermata over a rest / grand pause)
 }
@@ -322,12 +334,16 @@ export interface TremoloEvent {
 	pitchB: Pitch[];				// Second note/chord
 	count: number;					// Number of repetitions
 	division: number;			 // Note division (16, 32, etc.)
+	marksA?: Mark[];				// post-events written after the first pitch's duration
+	marksB?: Mark[];				// post-events written after the second pitch's duration
 }
 
 export interface TupletEvent {
 	type: 'tuplet';
 	ratio: Fraction;				// e.g., {numerator: 2, denominator: 3} for triplet
-	events: (NoteEvent | RestEvent | ContextChange)[];
+	// A nested \tuplet is a legal member (LilyPond nests them freely), so a tuplet
+	// may contain a tuplet.
+	events: (NoteEvent | RestEvent | ContextChange | TupletEvent)[];
 }
 
 // TimesEvent: from lilylet \times syntax (distinct from \tuplet decoded from LilyPond)

@@ -69,6 +69,13 @@ const SCOPE_MAP: Record<string, string> = {
 	CMD_REPEAT: "keyword",
 	TREMOLO: "keyword",
 
+	CMD_BREVE: "number",
+	ORN_CAESURA: "ornament",
+	CMD_XNOTE: "keyword",
+	CMD_IMPROV_ON: "keyword",
+	CMD_IMPROV_OFF: "keyword",
+	"*": "number",
+
 	CMD_TIMES: "tuplet",
 	CMD_TUPLET: "tuplet",
 

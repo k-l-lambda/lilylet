@@ -33,6 +33,8 @@ export interface MusicXmlKey {
 export interface MusicXmlTime {
 	beats: number;
 	beatType: number;
+	/** <time symbol="common"> (C) or "cut" (C|); absent for a numeric signature. */
+	symbol?: 'common' | 'cut';
 }
 
 export interface MusicXmlClef {
@@ -179,10 +181,15 @@ export interface MusicXmlBarline {
 // ============ Harmony (Chord Symbols) ============
 
 export interface MusicXmlHarmony {
-	root: {
+	root?: {
 		step: string;           // C, D, E, F, G, A, B
 		alter?: number;
 	};
+	/**
+	 * <numeral> instead of <root>: a Roman-numeral harmony (analysis, not a chord
+	 * symbol). Already carries its own text, e.g. "V" or "ii6".
+	 */
+	numeral?: string;
 	kind: string;               // major, minor, dominant, etc.
 	bass?: {
 		step: string;

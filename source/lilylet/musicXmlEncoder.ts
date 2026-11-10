@@ -94,11 +94,18 @@ const KEY_TO_FIFTHS: Record<string, number> = {
 };
 
 // Clef to MusicXML sign
-const CLEF_TO_SIGN: Record<string, { sign: string; line: number }> = {
+// MusicXML <clef> sign/line per lilylet clef. A percussion clef is <sign>percussion</sign>
+// with no <line>.
+const CLEF_TO_SIGN: Record<string, { sign: string; line?: number }> = {
 	treble: { sign: 'G', line: 2 },
 	bass: { sign: 'F', line: 4 },
 	alto: { sign: 'C', line: 3 },
 	tenor: { sign: 'C', line: 4 },
+	soprano: { sign: 'C', line: 1 },
+	mezzosoprano: { sign: 'C', line: 2 },
+	baritone: { sign: 'C', line: 5 },
+	varbaritone: { sign: 'F', line: 3 },
+	percussion: { sign: 'percussion' },
 };
 
 // Articulation to MusicXML element name
@@ -341,7 +348,8 @@ const encodeAttributes = (
 		const numberAttr = options.multiStaff || staff !== 1 ? ` number="${staff}"` : '';
 		xml += `${indent(level + 1)}<clef${numberAttr}>\n`;
 		xml += `${indent(level + 2)}<sign>${clefInfo.sign}</sign>\n`;
-		xml += `${indent(level + 2)}<line>${clefInfo.line}</line>\n`;
+		if (clefInfo.line !== undefined)
+			xml += `${indent(level + 2)}<line>${clefInfo.line}</line>\n`;
 		// An octave clef: the "8" drawn under or over it, and the notes under it are
 		// written at sounding pitch (see clefOctaves / encodePitch).
 		const octaves = clefOctaves(clef);

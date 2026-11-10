@@ -66,11 +66,19 @@ const KEY_ACCIDENTAL_MAP: Record<string, string> = {
 };
 
 // Clef names
+// Lilylet clef name -> LilyPond clef name. Names LilyPond knows are identical, so
+// the table only records them for the map lookup; every entry is checked against
+// scm/parser-clef.scm (LilyPond 2.22.1).
 const CLEF_MAP: Record<string, string> = {
 	treble: "treble",
 	bass: "bass",
 	alto: "alto",
 	tenor: "tenor",
+	soprano: "soprano",
+	mezzosoprano: "mezzosoprano",
+	baritone: "baritone",
+	varbaritone: "varbaritone",
+	percussion: "percussion",
 };
 
 // Accidental to LilyPond notation

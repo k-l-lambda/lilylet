@@ -18,6 +18,7 @@ import {
 	TimesEvent,
 	TremoloEvent,
 	BarlineEvent,
+	HarmonyEvent,
 	MarkupEvent,
 	DynamicEvent,
 	Pitch,
@@ -147,6 +148,11 @@ const CLEF_MAP: Record<string, string> = {
 	bass: 'bass',
 	alto: 'alto',
 	tenor: 'tenor',
+	soprano: 'soprano',
+	mezzosoprano: 'mezzosoprano',
+	baritone: 'baritone',
+	varbaritone: 'varbaritone',
+	percussion: 'percussion',
 };
 
 
@@ -154,10 +160,10 @@ const CLEF_MAP: Record<string, string> = {
 const ARTICULATION_MAP: Record<string, string> = {
 	staccato: '.',
 	staccatissimo: '!',
-	tenuto: '_',
+	tenuto: '--',
 	marcato: '^',
 	accent: '>',
-	portato: '_.',
+	portato: '-_',
 };
 
 
@@ -250,6 +256,10 @@ const serializePitchRelative = (pitch: Pitch, env: PitchEnv): { str: string; new
 
 // Serialize duration to Lilylet notation
 const serializeDuration = (duration: Duration): string => {
+	// A breve is division 0.5, which the numeric form cannot spell: `0.5` is not a
+	// duration (it parses as `.5`, a dotted nothing). LilyPond spells it `\breve`.
+	if (duration.division === 0.5 && !(duration.dots > 0)) return '\\breve';
+
 	let result = duration.division.toString();
 
 	// Add dots
@@ -280,7 +290,8 @@ const serializeMarks = (marks: Mark[]): string => {
 				const artStr = ARTICULATION_MAP[mark.type];
 				if (artStr) {
 					const prefix = mark.placement === 'above' ? '^' : mark.placement === 'below' ? '_' : '-';
-					parts.push(prefix + artStr);
+					// tenuto (`--`) and portato (`-_`) already carry their leading '-'.
+					parts.push(artStr.startsWith('-') && prefix === '-' ? artStr : prefix + artStr);
 				}
 				break;
 			}
@@ -399,7 +410,7 @@ const serializeRestEvent = (
 	let currentEnv = env;
 	let isPitchedRest = false;
 
-	// Full measure rest
+	// Full measure rest; R1*N keeps the bar count.
 	if (event.fullMeasure) {
 		parts.push('R');
 	}
@@ -423,6 +434,11 @@ const serializeRestEvent = (
 		prevDuration.division !== event.duration.division ||
 		prevDuration.dots !== event.duration.dots) {
 		parts.push(durStr);
+	}
+
+	// R1*N: the bar count, written straight after the duration.
+	if (event.fullMeasure && event.multiMeasure && event.multiMeasure > 1) {
+		parts.push('*' + event.multiMeasure);
 	}
 
 	// \rest mark comes after duration for positioned rests
@@ -584,10 +600,10 @@ const serializeTremoloEvent = (
 	// \repeat tremolo count { noteA noteB }
 	parts.push('\\repeat tremolo ' + event.count + ' {');
 
-	// First pitch/chord
+	// First pitch/chord (its post-events follow the duration)
 	if (event.pitchA.length === 1) {
 		const { str, newEnv } = serializePitchRelative(event.pitchA[0], currentEnv);
-		parts.push(' ' + str + event.division);
+		parts.push(' ' + str + event.division + serializeMarks(event.marksA || []));
 		currentEnv = newEnv;
 	} else {
 		const pitchStrs: string[] = [];
@@ -600,13 +616,13 @@ const serializeTremoloEvent = (
 			pitchStrs.push(str);
 			chordEnv = newEnv;
 		}
-		parts.push(' <' + pitchStrs.join(' ') + '>' + event.division);
+		parts.push(' <' + pitchStrs.join(' ') + '>' + event.division + serializeMarks(event.marksA || []));
 	}
 
 	// Second pitch/chord
 	if (event.pitchB.length === 1) {
 		const { str, newEnv } = serializePitchRelative(event.pitchB[0], currentEnv);
-		parts.push(' ' + str + event.division);
+		parts.push(' ' + str + event.division + serializeMarks(event.marksB || []));
 		currentEnv = newEnv;
 	} else {
 		const pitchStrs: string[] = [];
@@ -619,7 +635,7 @@ const serializeTremoloEvent = (
 			pitchStrs.push(str);
 			chordEnv = newEnv;
 		}
-		parts.push(' <' + pitchStrs.join(' ') + '>' + event.division);
+		parts.push(' <' + pitchStrs.join(' ') + '>' + event.division + serializeMarks(event.marksB || []));
 	}
 
 	parts.push(' }');
@@ -659,6 +675,9 @@ const serializeEvent = (
 			return serializeTremoloEvent(event as TremoloEvent, env);
 		case 'barline':
 			return { str: serializeBarlineEvent(event as BarlineEvent), newEnv: env };
+		case 'harmony':
+			// \chords "…" binds to the PRECEDING note, so it stays where it was parsed.
+			return { str: '\\chords "' + escapeString((event as HarmonyEvent).text) + '"', newEnv: env };
 		case 'markup': {
 			const mk = event as MarkupEvent;
 			const prefix = mk.placement === 'above' ? '^' : mk.placement === 'below' ? '_' : '';
@@ -855,11 +874,46 @@ const serializeVoice = (
 	let statedKey = measureContext && isFirstVoice ? measureContext.key : undefined;
 	let statedTime = measureContext && isFirstVoice ? measureContext.time : undefined;
 
+	// A note or rest may carry a time-modification ratio without sitting inside a
+	// TupletEvent — that is how MusicXML's <time-modification> without a
+	// <tuplet> bracket arrives. Written back as a bare duration the ratio is lost
+	// and the bar reads short, so a run of events sharing one ratio is wrapped in
+	// \times num/den { … }.
+	let openTuplet: { numerator: number; denominator: number; end: number } | null = null;
+	const tupletRatioOf = (e: Event): { numerator: number; denominator: number } | undefined =>
+		(e.type === 'note' || e.type === 'rest')
+			? (e as NoteEvent | RestEvent).duration.tuplet
+			: undefined;
+	const runEnd = (start: number, ratio: { numerator: number; denominator: number }): number => {
+		let k = start + 1;
+		while (k < voice.events.length) {
+			const r = tupletRatioOf(voice.events[k]);
+			if (!r || r.numerator !== ratio.numerator || r.denominator !== ratio.denominator) break;
+			k++;
+		}
+		return k - 1;
+	};
+
 	for (let eventIdx = 0; eventIdx < voice.events.length; eventIdx++) {
 		const event = voice.events[eventIdx];
 		// Skip leading context-staff events already absorbed into effectiveInitialStaff
 		if (eventIdx < leadStaffScanEnd && event.type === 'context' && (event as ContextChange).staff != null) {
 			continue;
+		}
+
+		// Close a \times group that has ended, and open one where a run starts.
+		if (openTuplet && eventIdx > openTuplet.end) {
+			parts.push('}');
+			openTuplet = null;
+		}
+		const ratio = tupletRatioOf(event);
+		if (ratio) {
+			const running = openTuplet && openTuplet.numerator === ratio.numerator && openTuplet.denominator === ratio.denominator;
+			if (!running) {
+				if (openTuplet) parts.push('}');
+				parts.push(`\\times ${ratio.numerator}/${ratio.denominator} {`);
+				openTuplet = { ...ratio, end: runEnd(eventIdx, ratio) };
+			}
 		}
 		if (event.type === 'context') {
 			const ctx = event as ContextChange;
@@ -974,6 +1028,10 @@ const serializeVoice = (
 	// Close a grace group left open at the end of the voice (unusual but possible).
 	if (graceGroupOpen) {
 		parts.push('}');
+	}
+	if (openTuplet) {
+		parts.push('}');
+		openTuplet = null;
 	}
 
 	// \addlyrics lanes are scoped to this voice; emit them inside the voice so

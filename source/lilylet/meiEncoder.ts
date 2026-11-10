@@ -77,11 +77,18 @@ const keyToFifths = (key?: { pitch: string; accidental?: Accidental; mode: strin
 };
 
 
-const CLEF_SHAPES: Record<string, { shape: string; line: number }> = {
+const CLEF_SHAPES: Record<string, { shape: string; line?: number }> = {
 	treble: { shape: "G", line: 2 },
 	bass: { shape: "F", line: 4 },
 	alto: { shape: "C", line: 3 },
 	tenor: { shape: "C", line: 4 },
+	// The rest of LilyPond's clef table (scm/parser-clef.scm).
+	soprano: { shape: "C", line: 1 },
+	mezzosoprano: { shape: "C", line: 2 },
+	baritone: { shape: "C", line: 5 },
+	varbaritone: { shape: "F", line: 3 },
+	// A percussion clef has no line: MEI writes clef.shape="perc" alone.
+	percussion: { shape: "perc" },
 	// Also support uppercase letter clef names
 	G: { shape: "G", line: 2 },
 	F: { shape: "F", line: 4 },
@@ -106,7 +113,8 @@ const CLEF_DIS: Record<number, string> = { 1: "8", 2: "15", 3: "22" };
 
 interface ResolvedClef {
 	shape: string;
-	line: number;
+	/** undefined for a shape that carries no line, i.e. the percussion clef. */
+	line?: number;
 	/** Octave-displacement glyph (clef.dis / clef.dis.place), whole-octave suffixes only. */
 	dis?: { dis: string; place: 'above' | 'below'; octaves: number };
 	/** Written→sounding transposition, for suffixes clef.dis cannot express. */
@@ -163,7 +171,8 @@ const clefOctaveShift = (clefStr: string | undefined): number =>
 // is emitted here alongside shape/line.
 const clefElementAttrs = (clefStr: string): string => {
 	const c = resolveClef(clefStr);
-	let attrs = `shape="${c.shape}" line="${c.line}"`;
+	// A percussion clef has no line (clef.line is meaningless there).
+	let attrs = c.line === undefined ? `shape="${c.shape}"` : `shape="${c.shape}" line="${c.line}"`;
 	if (c.dis) attrs += ` dis="${c.dis.dis}" dis.place="${c.dis.place}"`;
 	return attrs;
 };
@@ -183,7 +192,9 @@ const clefTransOf = (clefStr: string): { diat: number; semi: number } => {
 // declared transposition.
 const staffDefClefAttrs = (clefStr: string): string => {
 	const c = resolveClef(clefStr);
-	let attrs = `clef.shape="${c.shape}" clef.line="${c.line}"`;
+	let attrs = c.line === undefined
+		? `clef.shape="${c.shape}"`
+		: `clef.shape="${c.shape}" clef.line="${c.line}"`;
 	if (c.dis) attrs += ` clef.dis="${c.dis.dis}" clef.dis.place="${c.dis.place}"`;
 	if (c.trans) attrs += ` trans.diat="${c.trans.diat}" trans.semi="${c.trans.semi}"`;
 	return attrs;
@@ -194,6 +205,7 @@ const staffDefClefAttrs = (clefStr: string): string => {
 // Lilylet duration division to MEI dur
 // division: 1=whole, 2=half, 4=quarter, 8=eighth, etc.
 const DURATIONS: Record<number, string> = {
+	0.5: "breve",	// breve (double whole note), LilyPond \breve
 	1: "1",      // whole
 	2: "2",      // half
 	4: "4",      // quarter
@@ -321,15 +333,21 @@ const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 
 		if (pitch.courtesy) {
 			// Courtesy accidental (!) - always display
 			accid = noteAccid;
+		} else if (prevMeasureAccid === noteAccid) {
+			// Already shown earlier in this measure - do not draw it again
+			// (LilyPond prints one flat for `bes a bes`).
 		} else if (prevMeasureAccid !== undefined && noteAccid !== prevMeasureAccid) {
-			// Previous note in this measure had a different accidental - must re-assert
+			// Something else sounded at this pitch earlier in the measure, so this
+			// accidental has to be re-asserted even when the key already implies it
+			// (`\key g \major f4 f4 f!4 fs4` — the last fs needs its sharp).
 			accid = noteAccid;
 		} else if (noteAccid !== keyAccid) {
-			// Accidental differs from key signature - display it
+			// Accidental differs from the key signature - display it.
 			accid = noteAccid;
 		}
-		// Always set gestural accidental for MIDI generation
-		accidGes = noteAccid;
+		// Always set gestural accidental for MIDI generation. The gestural value set
+		// spells a double sharp 'ss' — 'x' is a written-only value Verovio rejects.
+		accidGes = noteAccid === 'x' ? 'ss' : noteAccid;
 		// Record this accidental for in-measure tracking
 		if (measureAccidentals) measureAccidentals.set(pitchKey, noteAccid);
 	} else if (keyAccid) {
@@ -342,6 +360,11 @@ const encodePitch = (pitch: Pitch, keyFifths: number = 0, ottavaShift: number = 
 		} else {
 			accid = 'n';
 		}
+		accidGes = 'n';
+		if (measureAccidentals) measureAccidentals.set(pitchKey, 'n');
+	} else if (pitch.courtesy) {
+		// `a!` with nothing else to say: force the natural sign.
+		accid = 'n';
 		accidGes = 'n';
 		if (measureAccidentals) measureAccidentals.set(pitchKey, 'n');
 	} else if (pitch.courtesy && prevMeasureAccid && prevMeasureAccid !== 'n') {
@@ -434,6 +457,8 @@ const buildNoteElement = (
 		artics?: { type: string; placement?: 'above' | 'below' }[];
 			tremolo?: number;
 			lyricXml?: string;
+		headShape?: 'x' | 'slash';
+		staffOffset?: number;
 	} = {},
 	noteId?: string
 ): string => {
@@ -451,12 +476,15 @@ const buildNoteElement = (
 	if (!inChord && options.tie) attrs += ` tie="${options.tie}"`;
 	if (!inChord && options.stemDir) attrs += ` stem.dir="${options.stemDir}"`;
 	if (!inChord && options.layerStaff && options.staff && options.staff !== options.layerStaff) {
-		attrs += ` staff="${options.staff}"`;
+		attrs += ` staff="${options.staff + (options.staffOffset || 0)}"`;
 	}
 	if (!inChord && options.tremolo) {
 		const stemMod = tremoloToStemMod(options.tremolo);
 		if (stemMod) attrs += ` stem.mod="${stemMod}"`;
 	}
+	// x / slash noteheads (\xNote, \improvisationOn) are an attribute of every note
+	// of the chord, so this is emitted whether or not the note sits in one.
+	if (options.headShape) attrs += ` head.shape="${options.headShape}"`;
 
 	const hasChildren = !inChord && ((options.artics && options.artics.length > 0) || !!options.lyricXml);
 
@@ -505,14 +533,17 @@ const extractMarkOptions = (marks?: Mark[]): {
 	beamEnd: boolean;
 	dynamic?: string;
 	dynamics: string[];  // all dynamics on this event (a note may carry several, e.g. fp written as two marks)
+	dynamicPlacement?: 'above' | 'below';
 	hairpin?: string;
 	pedal?: string;
 	pedals?: ('up' | 'down')[];
 	tremolo?: number;
 	fingerings: { finger: number; placement?: 'above' | 'below' }[];
 	navigation?: 'coda' | 'segno';
+	navigationPlacement?: 'above' | 'below';
 	markups: { content: string; placement?: 'above' | 'below' }[];
 	breath: boolean;
+	caesura: boolean;
 	glissando: boolean;
 } => {
 	const result = {
@@ -529,14 +560,17 @@ const extractMarkOptions = (marks?: Mark[]): {
 		beamEnd: false,
 		dynamic: undefined as string | undefined,
 		dynamics: [] as string[],
+		dynamicPlacement: undefined as 'above' | 'below' | undefined,
 		hairpin: undefined as string | undefined,
 		pedal: undefined as string | undefined,
 		pedals: [] as ('up' | 'down')[],
 		tremolo: undefined as number | undefined,
 		fingerings: [] as { finger: number; placement?: 'above' | 'below' }[],
 		navigation: undefined as 'coda' | 'segno' | undefined,
+		navigationPlacement: undefined as 'above' | 'below' | undefined,
 		markups: [] as { content: string; placement?: 'above' | 'below' }[],
 		breath: false,
+		caesura: false,
 		glissando: false,
 	};
 
@@ -571,6 +605,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 					result.mordent = 'upper';
 				} else if (mark.type === OrnamentType.breath) {
 					result.breath = true;
+				} else if (mark.type === OrnamentType.caesura) {
+					result.caesura = true;
 				}
 				break;
 			case 'dynamic': {
@@ -578,6 +614,8 @@ const extractMarkOptions = (marks?: Mark[]): {
 				if (dynStr) {
 					result.dynamic = dynStr;  // kept for back-compat (first dynamic)
 					result.dynamics.push(dynStr);
+					const p = (mark as { placement?: 'above' | 'below' }).placement;
+					if (p) result.dynamicPlacement = p;
 				}
 				break;
 			}
@@ -629,6 +667,7 @@ const extractMarkOptions = (marks?: Mark[]): {
 				break;
 			case 'navigation':
 				result.navigation = (mark as { type: 'coda' | 'segno' }).type;
+				result.navigationPlacement = (mark as { placement?: 'above' | 'below' }).placement ?? 'above';
 				break;
 			case 'markup':
 				result.markups.push({
@@ -667,12 +706,15 @@ interface NoteEventResult {
 	turn: boolean;
 	dynamic?: string;  // dynamic marking (p, pp, f, ff, etc.) — first one (back-compat)
 	dynamics: string[];  // all dynamics on this event
+	dynamicPlacement?: 'above' | 'below';
 	slurStart: boolean;  // For tracking slur spans
 	slurEnd: boolean;    // For tracking slur spans
 	fingerings: { finger: number; placement?: 'above' | 'below' }[];
 	navigation?: 'coda' | 'segno';
+	navigationPlacement?: 'above' | 'below';
 	markups: { content: string; placement?: 'above' | 'below' }[];
 	breath: boolean;
+	caesura: boolean;
 	glissando: boolean;
 }
 
@@ -687,7 +729,9 @@ const noteEventToMEI = (
 	ottavaShift: number = 0,
 	measureAccidentals?: Map<string, string>,
 	lyricXml: string = '',
-	clefOctave: number = 0
+	clefOctave: number = 0,
+	tieStartPitches?: Pitch[],
+	staffOffset: number = 0
 ): NoteEventResult => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const dots = event.duration.dots || 0;
@@ -718,11 +762,30 @@ const noteEventToMEI = (
 		layerStaff,
 		artics: markOptions.artics,
 		tremolo: markOptions.tremolo,
+		headShape: event.headShape,
+		staffOffset,
+	};
+
+	// A tie continuation normally does not reprint the accidental: the sign was shown
+	// where the tie started. But `b~ bf` is not a real tie (the sounding pitch moves),
+	// and the tie detector compares only step+octave, so the suppression must also
+	// require the accidental to agree with the tie-start note.
+	const suppressTieAccid = <T extends { accid?: string }>(p: T, index: number): T => {
+		if (!tieEnd || !p.accid) return p;
+		const start = tieStartPitches?.[index];
+		const startAccid = start?.accidental ? ACCIDENTALS[start.accidental] : undefined;
+		if (startAccid === undefined) return p;   // tie start carried no accidental change
+		const ges = p.accid === 'x' ? 'ss' : p.accid;
+		const startGes = startAccid === 'x' ? 'ss' : startAccid;
+		if (startGes !== ges) return p;           // the accidental genuinely changed
+		const copy = { ...p };
+		delete copy.accid;
+		return copy;
 	};
 
 	// Single note
 	if (event.pitches.length === 1) {
-		const pitch = encodePitch(event.pitches[0], keyFifths, ottavaShift, measureAccidentals, clefOctave);
+		const pitch = suppressTieAccid(encodePitch(event.pitches[0], keyFifths, ottavaShift, measureAccidentals, clefOctave), 0);
 		const noteId = generateId('note');
 		return {
 			xml: buildNoteElement(pitch, dur, dots, indent, false, { ...noteOptions, lyricXml }, noteId),
@@ -743,8 +806,11 @@ const noteEventToMEI = (
 			slurEnd: markOptions.slurEnd,
 			fingerings: markOptions.fingerings,
 			navigation: markOptions.navigation,
+			navigationPlacement: markOptions.navigationPlacement,
+			dynamicPlacement: markOptions.dynamicPlacement,
 			markups: markOptions.markups,
 			breath: markOptions.breath,
+			caesura: markOptions.caesura,
 			glissando: markOptions.glissando,
 		};
 	}
@@ -757,7 +823,7 @@ const noteEventToMEI = (
 	if (noteOptions.tie) chordAttrs += ` tie="${noteOptions.tie}"`;
 	if (noteOptions.stemDir) chordAttrs += ` stem.dir="${noteOptions.stemDir}"`;
 	if (layerStaff && noteOptions.staff && noteOptions.staff !== layerStaff) {
-		chordAttrs += ` staff="${noteOptions.staff}"`;
+		chordAttrs += ` staff="${noteOptions.staff + (noteOptions.staffOffset || 0)}"`;
 	}
 	if (noteOptions.tremolo) {
 		const stemMod = tremoloToStemMod(noteOptions.tremolo);
@@ -766,9 +832,9 @@ const noteEventToMEI = (
 
 	let result = `${indent}<chord ${chordAttrs}>\n`;
 
-	for (const p of event.pitches) {
-		const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals, clefOctave);
-		result += buildNoteElement(pitch, dur, dots, indent + '    ', true);
+	for (let pi = 0; pi < event.pitches.length; pi++) {
+		const pitch = suppressTieAccid(encodePitch(event.pitches[pi], keyFifths, ottavaShift, measureAccidentals, clefOctave), pi);
+		result += buildNoteElement(pitch, dur, dots, indent + '    ', true, { headShape: noteOptions.headShape });
 	}
 
 	// Artics for chord - group by placement
@@ -809,15 +875,18 @@ const noteEventToMEI = (
 		slurEnd: markOptions.slurEnd,
 		fingerings: markOptions.fingerings,
 		navigation: markOptions.navigation,
+		navigationPlacement: markOptions.navigationPlacement,
+		dynamicPlacement: markOptions.dynamicPlacement,
 		markups: markOptions.markups,
 		breath: markOptions.breath,
+		caesura: markOptions.caesura,
 		glissando: markOptions.glissando,
 	};
 };
 
 
 // Convert RestEvent to MEI
-const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, crossStaff?: number, clefOctave: number = 0): { xml: string; elementId: string; fermata?: 'normal' | 'short' } => {
+const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, crossStaff?: number, clefOctave: number = 0): { xml: string; elementId: string; fermata?: 'normal' | 'short'; markups: { content: string; placement?: 'above' | 'below' }[]; dynamics: DynamRef[] } => {
 	const dur = DURATIONS[event.duration.division] || "4";
 	const restId = generateId('rest');
 	let attrs = `xml:id="${restId}" dur="${dur}"`;
@@ -826,12 +895,23 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0,
 	// Cross-staff attribute
 	if (crossStaff) attrs += ` staff="${crossStaff}"`;
 
-	// A rest may carry a fermata (held silence). Surface it so the layer loop can
-	// emit a <fermata> control event referencing this rest's id.
+	// A rest may carry marks. A fermata is the oldest case (held silence); text
+	// directions (`r1^\markup "B:"`) and dynamics (`r1\p`) come off the same list.
 	let fermata: 'normal' | 'short' | undefined;
+	const restMarkups: { content: string; placement?: 'above' | 'below' }[] = [];
+	const restDynamics: DynamRef[] = [];
 	if (event.marks) {
 		for (const mk of event.marks) {
 			if (mk.markType === 'ornament' && (mk as { type?: string }).type === 'fermata') fermata = 'normal';
+			else if (mk.markType === 'markup') {
+				restMarkups.push({
+					content: (mk as { content: string }).content,
+					placement: (mk as { placement?: 'above' | 'below' }).placement,
+				});
+			} else if (mk.markType === 'dynamic') {
+				const label = DYNAMIC_MAP[mk.type];
+				if (label) restDynamics.push({ startid: restId, label, placement: (mk as { placement?: 'above' | 'below' }).placement });
+			}
 		}
 	}
 
@@ -843,16 +923,18 @@ const restEventToMEI = (event: RestEvent, indent: string, keyFifths: number = 0,
 
 	// Space rest (invisible)
 	if (event.invisible) {
-		return { xml: `${indent}<space ${attrs} />\n`, elementId: restId, fermata };
+		return { xml: `${indent}<space ${attrs} />\n`, elementId: restId, fermata, markups: restMarkups, dynamics: restDynamics };
 	}
 
-	// Full measure rest
+	// Full measure rest. R1*N is one multi-measure rest spanning N bars.
 	if (event.fullMeasure) {
 		const mRestId = generateId('mrest');
-		return { xml: `${indent}<mRest xml:id="${mRestId}" />\n`, elementId: mRestId, fermata };
+		if (event.multiMeasure && event.multiMeasure > 1)
+			return { xml: `${indent}<multiRest xml:id="${mRestId}" num="${event.multiMeasure}" />\n`, elementId: mRestId, fermata, markups: restMarkups, dynamics: restDynamics };
+		return { xml: `${indent}<mRest xml:id="${mRestId}" />\n`, elementId: mRestId, fermata, markups: restMarkups, dynamics: restDynamics };
 	}
 
-	return { xml: `${indent}<rest ${attrs} />\n`, elementId: restId, fermata };
+	return { xml: `${indent}<rest ${attrs} />\n`, elementId: restId, fermata, markups: restMarkups, dynamics: restDynamics };
 };
 
 
@@ -872,6 +954,10 @@ interface TupletEventResult {
 	pedals: PedalMark[];  // pedal marks on notes inside the tuplet (independent events)
 	fingerings: FingerRef[];  // fingering marks on notes inside the tuplet
 	markups: MarkupRef[];  // text directions (markup) on notes inside the tuplet
+	slurActions: { id: string; start: boolean }[];  // slur starts/ends in document order
+	pendingTieOut: Pitch[];  // pitches of a tie left open by the tuplet's last note
+	hairpinStarts: { id: string; form: 'cres' | 'dim' }[];  // hairpin starts inside the tuplet
+	hairpinEnds: string[];  // hairpin stops inside the tuplet
 	endingClef?: string;  // Updated clef name if changed inside the tuplet
 }
 
@@ -890,8 +976,17 @@ const tupletHasInternalBeams = (event: TupletEvent): boolean => {
 	return starts > 0 && starts === ends;
 };
 
+// Same test as the layer loop's local pitchesMatch: identical (phonet, octave) pairs.
+const tupletPitchesMatch = (p1: Pitch[], p2: Pitch[]): boolean => {
+	if (p1.length !== p2.length) return false;
+	for (let i = 0; i < p1.length; i++) {
+		if (p1[i].phonet !== p2[i].phonet || p1[i].octave !== p2[i].octave) return false;
+	}
+	return true;
+};
+
 // Convert TupletEvent to MEI
-const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false, measureAccidentals?: Map<string, string>, currentClef?: string, lyricCursors: LyricCursor[] = []): TupletEventResult => {
+const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: number, keyFifths: number = 0, currentStaff?: number, ottavaShift: number = 0, inParentBeam: boolean = false, measureAccidentals?: Map<string, string>, currentClef?: string, lyricCursors: LyricCursor[] = [], contextStemDir?: StemDirection, initialTiePitches: Pitch[] = []): TupletEventResult => {
 	// LilyPond \times 2/3 means "multiply duration by 2/3"
 	// So 3 notes × 2/3 = 2 beats worth (3 in time of 2)
 	// MEI: num = number of notes written, numbase = normal equivalent
@@ -902,14 +997,18 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 
 	const baseIndent = indent + '    ';
 
-	// Effective staff for cross-staff notation
-	const effectiveStaff = currentStaff ?? layerStaff;
+	// Effective staff for cross-staff notation. Mutable: a `\staff "N"` inside the
+	// tuplet moves the notes after it.
+	let effectiveStaff = currentStaff ?? layerStaff;
 
 	// Collect control event info from notes inside tuplet
 	let firstNoteId: string | null = null;
 	let lastNoteId: string | null = null;  // last note/rest id — anchors an ottava span end
 	const slurStarts: string[] = [];
 	const slurEnds: string[] = [];
+	// Slur actions in document order: a slur that both opens and closes inside the
+	// tuplet must pair with itself, not with an outer span.
+	const slurActions: { id: string; start: boolean }[] = [];
 	const dynamics: DynamRef[] = [];
 	const fermatas: FermataRef[] = [];
 	const trills: TrillRef[] = [];
@@ -919,12 +1018,20 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	const pedals: PedalMark[] = [];
 	const fingerings: FingerRef[] = [];
 	const markups: MarkupRef[] = [];
+	// Spans whose start/stop lives on an inner note (a slur is handled through
+	// slurStarts/slurEnds above; a hairpin needs its own pairs).
+	const hairpinStarts: { id: string; form: 'cres' | 'dim' }[] = [];
+	const hairpinEnds: string[] = [];
 
 	// Handle internal beam groups: if notes have manual beam marks, respect them
 	const hasInternalBeams = !inParentBeam && tupletHasInternalBeams(event);
 	let beamOpen = false;
 	let activeClef = currentClef;
 	let endingClef: string | undefined;
+	// A tie may open before the tuplet and close on its first note, or open on its
+	// last note and close after it. Both directions need carrying.
+	let pendingTieIn: Pitch[] = [...initialTiePitches];
+	let pendingTieOut: Pitch[] = [];
 
 	for (const e of event.events) {
 		if (e.type === 'note') {
@@ -944,18 +1051,27 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 				? { ...noteEvent, staff: effectiveStaff }
 				: noteEvent;
 			const lyricXml = lyricCursors.length ? lyricXmlForEvent(lyricCursors, noteIndent + '    ') : '';
-				const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, false, undefined, keyFifths, ottavaShift, measureAccidentals, lyricXml, clefOctaveShift(activeClef));
+				const carryTieEnd = pendingTieIn.length > 0 && tupletPitchesMatch(pendingTieIn, noteEvent.pitches);
+				const result = noteEventToMEI(effectiveNoteEvent, noteIndent, layerStaff, carryTieEnd, contextStemDir, keyFifths, ottavaShift, measureAccidentals, lyricXml, clefOctaveShift(activeClef), carryTieEnd ? pendingTieIn : undefined);
+				if (carryTieEnd) pendingTieIn = [];
 			xml += result.xml;
 
 			if (!firstNoteId) firstNoteId = result.elementId;
 			lastNoteId = result.elementId;
 
+			// Track an open tie so it can close on a note after the tuplet.
+			if (result.hasTieStart) pendingTieOut = result.pitches;
+			else if (carryTieEnd) pendingTieOut = [];
+
 			// Collect slur info
 			if (result.slurStart) slurStarts.push(result.elementId);
 			if (result.slurEnd) slurEnds.push(result.elementId);
+			// End first: a note may close one slur and open the next.
+			if (result.slurEnd) slurActions.push({ id: result.elementId, start: false });
+			if (result.slurStart) slurActions.push({ id: result.elementId, start: true });
 
 			// Collect other control events
-			if (result.dynamics) for (const label of result.dynamics) dynamics.push({ startid: result.elementId, label });
+			if (result.dynamics) for (const label of result.dynamics) dynamics.push({ startid: result.elementId, label, placement: result.dynamicPlacement });
 			if (result.fermata) fermatas.push({ startid: result.elementId, shape: result.fermata === 'short' ? 'angular' : undefined });
 			if (result.trill) trills.push({ startid: result.elementId });
 			if (result.mordent) mordents.push({ startid: result.elementId, form: result.mordent === 'upper' ? 'upper' : undefined });
@@ -970,6 +1086,11 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			for (const mkup of result.markups)
 				markups.push({ startid: result.elementId, content: mkup.content, placement: mkup.placement });
 
+			// Hairpin spans: `\<` / `\>` open one, `\!` closes it.
+			if (markOptions.hairpin === 'crescStart') hairpinStarts.push({ id: result.elementId, form: 'cres' });
+			else if (markOptions.hairpin === 'dimStart') hairpinStarts.push({ id: result.elementId, form: 'dim' });
+			else if (markOptions.hairpin === 'crescEnd' || markOptions.hairpin === 'dimEnd') hairpinEnds.push(result.elementId);
+
 			// Close beam if this note ends a beam group
 			if (hasInternalBeams && markOptions.beamEnd && beamOpen) {
 				xml += `${baseIndent}</beam>\n`;
@@ -981,8 +1102,37 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 			xml += restResult.xml;
 			lastNoteId = restResult.elementId;
 			if (restResult.fermata) fermatas.push({ startid: restResult.elementId, shape: restResult.fermata === 'short' ? 'angular' : undefined });
+			for (const mkup of restResult.markups) markups.push({ startid: restResult.elementId, content: mkup.content, placement: mkup.placement });
+			dynamics.push(...restResult.dynamics);
+		} else if (e.type === 'tuplet') {
+			// Nested tuplet: recurse, and lift its control events into this tuplet so
+			// slurs/hairpins/dynamics inside it still reach the layer.
+			const nestedIndent = beamOpen ? baseIndent + '    ' : baseIndent;
+			const nested = tupletEventToMEI(e as TupletEvent, nestedIndent, layerStaff, keyFifths, effectiveStaff, ottavaShift, inParentBeam, measureAccidentals, activeClef, [], contextStemDir, pendingTieIn);
+			xml += nested.xml;
+			if (!firstNoteId) firstNoteId = nested.firstNoteId;
+			lastNoteId = nested.lastNoteId ?? lastNoteId;
+			pendingTieIn = [];
+			if (nested.pendingTieOut.length) pendingTieOut = nested.pendingTieOut;
+			slurStarts.push(...nested.slurStarts);
+			slurEnds.push(...nested.slurEnds);
+			slurActions.push(...nested.slurActions);
+			dynamics.push(...nested.dynamics);
+			fermatas.push(...nested.fermatas);
+			trills.push(...nested.trills);
+			mordents.push(...nested.mordents);
+			turns.push(...nested.turns);
+			arpeggios.push(...nested.arpeggios);
+			pedals.push(...nested.pedals);
+			fingerings.push(...nested.fingerings);
+			markups.push(...nested.markups);
+			hairpinStarts.push(...nested.hairpinStarts);
+			hairpinEnds.push(...nested.hairpinEnds);
+			if (nested.endingClef) { activeClef = nested.endingClef; endingClef = nested.endingClef; }
 		} else if (e.type === 'context') {
 			const ctx = e as ContextChange;
+			// A staff switch inside the tuplet applies to the notes that follow it.
+			if (ctx.staff !== undefined && ctx.staff !== effectiveStaff) effectiveStaff = ctx.staff;
 			if (ctx.clef && ctx.clef !== activeClef) {
 				const layerStaffNum = layerStaff || 1;
 				const effectiveStaffNum = effectiveStaff ?? layerStaffNum;
@@ -1002,7 +1152,7 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 	}
 
 	xml += `${indent}</tuplet>\n`;
-	return { xml, firstNoteId, lastNoteId, slurStarts, slurEnds, dynamics, fermatas, trills, mordents, turns, arpeggios, pedals, fingerings, markups, endingClef };
+	return { xml, firstNoteId, lastNoteId, pendingTieOut, slurStarts, slurEnds, slurActions, dynamics, fermatas, trills, mordents, turns, arpeggios, pedals, fingerings, markups, hairpinStarts, hairpinEnds, endingClef };
 };
 
 
@@ -1112,6 +1262,10 @@ interface BreathRef {
 	startid: string;   // the note the breath follows
 }
 
+interface CaesuraRef {
+	startid: string;   // the note the caesura follows
+}
+
 interface GlissRef {
 	startid: string;
 	endid: string;
@@ -1129,6 +1283,7 @@ interface TurnRef {
 interface DynamRef {
 	startid: string;
 	label: string;  // p, pp, ppp, f, ff, fff, mf, mp, sfz, rfz
+	placement?: 'above' | 'below';  // ^ (above) / _ (below); unset = Verovio's default
 }
 
 interface FingerRef {
@@ -1139,6 +1294,8 @@ interface FingerRef {
 
 interface NavigationRef {
 	type: 'coda' | 'segno';
+	placement?: 'above' | 'below';
+	staff?: number;
 }
 
 interface HarmonyRef {
@@ -1164,7 +1321,7 @@ interface SlurSpan {
 
 // Tie state for cross-measure ties - maps staff:layer to pending pitches
 type TieState = Record<string, Pitch[]>;
-type SlurState = Record<string, string[]>;  // voice key -> open slur startIds (stack, oldest first)
+type SlurState = Record<string, { startId: string; token?: string }[]>;  // voice key -> open slurs (stack, oldest first); token = placeholder end id already emitted
 type GlissState = Record<string, string | null>;  // voice key -> pending glissando start id (awaiting next-measure target)
 type HairpinState = Record<string, { form: 'cres' | 'dim'; startId: string } | null>;  // voice key -> pending hairpin
 
@@ -1192,6 +1349,7 @@ interface LayerResult {
 	fermatas: FermataRef[];
 	trills: TrillRef[];
 	breaths: BreathRef[];
+	caesuras: CaesuraRef[];
 	glissandos: GlissRef[];
 	mordents: MordentRef[];
 	turns: TurnRef[];
@@ -1201,8 +1359,9 @@ interface LayerResult {
 	harmonies: HarmonyRef[];
 	barlines: BarlineRef[];
 	markups: MarkupRef[];
+	slurEndReplacements: Record<string, string>;  // placeholder -> real end id, for slurs starting earlier
 	pendingTiePitches: Pitch[];  // For cross-measure tie tracking
-	pendingSlur: string[];  // For cross-measure slur tracking (all open slur startIds)
+	pendingSlur: { startId: string; token?: string }[];  // open slurs carried into the next measure
 	pendingGliss: string | null;  // For cross-measure glissando (start note awaiting its target in the next measure)
 	pendingHairpin: { form: 'cres' | 'dim'; startId: string } | null;  // For cross-measure hairpin tracking
 	pendingOctave: PendingOctave | null;  // For cross-measure ottava span tracking
@@ -1242,7 +1401,7 @@ const getEventBeamMarks = (event: NoteEvent | RestEvent | TupletEvent | TimesEve
 };
 
 // Encode a layer (voice)
-const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlurs: string[] = [], initialHairpin: { form: 'cres' | 'dim'; startId: string } | null = null, initialOctave: PendingOctave | null = null, initialGliss: string | null = null): LayerResult => {
+const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePitches: Pitch[] = [], keyFifths: number = 0, initialClef?: Clef, initialSlurs: { startId: string; token?: string }[] = [], initialHairpin: { form: 'cres' | 'dim'; startId: string } | null = null, initialOctave: PendingOctave | null = null, initialGliss: string | null = null, staffOffset: number = 0): LayerResult => {
 	const layerId = generateId("layer");
 	let xml = `${indent}<layer xml:id="${layerId}" n="${layerN}">\n`;
 
@@ -1315,8 +1474,11 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	// most-recent open slur (LIFO), matching the hairpin fix. `currentSlur` is kept
 	// as a view of the stack top for the existing cross-measure carry plumbing.
 	const slurs: SlurSpan[] = [];
-	const openSlurs: { startId: string }[] = initialSlurs.map(startId => ({ startId }));
-	let currentSlur: { startId: string } | null = openSlurs.length ? openSlurs[openSlurs.length - 1] : null;
+	// Slur ends resolved in a LATER measure: the span is emitted where it starts,
+	// with a placeholder end id that is filled in once the closing note exists.
+	const slurEndReplacements: Record<string, string> = {};
+	const openSlurs: { startId: string; token?: string }[] = initialSlurs.map(s => ({ ...s }));
+	let currentSlur: { startId: string; token?: string } | null = openSlurs.length ? openSlurs[openSlurs.length - 1] : null;
 
 	// Track arpeggio refs
 	const arpeggios: ArpegRef[] = [];
@@ -1325,6 +1487,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 	const fermatas: FermataRef[] = [];
 	const trills: TrillRef[] = [];
 	const breaths: BreathRef[] = [];
+	const caesuras: CaesuraRef[] = [];
 	// Glissando: a note-to-note slide. Record the start note id and close it on the
 	// NEXT encoded note (endid), mirroring slur start→end pairing. A trailing
 	// glissando with no following note in the layer is dropped (no target).
@@ -1427,7 +1590,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					: noteEvent;
 
 				const eventLyricXml = isGraceNote ? '' : lyricXmlForEvent(lyricCursors, currentIndent + '    ');
-			const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift, measureAccidentals, eventLyricXml, clefOctaveShift(currentClef));
+			const result = noteEventToMEI(effectiveNoteEvent, currentIndent, voice.staff, tieEnd, currentStemDirection, keyFifths, currentOttavaShift, measureAccidentals, eventLyricXml, clefOctaveShift(currentClef), tieEnd ? pendingTiePitches : undefined, staffOffset);
 				xml += result.xml;
 				lastNoteId = result.elementId;
 				extendOttavaEnd(result.elementId);
@@ -1480,16 +1643,23 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 
 				// Track slur spans - end must be processed before start
 				// in case a note ends one slur and starts another.
-				// Pair an end to the most-recent open slur (LIFO).
+				// Pair an end to the most-recent open slur (LIFO). An end in a LATER
+				// measure resolves a placeholder emitted where the slur started.
 				if (result.slurEnd && openSlurs.length > 0) {
 					const open = openSlurs.pop()!;
-					slurs.push({
-						startId: open.startId,
-						endId: result.elementId,
-					});
+					if (open.token) {
+						// Already emitted in its start measure: fill in the end id.
+						slurEndReplacements[open.token] = result.elementId;
+					} else {
+						slurs.push({ startId: open.startId, endId: result.elementId });
+					}
 				}
 				if (result.slurStart) {
-					openSlurs.push({ startId: result.elementId });
+					// Emit the span here, in its start measure, with a placeholder end
+					// that the closing note fills in (possibly in a later measure).
+					const token = `__SLUR_END_${generateId('slurEnd')}__`;
+					openSlurs.push({ startId: result.elementId, token });
+					slurs.push({ startId: result.elementId, endId: token });
 				}
 				currentSlur = openSlurs.length ? openSlurs[openSlurs.length - 1] : null;
 
@@ -1512,6 +1682,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				if (result.breath) {
 					breaths.push({ startid: result.elementId });
 				}
+				if (result.caesura) {
+					caesuras.push({ startid: result.elementId });
+				}
 				// Glissando: close a pending start onto this note, then open a new one
 				// if this note itself carries a glissando.
 				if (pendingGlissStart) {
@@ -1531,7 +1704,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					turns.push({ startid: result.elementId });
 				}
 				if (result.dynamics) {
-					for (const label of result.dynamics) dynamics.push({ startid: result.elementId, label });
+					for (const label of result.dynamics) dynamics.push({ startid: result.elementId, label, placement: result.dynamicPlacement });
 				}
 				// Track fingerings
 				for (const fing of result.fingerings) {
@@ -1543,7 +1716,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				}
 				// Track navigation marks
 				if (result.navigation) {
-					navigations.push({ type: result.navigation });
+					navigations.push({ type: result.navigation, placement: result.navigationPlacement, staff: voice.staff || 1 });
 				}
 				break;
 			}
@@ -1561,6 +1734,9 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				applyOttavaAnchor(restResult.elementId);
 				// Fermata over a rest (held silence) — emit as a control event on the rest.
 				if (restResult.fermata) fermatas.push({ startid: restResult.elementId, shape: restResult.fermata === 'short' ? 'angular' : undefined });
+				// Marks written on the rest itself (`r1^\markup "B:"`, `r1\p`).
+				for (const mkup of restResult.markups) markups.push({ startid: restResult.elementId, content: mkup.content, placement: mkup.placement });
+				dynamics.push(...restResult.dynamics);
 				// A leading dynamic/markup attaches to the next event, which may be this rest
 				flushPendingMarkups(restResult.elementId);
 				flushPendingDynamics(restResult.elementId);
@@ -1572,7 +1748,7 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 				// Pass beamElementOpen to tuplet so it knows not to create its own beam
 				// A pending ottava shift applies to the tuplet's notes' written octave.
 				applyPendingOttavaShift();
-				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen, measureAccidentals, currentClef, lyricCursors);
+				const tupletResult = tupletEventToMEI(event as TupletEvent, currentIndent, voice.staff, keyFifths, currentStaff, currentOttavaShift, beamElementOpen, measureAccidentals, currentClef, lyricCursors, currentStemDirection, pendingTiePitches);
 				xml += tupletResult.xml;
 
 				// An ottava span can open on, run through, or close at a tuplet (common
@@ -1594,22 +1770,34 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 					lastNoteId = tupletResult.lastNoteId ?? tupletResult.firstNoteId;
 				}
 
-				// Process slur ends first (to close open slurs, LIFO), then starts.
-				for (const endId of tupletResult.slurEnds) {
-					if (openSlurs.length > 0) {
+				// Replay the tuplet's slur starts/ends in document order so a slur wholly
+				// inside the tuplet pairs with itself.
+				for (const act of tupletResult.slurActions) {
+					if (act.start) {
+						openSlurs.push({ startId: act.id });
+					} else if (openSlurs.length > 0) {
 						const open = openSlurs.pop()!;
-						slurs.push({
-							startId: open.startId,
-							endId: endId,
-						});
+						slurs.push({ startId: open.startId, endId: act.id });
 					}
 				}
-
-				// Then process slur starts (to open new slurs)
-				for (const startId of tupletResult.slurStarts) {
-					openSlurs.push({ startId });
-				}
 				currentSlur = openSlurs.length ? openSlurs[openSlurs.length - 1] : null;
+
+				// Hairpins wholly inside the tuplet: pair ends with the most recent
+				// same-form start; force-close anything still open onto the tuplet's
+				// last note so the span is not lost.
+				for (const endId of tupletResult.hairpinEnds) {
+					// Pair with the most recent open hairpin of ANY form: the inner stop
+					// has no form of its own.
+					const pick = openHairpins.length - 1;
+					if (pick >= 0) {
+						const open = openHairpins.splice(pick, 1)[0];
+						hairpins.push({ form: open.form, startId: open.startId, endId });
+					}
+				}
+				for (const hs of tupletResult.hairpinStarts) openHairpins.push({ form: hs.form, startId: hs.id });
+
+				// A tie opened on the tuplet's last note continues after it.
+				pendingTiePitches = tupletResult.pendingTieOut;
 
 				// Collect other control events from tuplet
 				dynamics.push(...tupletResult.dynamics);
@@ -1791,13 +1979,18 @@ const encodeLayer = (voice: Voice, layerN: number, indent: string, initialTiePit
 		}
 	}
 
+	// A slur that opened in an earlier measure is emitted THERE, but its end is only
+	// known now: emit it here against a placeholder token that the score-level pass
+	// substitutes. (Verovio warns "slur … is not encoded in the measure of its start"
+	// when it is emitted at the closing measure instead.)
 	xml += `${indent}</layer>\n`;
-	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, breaths, glissandos, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: openSlurs.map(s => s.startId), pendingGliss: pendingGlissStart, pendingHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift, octaveEndReplacements };
+	return { xml, hairpins, pedals, octaves, slurs, arpeggios, fermatas, trills, breaths, caesuras, glissandos, mordents, turns, dynamics, fingerings, navigations, harmonies, barlines, markups, pendingTiePitches, pendingSlur: openSlurs.map(s => ({ startId: s.startId, token: s.token })), slurEndReplacements, pendingGliss: pendingGlissStart, pendingHairpin, pendingOctave, ottavaExplicitlyClosed, endingClef: currentClef, lastNoteId, currentOttavaShift, octaveEndReplacements };
 };
 
 // Staff result type
 interface StaffResult {
 	xml: string;
+	slurEndReplacements: Record<string, string>;
 	hairpins: HairpinSpan[];
 	pedals: PedalMark[];
 	octaves: OctaveSpan[];
@@ -1806,6 +1999,7 @@ interface StaffResult {
 	fermatas: FermataRef[];
 	trills: TrillRef[];
 	breaths: BreathRef[];
+	caesuras: CaesuraRef[];
 	glissandos: GlissRef[];
 	mordents: MordentRef[];
 	turns: TurnRef[];
@@ -1827,7 +2021,7 @@ interface StaffResult {
 }
 
 // Encode a staff
-const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, slurState: SlurState = {}, hairpinState: HairpinState = {}, ottavaState: OttavaState = {}, keyFifths: number = 0, initialClef?: Clef, glissState: GlissState = {}): StaffResult => {
+const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: TieState = {}, slurState: SlurState = {}, hairpinState: HairpinState = {}, ottavaState: OttavaState = {}, keyFifths: number = 0, initialClef?: Clef, glissState: GlissState = {}, staffOffset: number = 0): StaffResult => {
 	const staffId = generateId("staff");
 	let xml = `${indent}<staff xml:id="${staffId}" n="${staffN}">\n`;
 	const allHairpins: HairpinSpan[] = [];
@@ -1838,6 +2032,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const allFermatas: FermataRef[] = [];
 	const allTrills: TrillRef[] = [];
 	const allBreaths: BreathRef[] = [];
+	const allCaesuras: CaesuraRef[] = [];
 	const allGlissandos: GlissRef[] = [];
 	const allMordents: MordentRef[] = [];
 	const allTurns: TurnRef[] = [];
@@ -1855,6 +2050,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	const ottavaExplicitlyClosed: Record<string, boolean> = {};
 	const lastNoteIds: Record<string, string | null> = {};
 	const octaveEndReplacements: Record<string, string> = {};
+	const slurEndReplacements: Record<string, string> = {};
 	let endingClef: Clef | undefined = initialClef;
 
 	if (voices.length === 0) {
@@ -1868,7 +2064,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			const initialHairpin = hairpinState[tieKey] || null;
 			const initialOctave = ottavaState[tieKey] || null;
 			const initialGliss = glissState[tieKey] || null;
-			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef, initialSlur, initialHairpin, initialOctave, initialGliss);
+			const result = encodeLayer(voice, layerN, indent + '    ', initialTies, keyFifths, endingClef, initialSlur, initialHairpin, initialOctave, initialGliss, staffOffset);
 			xml += result.xml;
 			allHairpins.push(...result.hairpins);
 			allPedals.push(...result.pedals);
@@ -1878,6 +2074,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			allFermatas.push(...result.fermatas);
 			allTrills.push(...result.trills);
 			allBreaths.push(...result.breaths);
+			allCaesuras.push(...result.caesuras);
 			allGlissandos.push(...result.glissandos);
 			allMordents.push(...result.mordents);
 			allTurns.push(...result.turns);
@@ -1888,6 +2085,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			allBarlines.push(...result.barlines);
 			allMarkups.push(...result.markups);
 			Object.assign(octaveEndReplacements, result.octaveEndReplacements);
+			Object.assign(slurEndReplacements, result.slurEndReplacements);
 			// Track pending ties for this layer
 			if (result.pendingTiePitches.length > 0) {
 				pendingTies[tieKey] = result.pendingTiePitches;
@@ -1897,10 +2095,10 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 			// clears the carried stack rather than leaving a stale open slur.
 			pendingSlurs[tieKey] = result.pendingSlur;
 			pendingGlisses[tieKey] = result.pendingGliss;
-			// Track pending hairpins for this layer
-			if (result.pendingHairpin) {
-				pendingHairpins[tieKey] = result.pendingHairpin;
-			}
+			// Track pending hairpins for this layer. ALWAYS record, even when nothing is
+			// left open: skipping the empty case left the previous measure's span in the
+			// carry, so the next `\<` resumed from a stale start instead of its own.
+			pendingHairpins[tieKey] = result.pendingHairpin;
 			// Track pending ottava spans for this layer
 			if (result.pendingOctave) {
 				pendingOctaves[tieKey] = result.pendingOctave;
@@ -1921,6 +2119,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 	xml += `${indent}</staff>\n`;
 	return {
 		xml,
+		slurEndReplacements,
 		hairpins: allHairpins,
 		pedals: allPedals,
 		octaves: allOctaves,
@@ -1929,6 +2128,7 @@ const encodeStaff = (voices: Voice[], staffN: number, indent: string, tieState: 
 		fermatas: allFermatas,
 		trills: allTrills,
 		breaths: allBreaths,
+		caesuras: allCaesuras,
 		glissandos: allGlissandos,
 		mordents: allMordents,
 		turns: allTurns,
@@ -2064,7 +2264,7 @@ const BARLINE_TO_MEI: Record<string, string> = {
 
 // Encode a measure
 // encodeMeasure accepts mutable tieState, slurState, hairpinState, ottavaState and clefState that persist across measures
-const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}, measureIds?: string[], glissState: GlissState = {}, barHidden: boolean = false, meterUnit: number = 4): string => {
+const encodeMeasure = (measure: Measure, measureN: number, indent: string, totalStaves: number, tieState: TieState, slurState: SlurState, hairpinState: HairpinState, ottavaState: OttavaState, keyFifths: number = 0, partInfos: PartInfo[] = [], clefState: ClefState = {}, octaveEndReplacements: Record<string, string> = {}, measureIds?: string[], glissState: GlissState = {}, barHidden: boolean = false, meterUnit: number = 4, slurEndReplacements: Record<string, string> = {}): string => {
 	const measureId = generateId("measure");
 	if (measureIds) measureIds.push(measureId);
 	let staffContent = '';  // Build staff content first, then add measure tag with barline
@@ -2076,6 +2276,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	const allFermatas: FermataRef[] = [];
 	const allTrills: TrillRef[] = [];
 	const allBreaths: BreathRef[] = [];
+	const allCaesuras: CaesuraRef[] = [];
 	const allGlissandos: GlissRef[] = [];
 	const allMordents: MordentRef[] = [];
 	const allTurns: TurnRef[] = [];
@@ -2109,12 +2310,14 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 
 	// Group voices by global staff (local staff + part offset)
 	const voicesByStaff: Record<number, Voice[]> = {};
+	const staffOffsets: Record<number, number> = {};
 	for (let pi = 0; pi < measure.parts.length; pi++) {
 		const part = measure.parts[pi];
 		const partOffset = partInfos[pi]?.staffOffset || 0;
 		for (const voice of part.voices) {
 			const localStaff = voice.staff || 1;
 			const globalStaff = partOffset + localStaff;
+			staffOffsets[globalStaff] = partOffset;
 			if (!voicesByStaff[globalStaff]) {
 				voicesByStaff[globalStaff] = [];
 			}
@@ -2126,7 +2329,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 	for (let si = 1; si <= totalStaves; si++) {
 		const voices = voicesByStaff[si] || [];
 		const initialClef = clefState[si];
-		const result = encodeStaff(voices, si, indent + '    ', tieState, slurState, hairpinState, ottavaState, keyFifths, initialClef, glissState);
+		const result = encodeStaff(voices, si, indent + '    ', tieState, slurState, hairpinState, ottavaState, keyFifths, initialClef, glissState, staffOffsets[si] || 0);
 		staffContent += result.xml;
 		allHairpins.push(...result.hairpins);
 		allPedals.push(...result.pedals);
@@ -2136,6 +2339,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		allFermatas.push(...result.fermatas);
 		allTrills.push(...result.trills);
 		allBreaths.push(...result.breaths);
+		allCaesuras.push(...result.caesuras);
 		allGlissandos.push(...result.glissandos);
 		allMordents.push(...result.mordents);
 		allTurns.push(...result.turns);
@@ -2146,6 +2350,7 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		allBarlines.push(...result.barlines);
 		allMarkups.push(...result.markups);
 		Object.assign(octaveEndReplacements, result.octaveEndReplacements);
+		Object.assign(slurEndReplacements, result.slurEndReplacements);
 		// Update tie state with pending ties from this staff
 		Object.assign(tieState, result.pendingTies);
 		// Update slur state with pending slurs from this staff
@@ -2237,6 +2442,11 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 		staffContent += `${indent}    <breath xml:id="${generateId('breath')}" startid="#${br.startid}" />\n`;
 	}
 
+	// Caesura (railroad tracks), same shape as a breath mark
+	for (const ca of allCaesuras) {
+		staffContent += `${indent}    <caesura xml:id="${generateId('caesura')}" startid="#${ca.startid}" />\n`;
+	}
+
 	// Generate glissando spans (note-to-note slide)
 	for (const gl of allGlissandos) {
 		staffContent += `${indent}    <gliss xml:id="${generateId('gliss')}" startid="#${gl.startid}" endid="#${gl.endid}" />\n`;
@@ -2255,7 +2465,8 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 
 	// Generate dynamic control events
 	for (const dyn of allDynamics) {
-		staffContent += `${indent}    <dynam xml:id="${generateId('dynam')}" startid="#${dyn.startid}">${dyn.label}</dynam>\n`;
+		const placeAttr = dyn.placement ? ` place="${dyn.placement}"` : '';
+		staffContent += `${indent}    <dynam xml:id="${generateId('dynam')}" startid="#${dyn.startid}"${placeAttr}>${dyn.label}</dynam>\n`;
 	}
 
 	// Generate fingering control events
@@ -2266,9 +2477,13 @@ const encodeMeasure = (measure: Measure, measureN: number, indent: string, total
 
 	// Generate dir elements for navigation marks (coda, segno)
 	for (const nav of allNavigations) {
-		// Use <dir> element with appropriate glyph
+		// A <dir> with the SMuFL glyph. Verovio 6.2.0 ignores <repeatMark> entirely
+		// ("Element <repeatMark> is unknown and will be ignored"), so this stays a <dir>;
+		// place and staff are what put it over the right staff.
 		const glyph = nav.type === 'coda' ? '𝄌' : '𝄋';  // Unicode coda/segno symbols
-		staffContent += `${indent}    <dir xml:id="${generateId('dir')}" tstamp="1">${glyph}</dir>\n`;
+		const placeAttr = nav.placement ? ` place="${nav.placement}"` : '';
+		const staffAttr = nav.staff ? ` staff="${nav.staff}"` : '';
+		staffContent += `${indent}    <dir xml:id="${generateId('dir')}" tstamp="1"${placeAttr}${staffAttr}>${glyph}</dir>\n`;
 	}
 
 	// Generate harm elements for chord symbols
@@ -2515,7 +2730,8 @@ const encodeScoreDef = (
 	meterSymbol?: 'common' | 'cut',
 	stavesCode?: string,
 	instruments: { [key: string]: InstrumentName } = {},
-	meterHidden: boolean = false
+	meterHidden: boolean = false,
+	staffKeys: Record<number, number> = {}
 ): string => {
 	const scoreDefId = generateId("scoredef");
 
@@ -2544,7 +2760,8 @@ const encodeScoreDef = (
 		const layout = parseStaffLayout(stavesCode);
 		if (layout.stavesCount === flatStaves.length) {
 			const staffDefAttrs = flatStaves.map(
-				s => `xml:id="${generateId('staffdef')}" n="${s.n}" lines="5" ${staffDefClefAttrs(s.clef)}`
+				s => `xml:id="${generateId('staffdef')}" n="${s.n}" lines="5" ${staffDefClefAttrs(s.clef)}` +
+					(staffKeys[s.n] !== undefined ? ` key.sig="${KEY_SIGS[staffKeys[s.n]] || '0'}"` : '')
 			);
 			xml += layoutGroupToMEI(layout.group, staffDefAttrs, { i: 0 }, `${indent}    `, instruments, channels);
 			layoutUsed = true;
@@ -2570,7 +2787,8 @@ const encodeScoreDef = (
 					const globalStaff = info.staffOffset + ls;
 					const clef = info.clefs[ls] || Clef.treble;
 					const leafInstr = instruments[`${globalStaff}`];
-					const attrs = `xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)}`;
+					const attrs = `xml:id="${generateId('staffdef')}" n="${globalStaff}" lines="5" ${staffDefClefAttrs(clef)}` +
+					(staffKeys[globalStaff] !== undefined ? ` key.sig="${KEY_SIGS[staffKeys[globalStaff]] || '0'}"` : '');
 					xml += staffDefWithLabel(attrs, leafInstr, `${indent}            `, channels);
 				}
 				xml += `${indent}        </staffGrp>\n`;
@@ -2947,6 +3165,34 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		currentMeterSymbol = firstMeasure.timeSig.symbol;
 	}
 
+	// Each voice may state its own \key (a transposing instrument, or bitonal writing).
+	// The scoreDef carries the FIRST voice's key; every staff that declares a different
+	// one gets its own key.sig on its <staffDef>, which is what Verovio reads per staff.
+	// (The measure-level key is the parser's last-wins, so it cannot serve as the base.)
+	const voiceKeys: { staff: number; fifths: number }[] = [];
+	{
+		const offsets: number[] = [];
+		let running = 0;
+		for (const info of partInfos) { offsets.push(running); running += info.maxStaff; }
+		firstMeasure.parts.forEach((part, pi) => {
+			for (const voice of part.voices) {
+				const keyEv = voice.events.find(
+					(e): e is ContextChange => e.type === 'context' && !!(e as ContextChange).key,
+				);
+				if (!keyEv) continue;
+				voiceKeys.push({
+					staff: (offsets[pi] ?? 0) + (voice.staff || 1),
+					fifths: keyToFifths((keyEv as ContextChange).key),
+				});
+			}
+		});
+	}
+	if (voiceKeys.length > 0) currentKey = voiceKeys[0].fifths;
+	const staffKeys: Record<number, number> = {};
+	for (const vk of voiceKeys) {
+		if (vk.fifths !== currentKey) staffKeys[vk.staff] = vk.fifths;
+	}
+
 	const keySig = KEY_SIGS[currentKey] || "0";
 
 	// Apply auto-beam if needed (before encoding so beam marks are picked up by encodeLayer)
@@ -3005,7 +3251,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += `${indent}${indent}${indent}<mdiv xml:id="${generateId("mdiv")}">\n`;
 	mei += `${indent}${indent}${indent}${indent}<score xml:id="${generateId("score")}">\n`;
 	const omitStates = computeOmitStates(doc.measures);
-	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol, doc.metadata?.staves, doc.metadata?.instruments, omitStates.meterHidden[0]);
+	mei += encodeScoreDef(keySig, currentTimeNum, currentTimeDen, partInfos, `${indent}${indent}${indent}${indent}${indent}`, currentMeterSymbol, doc.metadata?.staves, doc.metadata?.instruments, omitStates.meterHidden[0], staffKeys);
 	mei += `${indent}${indent}${indent}${indent}${indent}<section xml:id="${generateId("section")}">\n`;
 	// Splice point for an <expansion> element (must be the FIRST child of
 	// <section>, but its plist needs the measure ids collected during the loop
@@ -3089,6 +3335,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	// Track ottava state across measures for cross-measure ottava spans
 	const ottavaState: OttavaState = {};
 	const octaveEndReplacements: Record<string, string> = {};
+	const slurEndReplacements: Record<string, string> = {};
 
 	// Initialize clef state from partInfos (convert local staff to global staff)
 	const clefState: ClefState = {};
@@ -3174,7 +3421,7 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 		const openTag = segOpenAt.get(mIndex);
 		if (openTag) mei += openTag;
 		const measureIndent = segDecomp ? `${mIndent}${indent}` : mIndent;
-		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds, glissState, omitStates.barHidden[mi], currentTimeDen);
+		mei += encodeMeasure(measure, mIndex, measureIndent, totalStaves, tieState, slurState, hairpinState, ottavaState, currentKey, partInfos, clefState, octaveEndReplacements, measureIds, glissState, omitStates.barHidden[mi], currentTimeDen, slurEndReplacements);
 		const closeTag = segCloseAt.get(mIndex);
 		if (closeTag) mei += closeTag;
 	});
@@ -3226,6 +3473,11 @@ const encode = (doc: LilyletDoc, options: MEIEncoderOptions = {}): string => {
 	mei += '</mei>\n';
 
 	for (const [token, endId] of Object.entries(octaveEndReplacements)) {
+		mei = mei.replaceAll(token, endId);
+	}
+	// Slur spans emitted at their start measure: fill in the end id now that the
+	// closing note exists.
+	for (const [token, endId] of Object.entries(slurEndReplacements)) {
 		mei = mei.replaceAll(token, endId);
 	}
 

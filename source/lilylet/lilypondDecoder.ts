@@ -78,6 +78,14 @@ const LILYPOND_CLEF_MAP: Record<string, Clef> = {
 	alto: Clef.alto,
 	C: Clef.alto,
 	tenor: Clef.tenor,
+	soprano: Clef.soprano,
+	mezzosoprano: Clef.mezzosoprano,
+	baritone: Clef.baritone,
+	varbaritone: Clef.varbaritone,
+	baritonevarC: Clef.baritone,	// the same C5 clef under its variant name
+	baritonevarF: Clef.varbaritone,	// F3, also spelled baritonevarF
+	percussion: Clef.percussion,
+	varpercussion: Clef.percussion,
 };
 
 

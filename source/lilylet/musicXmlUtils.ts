@@ -345,11 +345,20 @@ export const convertClef = (sign: string, line?: number): Clef | undefined => {
 	if (upperSign === 'G') {
 		return Clef.treble;
 	} else if (upperSign === 'F') {
-		return Clef.bass;
+		// F clef: line 4 is bass, line 3 the baritone (varbaritone) F clef.
+		return Number(line) === 3 ? Clef.varbaritone : Clef.bass;
 	} else if (upperSign === 'C') {
-		// C clef: tenor on line 4, alto on line 3. Other lines (soprano, mezzo,
-		// baritone) are not modelled yet and fall back to alto.
-		return Number(line) === 4 ? Clef.tenor : Clef.alto;
+		// C clef: line 1 soprano, 2 mezzosoprano, 3 alto, 4 tenor, 5 baritone.
+		switch (Number(line)) {
+			case 1: return Clef.soprano;
+			case 2: return Clef.mezzosoprano;
+			case 4: return Clef.tenor;
+			case 5: return Clef.baritone;
+			default: return Clef.alto;
+		}
+	} else if (upperSign === 'PERCUSSION') {
+		// The neutral clef needs no line.
+		return Clef.percussion;
 	}
 
 	console.warn(`Unknown clef: sign=${sign}, line=${line}`);

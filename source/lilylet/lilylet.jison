@@ -15,6 +15,11 @@
 	});
 
 	const noteEvent = (pitches, dur, marks, options = {}) => {
+		if (currentHeadShape !== undefined && options.headShape === undefined) {
+			options = { ...options, headShape: currentHeadShape };
+			// \xNote affects only the note that follows it; \improvisationOn persists.
+			if (xNotePending) { currentHeadShape = undefined; xNotePending = false; }
+		}
 		// Check if this is a pitched rest (e.g., g'\rest)
 		const pitchedRestMark = marks && marks.find(m => m && m.pitchedRest);
 		if (pitchedRestMark) {
@@ -153,12 +158,14 @@
 		events,
 	});
 
-	const tremoloEvent = (pitchA, pitchB, count, division) => ({
+	const tremoloEvent = (pitchA, pitchB, count, division, marksA, marksB) => ({
 		type: 'tremolo',
 		pitchA,
 		pitchB,
 		count,
 		division,
+		...(marksA && marksA.length ? { marksA } : {}),
+		...(marksB && marksB.length ? { marksB } : {}),
 	});
 
 	// Articulation/mark helpers - all marks have markType for discrimination
@@ -237,6 +244,12 @@
 	let currentDuration = { division: 4, dots: 0 }; // default quarter note
 	let numericTimeSignature = false; // When true, 4/4 and 2/2 use numeric display instead of C/C|
 	let currentOttava = 0; // Current ottava level, resets on newline
+	// Notehead shape set by \xNote / \improvisationOn, cleared by \improvisationOff.
+	// \xNote applies to the immediately following note only (LilyPond semantics).
+	let currentHeadShape = undefined;
+	let xNotePending = false;
+	// The hairpin last opened (\\< or \\>), so `\!` can close the right one.
+	let lastHairpin = undefined;
 
 	// \partial warnings accumulated during parse; reset before each parse
 	let parseWarnings = [];
@@ -339,14 +352,14 @@
 "\\major"						return 'MODE_MAJOR'
 "\\minor"						return 'MODE_MINOR'
 
-"\\sustainOn"					return 'CMD_SUSTAINON'
-"\\sustainOff"					return 'CMD_SUSTAINOFF'
+\\sustainOn(?![a-zA-Z])					return 'CMD_SUSTAINON'
+\\sustainOff(?![a-zA-Z])					return 'CMD_SUSTAINOFF'
 
-"\\bar"							return 'CMD_BAR'
-"\\coda"						return 'CMD_CODA'
-"\\segno"						return 'CMD_SEGNO'
-"\\chords"						return 'CMD_CHORDS'
-"\\markup"						return 'CMD_MARKUP'
+\\bar(?![a-zA-Z])							return 'CMD_BAR'
+\\coda(?![a-zA-Z])						return 'CMD_CODA'
+\\segno(?![a-zA-Z])						return 'CMD_SEGNO'
+\\chords(?![a-zA-Z])						return 'CMD_CHORDS'
+\\markup(?![a-zA-Z])						return 'CMD_MARKUP'
 "\\addlyrics"					{ this.pushState('lyric'); return 'CMD_ADDLYRICS'; }
 "^\\figures"					{ this.pushState('figures'); return 'CMD_FIGURES_ABOVE'; }
 "_\\figures"					{ this.pushState('figures'); return 'CMD_FIGURES_BELOW'; }
@@ -356,38 +369,44 @@
 "\\>"							return 'CMD_DIM_BEGIN'
 "\\!"							return 'CMD_DYNAMICS_END'
 
-"\\staccato"					return 'ART_STACCATO'
-"\\staccatissimo"				return 'ART_STACCATISSIMO'
-"\\tenuto"						return 'ART_TENUTO'
-"\\marcato"						return 'ART_MARCATO'
-"\\accent"						return 'ART_ACCENT'
-"\\portato"						return 'ART_PORTATO'
+\\staccato(?![a-zA-Z])					return 'ART_STACCATO'
+\\staccatissimo(?![a-zA-Z])				return 'ART_STACCATISSIMO'
+\\tenuto(?![a-zA-Z])						return 'ART_TENUTO'
+\\marcato(?![a-zA-Z])						return 'ART_MARCATO'
+\\accent(?![a-zA-Z])						return 'ART_ACCENT'
+\\portato(?![a-zA-Z])						return 'ART_PORTATO'
 
-"\\trill"						return 'ORN_TRILL'
-"\\turn"						return 'ORN_TURN'
-"\\mordent"						return 'ORN_MORDENT'
-"\\prall"						return 'ORN_PRALL'
-"\\fermata"						return 'ORN_FERMATA'
-"\\shortfermata"				return 'ORN_SHORTFERMATA'
-"\\arpeggio"					return 'ORN_ARPEGGIO'
-"\\breathe"						return 'ORN_BREATHE'
-"\\glissando"					return 'CMD_GLISSANDO'
+\\trill(?![a-zA-Z])						return 'ORN_TRILL'
+\\turn(?![a-zA-Z])						return 'ORN_TURN'
+\\mordent(?![a-zA-Z])						return 'ORN_MORDENT'
+\\prall(?![a-zA-Z])						return 'ORN_PRALL'
+\\fermata(?![a-zA-Z])						return 'ORN_FERMATA'
+\\shortfermata(?![a-zA-Z])				return 'ORN_SHORTFERMATA'
+\\arpeggio(?![a-zA-Z])					return 'ORN_ARPEGGIO'
+\\breathe(?![a-zA-Z])						return 'ORN_BREATHE'
+\\caesura(?![a-zA-Z])						return 'ORN_CAESURA'
+"\\xNote"						return 'CMD_XNOTE'
+"\\improvisationOn"				return 'CMD_IMPROV_ON'
+"\\improvisationOff"				return 'CMD_IMPROV_OFF'
+\\glissando(?![a-zA-Z])					return 'CMD_GLISSANDO'
+\\breve(?![a-zA-Z])						return 'CMD_BREVE'
 
-\\(?:fffff|ppppp|ffff|pppp|sffz|sfpp|sfzp|mfp|sff|sfp|spp|fz|pf|rf|sf|sp|n)(?![a-zA-Z])	return 'DYN_OTHER'
-"\\ppp"							return 'DYN_PPP'
-"\\pp"							return 'DYN_PP'
-"\\mp"							return 'DYN_MP'
-"\\mf"							return 'DYN_MF'
-"\\fff"							return 'DYN_FFF'
-"\\ff"							return 'DYN_FF'
-"\\sfz"							return 'DYN_SFZ'
-"\\rfz"							return 'DYN_RFZ'
-"\\sf"							return 'DYN_SF'
-"\\fp"							return 'DYN_FP'
-"\\p"							return 'DYN_P'
-"\\f"							return 'DYN_F'
+\\(?:fffff|ppppp|fpp|ffff|pppp|sffz|sfpp|sfzp|mfp|sff|sfp|spp|fz|pf|rf|sf|sp|n)(?![a-zA-Z])	return 'DYN_OTHER'
+\\ppp(?![a-zA-Z])							return 'DYN_PPP'
+\\pp(?![a-zA-Z])							return 'DYN_PP'
+\\mp(?![a-zA-Z])							return 'DYN_MP'
+\\mf(?![a-zA-Z])							return 'DYN_MF'
+\\fff(?![a-zA-Z])							return 'DYN_FFF'
+\\ff(?![a-zA-Z])							return 'DYN_FF'
+\\sfz(?![a-zA-Z])							return 'DYN_SFZ'
+\\rfz(?![a-zA-Z])							return 'DYN_RFZ'
+\\sf(?![a-zA-Z])							return 'DYN_SF'
+\\fp(?![a-zA-Z])							return 'DYN_FP'
+\\p(?![a-zA-Z])							return 'DYN_P'
+\\f(?![a-zA-Z])							return 'DYN_F'
 
 "\\rest"						return 'CMD_REST'
+"*"								return '*'
 
 "\\\\\\"						return 'PART_SEP'
 "\\\\"							return 'VOICE_SEP'
@@ -579,6 +598,7 @@ voice_events
 
 event
 	: note_event
+	| head_shape_cmd
 	| rest_event
 	| context_event
 	| grace_event
@@ -645,6 +665,9 @@ octave
 
 duration
 	: NUMBER dots								-> duration(Number($1), $2)
+	// \breve is a breve (double whole note): 8 quarters, i.e. division 0.5.
+	// It lexes as its own token, otherwise `\breve` reads as the pitches b r e v e.
+	| CMD_BREVE dots							-> duration(0.5, $2)
 	;
 
 dots
@@ -652,11 +675,18 @@ dots
 	| dots '.'									{ $$ = $1 + 1; }
 	;
 
+head_shape_cmd
+	: CMD_XNOTE									%{ currentHeadShape = 'x'; xNotePending = true; $$ = null; %}
+	| CMD_IMPROV_ON								%{ currentHeadShape = 'slash'; $$ = null; %}
+	| CMD_IMPROV_OFF							%{ currentHeadShape = undefined; $$ = null; %}
+	;
+
 rest_event
-	: REST_CHAR duration post_events			%{ currentDuration = $2; $$ = restEvent($2, { fullMeasure: $1 === 'R' }); %}
-	| SPACE_CHAR duration post_events			%{ currentDuration = $2; $$ = restEvent($2, { invisible: true }); %}
-	| REST_CHAR post_events						-> restEvent(currentDuration, { fullMeasure: $1 === 'R' })
-	| SPACE_CHAR post_events					-> restEvent(currentDuration, { invisible: true })
+	: REST_CHAR duration post_events			%{ currentDuration = $2; $$ = restEvent($2, { fullMeasure: $1 === 'R', marks: $3.length ? $3 : undefined }); %}
+	| REST_CHAR duration '*' NUMBER post_events	%{ currentDuration = $2; $$ = restEvent($2, { fullMeasure: $1 === 'R', multiMeasure: Number($4), marks: $5.length ? $5 : undefined }); %}
+	| SPACE_CHAR duration post_events			%{ currentDuration = $2; $$ = restEvent($2, { invisible: true, marks: $3.length ? $3 : undefined }); %}
+	| REST_CHAR post_events						-> restEvent(currentDuration, { fullMeasure: true, marks: $2.length ? $2 : undefined })
+	| SPACE_CHAR post_events					-> restEvent(currentDuration, { invisible: true, marks: $2.length ? $2 : undefined })
 	;
 
 context_event
@@ -760,7 +790,7 @@ grace_event
 
 tuplet_event
 	: CMD_TIMES NUMBER '/' NUMBER '{' voice_events '}'		-> timesEvent(fraction(Number($2), Number($4)), $6.filter(e => e.type === 'note' || e.type === 'rest' || e.type === 'context'))
-	| CMD_TUPLET NUMBER '/' NUMBER '{' voice_events '}'		-> tupletEvent(fraction(Number($4), Number($2)), $6.filter(e => e.type === 'note' || e.type === 'rest' || e.type === 'context'))
+	| CMD_TUPLET NUMBER '/' NUMBER '{' voice_events '}'		-> tupletEvent(fraction(Number($4), Number($2)), $6.filter(e => e.type === 'note' || e.type === 'rest' || e.type === 'context' || e.type === 'tuplet'))
 	;
 
 tremolo_pitches
@@ -769,8 +799,8 @@ tremolo_pitches
 	;
 
 tremolo_event
-	: CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration tremolo_pitches duration '}'		%{ currentDuration = $6; $$ = tremoloEvent($5, $7, Number($3), $6.division); %}
-	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration tremolo_pitches '}'				%{ currentDuration = $6; $$ = tremoloEvent($5, $7, Number($3), $6.division); %}
+	: CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration post_events tremolo_pitches duration post_events '}'		%{ currentDuration = $6; $$ = tremoloEvent($5, $8, Number($3), $6.division, $7, $10); %}
+	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration post_events tremolo_pitches '}'				%{ currentDuration = $6; $$ = tremoloEvent($5, $8, Number($3), $6.division, $7, []); %}
 	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches tremolo_pitches '}'							-> tremoloEvent($5, $6, Number($3), currentDuration.division)
 	;
 
@@ -831,6 +861,7 @@ ornament_mark
 	| ORN_SHORTFERMATA							-> ornament('shortFermata')
 	| ORN_ARPEGGIO								-> ornament('arpeggio')
 	| ORN_BREATHE								-> ornament('breath')
+	| ORN_CAESURA								-> ornament('caesura')
 	;
 
 dynamic_mark
@@ -850,9 +881,12 @@ dynamic_mark
 	;
 
 hairpin_mark
-	: CMD_CRESC_BEGIN							-> hairpin('crescendoStart')
-	| CMD_DIM_BEGIN								-> hairpin('diminuendoStart')
-	| CMD_DYNAMICS_END							-> hairpin('crescendoEnd')
+	: CMD_CRESC_BEGIN							%{ lastHairpin = 'crescendo'; $$ = hairpin('crescendoStart'); %}
+	| CMD_DIM_BEGIN								%{ lastHairpin = 'diminuendo'; $$ = hairpin('diminuendoStart'); %}
+	// `\!` ends whichever hairpin is open. LilyPond's token names no form, so the
+	// type follows the hairpin last opened (\\< or \\>) — without this every `\!`
+	// came out as a crescendo end and a diminuendo's stop was mismatched.
+	| CMD_DYNAMICS_END							%{ $$ = hairpin(lastHairpin === 'diminuendo' ? 'diminuendoEnd' : 'crescendoEnd'); lastHairpin = undefined; %}
 	;
 
 pedal_mark
