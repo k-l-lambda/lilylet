@@ -35,6 +35,8 @@ export interface MusicXmlTime {
 	beatType: number;
 	/** <time symbol="common"> (C) or "cut" (C|); absent for a numeric signature. */
 	symbol?: 'common' | 'cut';
+	/** false for <time print-object="no">: the bar still has this length, but no signature is drawn. */
+	printObject?: boolean;
 }
 
 export interface MusicXmlClef {

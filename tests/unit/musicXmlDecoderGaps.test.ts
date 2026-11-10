@@ -107,5 +107,21 @@ test('a <type>breve</type> note is 8 quarters long', () => {
 	assert(q === 8, `duration ${JSON.stringify(d)} = ${q} quarters`);
 });
 
+test('<time print-object="no"> keeps the bar length but hides the signature', () => {
+	const hidden = decode(xml(`<time print-object="no"><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef>`,
+		n('C', 5, 24, 'whole')));
+	assert(hidden.measures[0].timeSig?.numerator === 4 && hidden.measures[0].timeSig?.denominator === 4,
+		`time signature: ${JSON.stringify(hidden.measures[0].timeSig)}`);
+	const ev = hidden.measures[0].parts[0].voices[0].events as any[];
+	assert(ev[0]?.type === 'context' && ev[0].omit?.timeSignature === true, `first event: ${JSON.stringify(ev[0])}`);
+	// ...and a normal one does not hide anything.
+	const shown = decode(xml(time(4, 4), n('C', 5, 24, 'whole')));
+	assert(!(shown.measures[0].parts[0].voices[0].events as any[]).some(e => e.omit),
+		'a plain <time> produced an \\omit');
+	// The text round-trips: the omit is written before the first note and read back.
+	const lyl = serializeLilyletDoc(hidden).trim();
+	assert(/\\omit Score\.TimeSignature/.test(lyl) && /\\time 4\/4/.test(lyl), `serialized: ${lyl}`);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

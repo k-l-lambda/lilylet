@@ -659,7 +659,10 @@ const parseAttributes = (attrEl: Element): MusicXmlAttributes => {
 			// instead of forcing a numeric signature.
 			const symbol = timeEl.getAttribute('symbol');
 			const sym = symbol === 'common' || symbol === 'cut' ? symbol : undefined;
-			result.time = sym ? { beats, beatType, symbol: sym } : { beats, beatType };
+			// print-object="no": the bar keeps this length but no signature is drawn
+			// (MuseScore hides it when a worksheet's bars do not look like its meter).
+			const printObject = timeEl.getAttribute('print-object') === 'no' ? false : undefined;
+			result.time = { beats, beatType, ...(sym ? { symbol: sym } : {}), ...(printObject === false ? { printObject } : {}) };
 		}
 	}
 
@@ -1284,6 +1287,8 @@ interface MeasureConversionResult {
 	voiceMap: Map<number, { events: Event[]; staff: number; lyrics: Map<number, LyricSyllable[]> }>;
 	key?: KeySignature;
 	timeSig?: TimeSig;
+	// <time print-object="no">: the measure keeps timeSig's length but draws no signature.
+	timeHidden?: boolean;
 	barline?: BarlineEvent;
 	// A `location="left"` repeat (e.g. forward-repeat `.|:`) belongs at the FRONT
 	// of this measure, but lilylet models a `\bar` as the END bar of its measure.
@@ -1391,6 +1396,8 @@ const convertMeasure = (
 ): MeasureConversionResult => {
 	let key: KeySignature | undefined;
 	let timeSig: TimeSig | undefined;
+	// <time print-object="no"> in this measure: its signature is not drawn.
+	let timeHidden = false;
 	let barline: BarlineEvent | undefined;
 	let leadingBarline: BarlineEvent | undefined;
 	const harmonies: HarmonyEvent[] = [];
@@ -1481,6 +1488,9 @@ const convertMeasure = (
 				timeSig = attrs.time.symbol
 					? { ...createFraction(attrs.time.beats, attrs.time.beatType), symbol: attrs.time.symbol }
 					: createFraction(attrs.time.beats, attrs.time.beatType);
+				// <time print-object="no">: keep the length, hide the glyph. The encoder
+				// carries \omit Score.TimeSignature on the measure's first voice.
+				if (attrs.time.printObject === false) timeHidden = true;
 			}
 
 			// Instrument transposition, in force from here to the end of the part.
@@ -1943,7 +1953,7 @@ const convertMeasure = (
 		});
 	}
 
-	return { voiceMap, key, timeSig, barline, leadingBarline, harmonies, clefs };
+	return { voiceMap, key, timeSig, timeHidden: timeHidden || undefined, barline, leadingBarline, harmonies, clefs };
 };
 
 /**
@@ -1974,7 +1984,7 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 
 	for (const measureEl of measureEls) {
 		voiceTracker.reset();
-		const { voiceMap, key, timeSig, barline, leadingBarline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker, tupletTracker, transposeTracker, octaveFold);
+		const { voiceMap, key, timeSig, timeHidden, barline, leadingBarline, harmonies, clefs } = convertMeasure(measureEl, voiceTracker, spannerTracker, ottavaTracker, tupletTracker, transposeTracker, octaveFold);
 
 		// A forward-repeat (or any `location="left"`) barline belongs at the END of
 		// the PREVIOUS measure in lilylet's "\bar = current measure's end bar" model.
@@ -2103,6 +2113,13 @@ const convertPart = (partEl: Element): { measures: Measure[]; name?: string } =>
 				voices,
 			}],
 		};
+
+		// <time print-object="no">: the length stays (timeSig, above), but the glyph is
+		// not drawn. lilylet's \omit is a context change that takes effect at the
+		// measure start, so it goes on the first voice, before anything musical.
+		if (timeHidden) {
+			voices[0].events.unshift({ type: 'context', omit: { timeSignature: true } });
+		}
 
 		// Only include key/time if they changed
 		if (key) measure.key = key;
