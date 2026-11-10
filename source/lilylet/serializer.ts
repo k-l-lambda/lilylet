@@ -320,8 +320,10 @@ const serializeMarks = (marks: Mark[]): string => {
 				break;
 			case 'markup': {
 				// Text direction attached to a note (e.g. ^\markup "cantabile").
-				// Placement: above → ^, below → _, unspecified → - (default).
-				const prefix = mark.placement === 'above' ? '^' : mark.placement === 'below' ? '_' : '-';
+				// Placement: above → ^, below → _. A bare `-` would read back as
+				// tenuto (`c4-\markup "x"` parses as tenuto + markup), so no
+				// placement is written as nothing at all.
+				const prefix = mark.placement === 'above' ? '^' : mark.placement === 'below' ? '_' : '';
 				parts.push(prefix + '\\markup "' + escapeString(mark.content) + '"');
 				break;
 			}
@@ -444,6 +446,14 @@ const serializeRestEvent = (
 	// \rest mark comes after duration for positioned rests
 	if (isPitchedRest) {
 		parts.push('\\rest');
+	}
+
+	// Marks on a rest or spacer (a text direction over an empty answer bar, a
+	// dynamic, a fermata). Spanners and ties need a note to hang from, so they are
+	// left out rather than written as a dangling `(` / `~`.
+	if (event.marks?.length) {
+		const hostable = event.marks.filter(m => m.markType !== 'tie' && m.markType !== 'slur' && m.markType !== 'beam' && m.markType !== 'glissando');
+		if (hostable.length) parts.push(serializeMarks(hostable));
 	}
 
 	return { str: parts.join(''), newEnv: currentEnv };

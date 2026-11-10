@@ -89,6 +89,13 @@ test('a <direction> before a <rest> stays on the rest', () => {
 		`<note><rest/><duration>6</duration><voice>1</voice><type>quarter</type></note>` + n('C', 5, 6, 'quarter')));
 	const note = ev.find(e => e.type === 'note');
 	assert(!JSON.stringify(note?.marks || []).includes('"X"'), `the text moved onto the following note: ${JSON.stringify(note?.marks)}`);
+	// ...and it is not merely dropped: it stays on the rest, and the serialized
+	// text reads back with the text still on the rest (no `-`, which is tenuto).
+	const rest = ev.find(e => e.type === 'rest');
+	assert(JSON.stringify(rest?.marks || []).includes('"X"'), `the text is missing from the rest: ${JSON.stringify(rest?.marks)}`);
+	const lyl = ser(xml(time(2, 4), `<direction><direction-type><words>X</words></direction-type></direction>` +
+		`<note><rest/><duration>12</duration><voice>1</voice><type>half</type></note>`));
+	assert(/r2\^?\\markup "X"/.test(lyl) || /r2[^ ]*\\markup "X"/.test(lyl), `serialized: ${lyl}`);
 });
 
 test('a <type>breve</type> note is 8 quarters long', () => {
