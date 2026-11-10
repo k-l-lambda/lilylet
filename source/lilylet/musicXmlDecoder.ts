@@ -509,10 +509,12 @@ const parseNote = (noteEl: Element, divisions: number): MusicXmlNote => {
 			const step = getElementText(unpitchedEl, 'display-step');
 			const octave = getElementInt(unpitchedEl, 'display-octave');
 			if (step) {
+				// The display octave is in MusicXML's numbering like <octave>; the -4 to
+				// lilylet's octave happens once, in musicXmlPitchToLilylet().
 				pitch = {
 					step: step.toUpperCase(),
 					alter: getElementInt(unpitchedEl, 'display-alter'),
-					octave: octave !== undefined ? octave - 4 : undefined,
+					octave,
 				};
 			}
 		}

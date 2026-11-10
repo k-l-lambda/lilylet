@@ -36,6 +36,10 @@ test('<unpitched> notes are kept, at their display position', () => {
 	const ev = events(xml(`<time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>percussion</sign></clef>`,
 		`<note><unpitched><display-step>C</display-step><display-octave>5</display-octave></unpitched><duration>6</duration><voice>1</voice><type>quarter</type></note>`.repeat(2)));
 	assert(ev.filter(e => e.type === 'note').length === 2, `notes: ${ev.map(e => e.type).join(' ')}`);
+	// The display octave uses MusicXML's numbering, like <octave>: the -4 shift to
+	// lilylet's octave happens once, downstream. (It was applied twice at first.)
+	assert(ev.filter(e => e.type === 'note').every((e: any) => e.pitches[0].octave === 1),
+		`octaves: ${ev.filter(e => e.type === 'note').map((e: any) => e.pitches[0].octave).join(' ')} (want 1 = written C5)`);
 });
 
 test('<chord/> notes inside a tuplet stay chords inside the tuplet', () => {
