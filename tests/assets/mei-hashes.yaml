@@ -102,6 +102,7 @@ figures-compound-meter.lyl: 1e8f4f29d0980f93567dc0cce71a0352
 figures-several-per-note.lyl: 2734df3b82dc879ba142d49f3f52fcfb
 figures-skip-blank.lyl: 1ed071167a8a275e7b034dadd4677fd1
 fingering-basic.lyl: ae4d552b0cd0cdfa82195473b3cf308f
+fingering-out-of-range.lyl: ac678bc77b28ed5673ff6ef27e6efdc8
 fingering-with-chord.lyl: 1cc5a0091f831437cfa79da398994bef
 grace-embed-in-beam.lyl: 7eb605451ffdfdcc2389c8743e3d152e
 grace-multiple-notes.lyl: 3293a7c4e7e114d986c0045c47db4469

@@ -776,7 +776,7 @@ tremolo_event
 
 post_events
 	: /* empty */								{ $$ = []; }
-	| post_events post_event					{ $$ = $1.concat([$2]); }
+	| post_events post_event					{ $$ = $2 === null ? $1 : $1.concat([$2]); }
 	;
 
 post_event
@@ -884,11 +884,11 @@ direction_mark
 	;
 
 fingering_mark
-	: '-' NUMBER								%{ const n = Number($2); if (n >= 1 && n <= 5) $$ = fingering(n); else $$ = null; %}
+	: '-' NUMBER								%{ const n = Number($2); if (n >= 0 && n <= 9) $$ = fingering(n); else $$ = null; %}
 	;
 
 fingering_number
-	: NUMBER									%{ const n = Number($1); if (n >= 1 && n <= 5) $$ = fingering(n); else $$ = null; %}
+	: NUMBER									%{ const n = Number($1); if (n >= 0 && n <= 9) $$ = fingering(n); else $$ = null; %}
 	;
 
 navigation_mark

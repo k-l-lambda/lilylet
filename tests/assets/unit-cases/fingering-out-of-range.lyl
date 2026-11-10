@@ -1,0 +1,4 @@
+% Fingerings other than 1–5: 0 (open string), 6–9 (MuseScore allows any digit; guitar/harp use 0).
+% Expected: each is a fingering mark with that number.
+% Current parser creates null marks for some of these values, which makes MEI encoding fail.
+\time 4/4 c'4-0 d-6 e-9 f-1 | %1
