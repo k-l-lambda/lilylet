@@ -16,13 +16,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parseCode, meiEncoder, serializeLilyletDoc } from '../../source/lilylet/index.js';
 
-// Most of these fixtures are in `unit-cases-pending/`, NOT `unit-cases/`: every
-// shared suite walks the latter, so a fixture that fails to parse (or encodes to
-// wrong content) would break `npm test`, the three round-trip suites, `test:mei`
-// and `test:mei-hashes`. A fixture moves into `unit-cases/` when its construct
-// starts working. See `tests/assets/unit-cases-pending/README.md`.
-const CASES = path.join(import.meta.dirname, '../assets/unit-cases-pending');
-const PROMOTED = path.join(import.meta.dirname, '../assets/unit-cases');
+// The fixtures live in `unit-cases/` with the rest. They were held in a separate
+// `unit-cases-pending/` while the syntax did not parse: every shared suite walks
+// `unit-cases/`, so a fixture that fails to parse (or encodes to wrong content)
+// breaks `npm test`, the three round-trip suites, `test:mei` and `test:mei-hashes`.
+// All of them are implemented now, so they are ordinary cases.
+const CASES = path.join(import.meta.dirname, '../assets/unit-cases');
 
 let passed = 0;
 let failed = 0;
@@ -42,10 +41,7 @@ const assert = (cond: boolean, msg: string) => {
 	if (!cond) throw new Error(msg);
 };
 
-const load = (file: string) => {
-	const pending = path.join(CASES, file);
-	return fs.readFileSync(fs.existsSync(pending) ? pending : path.join(PROMOTED, file), 'utf-8');
-};
+const load = (file: string) => fs.readFileSync(path.join(CASES, file), 'utf-8');
 
 /** Top-level events of voice 1 of part 1, measure `m` (0-based). */
 const events = (doc: any, m = 0): any[] => doc.measures[m].parts[0].voices[0].events;

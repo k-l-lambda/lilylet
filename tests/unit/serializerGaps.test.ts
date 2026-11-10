@@ -35,7 +35,9 @@ const barLength = (doc: any) => {
 	let total = 0;
 	for (const e of doc.measures[0].parts[0].voices[0].events) {
 		if (e.type === 'note' || e.type === 'rest') total += quarters(e.duration);
-		else if (e.type === 'tuplet') total += e.events.reduce((s: number, x: any) => s + quarters(x.duration), 0) * e.ratio.numerator / e.ratio.denominator;
+		// \times and \tuplet both carry a ratio; a bare time-modification serializes as
+		// \times, so counting only 'tuplet' read the bar as empty.
+		else if (e.type === 'tuplet' || e.type === 'times') total += e.events.reduce((s: number, x: any) => s + quarters(x.duration), 0) * e.ratio.numerator / e.ratio.denominator;
 	}
 	return total;
 };

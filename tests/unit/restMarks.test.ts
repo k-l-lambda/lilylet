@@ -25,7 +25,11 @@ test('the parser keeps markup on a spacer and on a rest', () => {
 	const doc = parseCode(String.raw`c1 | %1
 s1^\markup "E major" | %2
 r1_\markup "B:" | %3`);
-	const marks = doc.measures.slice(1).map(m => JSON.stringify((m.parts[0].voices[0].events[0] as any).marks || []));
+	// events[0] is the leading pitchReset, so look for the rest itself.
+	const marks = doc.measures.slice(1).map(m => {
+		const rest = (m.parts[0].voices[0].events as any[]).find(e => e.type === 'rest');
+		return JSON.stringify(rest?.marks || []);
+	});
 	assert(marks[0].includes('E major'), `spacer marks: ${marks[0]}`);
 	assert(marks[1].includes('B:'), `rest marks: ${marks[1]}`);
 });
