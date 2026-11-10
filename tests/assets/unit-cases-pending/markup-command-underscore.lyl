@@ -1,0 +1,6 @@
+% A post-event command followed directly by `_` (no space), e.g. `\coda_\markup`, `\pp_\markup`.
+% Expected: each note keeps both the command and its markup below it; one note per event.
+% Now: for most commands the lexer splits the name into notes (`\coda_` → c o d a), or drops it.
+\time 4/4 g'1\coda_\markup "To Coda" | %1
+\time 4/4 e'2\pp_\markup "dolce" <a cs>\p_\markup "Viol." | %2
+\time 4/4 c'4\mf_\markup "x" d\fermata_\markup "y" e\staccato_\markup "z" f\ff_\markup "w" | %3

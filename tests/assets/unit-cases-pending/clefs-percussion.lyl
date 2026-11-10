@@ -1,0 +1,3 @@
+% Percussion (neutral) clef, LilyPond `\clef "percussion"`. Expected: MEI clef.shape="perc".
+% Now: falls back to treble.
+\time 4/4 \clef "percussion" c'4 c c c | %1

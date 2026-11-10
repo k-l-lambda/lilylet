@@ -1,0 +1,5 @@
+% A post-event (pedal, articulation, dynamic) on a note inside `\repeat tremolo`.
+% Expected: parses; the marks stay on their notes. TremoloEvent needs mark storage for this.
+% Now: a parse error.
+\time 4/4 \repeat tremolo 4 { b,16\sustainOn b' } r2 | %1
+\time 4/4 \repeat tremolo 4 { c'16\p e } r2 | %2

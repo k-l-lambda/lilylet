@@ -1,0 +1,5 @@
+% Multi-bar rest, LilyPond `R1*4`. Expected: 4 bars of rest, drawn as one multi-measure rest with "4".
+% Now: the *4 multiplier is ignored without a warning, so the piece is 3 bars short.
+\time 4/4 c'1 | %1
+\time 4/4 R1*4 | %2
+\time 4/4 c'1 | %6

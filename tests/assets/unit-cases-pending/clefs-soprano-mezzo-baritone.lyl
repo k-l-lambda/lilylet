@@ -1,0 +1,11 @@
+% LilyPond clef names, from scm/parser-clef.scm (LilyPond 2.22.1):
+%   soprano     = clefs.C on line 1  -> C1
+%   mezzosoprano= clefs.C on line 2  -> C2
+%   baritone    = clefs.C on line 5  -> C5
+%   varbaritone = clefs.F on line 3  -> F3
+% Expected: MEI clef.shape/clef.line as named.
+% Now: all fall back to treble (G on line 2).
+\time 4/4 \clef "soprano" c'1 | %1
+\time 4/4 \clef "mezzosoprano" c'1 | %2
+\time 4/4 \clef "baritone" c1 | %3
+\time 4/4 \clef "varbaritone" c1 | %4

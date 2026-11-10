@@ -1,0 +1,6 @@
+% x noteheads (`\xNote`) and slash noteheads for comping rhythm (`\improvisationOn` ... `\improvisationOff`).
+% Expected: MEI head.shape="x" on the first bar's first note, head.shape="slash" on bar 2.
+% `\xNote` applies only to the immediately following note in LilyPond.
+\time 4/4 \xNote c'4 c c c | %1
+\time 4/4 \improvisationOn b'4 b b b \improvisationOff | %2
+\time 4/4 c'1 | %3

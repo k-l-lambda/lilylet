@@ -1,0 +1,4 @@
+% Lilylet's `\fpp` dynamic syntax. This is not a LilyPond 2.22 command; Lilylet can still
+% represent it and the MEI encoder should emit <dynam>fpp</dynam>.
+\time 4/4 c'1\fpp | %1
+\time 4/4 c'2\fpp c\fp | %2

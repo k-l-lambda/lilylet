@@ -1,0 +1,8 @@
+% Full-bar rest in a bar longer than a whole note (4/2, 3/1). Expected: R\breve is a whole-bar rest.
+% Two bugs. (1) The grammar has no `\breve`, so this bar lexes as R1 plus five stray
+% pitches. (2) The .lyl serializer, given a full-measure rest whose duration is a breve
+% (e.g. decoded from MusicXML, where <rest measure="yes"> in 4/2 is 8 quarters), writes
+% `R0.5`; `0.5` is not a duration, so it reads back as division 0 plus a stray `.5`.
+\time 4/2 c'1 c | %1
+\time 4/2 R\breve | %2
+\time 4/2 c'\breve | %3

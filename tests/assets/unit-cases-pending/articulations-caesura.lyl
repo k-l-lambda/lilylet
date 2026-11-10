@@ -1,0 +1,6 @@
+% Caesura (railroad tracks), LilyPond `\caesura`. Expected: a caesura after the 2nd note (MEI <caesura>).
+% LilyPond 2.22.1 does not predefine `\caesura`; it needs `\include "gregorian.ly"` first.
+% So the LilyPond encoder must not emit a bare `\caesura` - either emit the include, or
+% emit `\breathe` (which it does define), when this mark is serialized back.
+\time 4/4 c'4 d \caesura e f | %1
+\time 4/4 g'2 \caesura g | %2

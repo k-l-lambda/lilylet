@@ -1,0 +1,6 @@
+% Breve (double whole note), LilyPond `\breve`. Expected: one note/rest of 8 quarter beats each.
+% Now: `\breve` lexes as the pitches b r e v e (five extra events per bar), and a numeric
+% `c'0` parses as duration division 0 — a zero-length note — instead of a breve.
+\time 4/2 c'\breve | %1
+\time 4/2 r\breve | %2
+\time 4/2 <c' e g>\breve | %3
