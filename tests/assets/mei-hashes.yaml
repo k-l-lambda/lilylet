@@ -51,7 +51,7 @@ beams-auto-beam-off.lyl: 76e0d08cc8c3bb5c3896466b3c141ab7
 beams-auto-beam-on.lyl: ead8cc3dc47e5c0ca3a830fea1119cd2
 beams-auto-beam-rest-break.lyl: 85c5ea8ec5ade54f4b5561652abf4c78
 beams-auto-beam-sixteenths.lyl: d805553617a19805699173c9e6788c96
-beams-auto-beam-tuplet.lyl: 1d319f791582656a2aa1d1b6b0daeda2
+beams-auto-beam-tuplet.lyl: 7d06cc55d35df0d0f064cab64853dbe5
 beams-manual-beam.lyl: c42058b5b6cb240f2b3fab6790da33f4
 chords-chord-with-accidentals.lyl: c39cb0286571d83f6fe230803b07d44c
 chords-multiple-chords-in-sequence.lyl: a6d5ee5055130d083f4c29df51e14b4a
@@ -76,7 +76,7 @@ clefs-whole-measure-staff2-change.lyl: 9457d595861042ad532c54181b8a873f
 comments.lyl: 0f39d889545cafef523e8846fe84d886
 cross-staves-rapid-switches.lyl: 9316a798df0f6c8ce169ce713d48412f
 cross-staves-simple-notes.lyl: 19f46ec626ffdc4ad5ab8192104aa67e
-cross-staves-tuplet-mix.lyl: 4f5e23057a948188387d88f657650ef9
+cross-staves-tuplet-mix.lyl: 5ab496e3b1ad6900be01230d09535154
 demo-BWV114.lyl: f4b511963fccbe37cc27172af43bd99e
 demo-BWV610.lyl: 3df60b66823417a2b6a00cb9b06ad913
 demo-chopin-10-3.lyl: 3c904514aa75451d5491840d9a83b6d8
@@ -184,10 +184,10 @@ multiple-parts-double-piano.lyl: f01607a1a641629e81e106bd735d02a2
 multiple-parts-quartet.lyl: 1273d7003bb11ced2f32b5f0de70c056
 multiple-staves-3voices.lyl: 9f01de1681511e8d25804ed0613ca6ef
 multiple-staves-clef-cross-staff-rest.lyl: bdc4c9580a32c2322216c049000932a8
-multiple-staves-cross-staves.lyl: e9b82d90b063a67d05781dad3f400b05
+multiple-staves-cross-staves.lyl: 818eaf1fa0331bda78121300fa60e098
 multiple-staves-cross-staves2.lyl: e67062ab6626e934af52bb7679c61d9e
 multiple-staves-cross-staves3.lyl: bee7ba35830fbe4e147a97d9a93ce937
-multiple-staves-polyvoice.lyl: abef14ed8e25f2ff414c96c2419c1b1b
+multiple-staves-polyvoice.lyl: 3d4ef879b4127c341c87a456c89f3faf
 multiple-staves-simple.lyl: 8448f1b5cf1be2d02b45d832c6b1caa3
 multiple-staves-simple2.lyl: ee73b60bf4e625e32ac73c984634c907
 multiple-voices-two-voices-with-vb-separator.lyl: 20b8e6125b146d238b10fcd738810158
@@ -199,7 +199,7 @@ octaves-lower-octave.lyl: 07edfd96621b1b1b7a5aa0fed55e6a75
 octaves-ottava-cross-measure.lyl: 4bf4a16393f45a8caae68e91587c8408
 octaves-ottava-cross-measure2.lyl: 535bf109a94e630a307b03a2f114a0fc
 octaves-ottava-down.lyl: 2d5ae5107edfb3ceeeb22d4abca3a471
-octaves-ottava-over-tuplet.lyl: d457c30b15a05b90ad68e33b58b40c7e
+octaves-ottava-over-tuplet.lyl: 65013ba724561c3514e07237fdc541ae
 octaves-ottava-sequential-cross-measure.lyl: 908c2b3655cd165f0551743de5b2ceb9
 octaves-ottava-up.lyl: 7fbb6515d846ca6ec794afc995ae1643
 partial-correct.lyl: 591e36dc8dcdd78cc67c93786cb4339f
@@ -230,7 +230,7 @@ tempo-beats.lyl: 8d561ce06129c20445abb5e2509a9b33
 tempo-mix-grandstaff.lyl: 3a2c491253959105db1cb95bffe883c8
 tempo-mix.lyl: 62cbcb652f0723e2166c3a64316d3745
 tempo-text.lyl: ac43cb3b2ce87088dc671d87453b2877
-text-markup-before-tuplet-after-barline.lyl: 5d13dd325abbb01c19467792f1ac6048
+text-markup-before-tuplet-after-barline.lyl: e245e7792cc3f65fdd0327a2fbc22b27
 ties-and-slurs-slur-end.lyl: 6d64e8dd29692d4dad18edf1335acf4d
 ties-and-slurs-slur-start.lyl: 3f51062460351629701c9f3e18ae6e50
 ties-and-slurs-tie.lyl: 4b9af0837cb5c49de20fc7842645fb35
@@ -255,12 +255,12 @@ tremolos-post-event.lyl: a7b32f490adfce4d2975673a77764191
 tremolos-single-tremolo-16.lyl: 265be348773b0cf751a89d1945e0f59e
 tremolos-single-tremolo-32.lyl: f97f46d215e1a4d99e77a39636129349
 tremolos-single-tremolo-chord.lyl: 91f44fc26c94c641d05ecd2e75759da8
-tuplets-beam-in-group.lyl: cec3b402b2a6ded489097dd0f202ca80
-tuplets-beam-out-group.lyl: e463e7570e9121c17544bd82a80a365d
-tuplets-beam-subgroups-16th.lyl: 69c487f2b64efbc73aec679c97608074
-tuplets-beam-subgroups.lyl: af5468a73ce6e925992cb5fb943ca506
+tuplets-beam-in-group.lyl: 40c10b44392e81ffcfa6036e08557daa
+tuplets-beam-out-group.lyl: 1049595068443bccea103fad4f3d4b90
+tuplets-beam-subgroups-16th.lyl: 42c766f1ced7b43816713e2697a658c0
+tuplets-beam-subgroups.lyl: ad122a1f247b168ed82be06a787128ed
 tuplets-quadruplet-4-eighth-notes-in-time-of-3-3-4.lyl: 03f5574b75f4fe2ab9e46671b0ad141f
-tuplets-reversed-beam-order-nested-balance.lyl: 38f4c27a32fd366c9a3361cc3786ab47
-tuplets-reversed-beam-order.lyl: c44dc5f00241fb879c312899e560dd05
+tuplets-reversed-beam-order-nested-balance.lyl: e93cc37d3fee5794747323193ac9062b
+tuplets-reversed-beam-order.lyl: b05b34b2df4e17d2eda87b5cab6e2a1b
 tuplets-triplet-3-eighth-notes-in-time-of-2-2-3.lyl: b40f9d8d4c09f8170e383b930634a4f7
 tuplets-tuplet.lyl: 50a96624e79c4844338096158358ec3b

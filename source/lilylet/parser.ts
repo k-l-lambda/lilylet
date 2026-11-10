@@ -78,8 +78,11 @@ const resolveVoicePitches = (events: any[], env: PitchEnv): void => {
 			if (restEvent.pitch) {
 				resolveRelativePitch(env, restEvent.pitch);
 			}
-		} else if (event.type === 'tuplet') {
-			// Process tuplet events
+		} else if (event.type === 'tuplet' || event.type === 'times') {
+			// \times is a tuplet in every respect except how its bracket is drawn, so
+			// its contents resolve relative pitch exactly like \tuplet's. Missing it here
+			// left every note of a \times group at its written octave (and unresolved
+			// relative to the preceding note), so the same music came out an octave off.
 			for (const tupletEvent of event.events) {
 				if (tupletEvent.type === 'note') {
 					const pitches = tupletEvent.pitches;

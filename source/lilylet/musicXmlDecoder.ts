@@ -348,6 +348,28 @@ class VoiceTracker {
 		return voice?.lastEvent;
 	}
 
+	/**
+	 * The last NOTE/REST of a voice to attach a <chord/> member to. `lastEvent` is not
+	 * enough: a <harmony> queued for the note is appended right after it (`\chords`
+	 * binds backwards), so in `note, harmony, <chord/>` the chord would find the harmony
+	 * and become a separate note instead of joining the chord.
+	 */
+	getLastNoteEvent(voiceNum: number): Event | undefined {
+		const events = this.voices.get(voiceNum)?.events;
+		if (!events) return undefined;
+		for (let i = events.length - 1; i >= 0; i--) {
+			const e = events[i];
+			if (e.type === 'note' || e.type === 'rest') return e;
+			if (e.type === 'tuplet' || e.type === 'times') {
+				const inner = (e as TupletEvent).events;
+				for (let j = inner.length - 1; j >= 0; j--) {
+					const t = inner[j];
+					if (t.type === 'note' || t.type === 'rest') return t;
+				}
+			}
+		}
+		return undefined;
+	}
 	backup(duration: number): void {
 		this.currentPosition -= duration;
 		// Note: Negative position is OK - it just means we're going back
@@ -1439,9 +1461,14 @@ const convertMeasure = (
 	// which voice the gap belongs to. Flushed as invisible rests before that note,
 	// or onto currentVoice at a <backup>/measure end (a trailing gap in this voice).
 	let pendingForward = 0;
-	// Set by <backup>, cleared by the next element: a <forward> right after a
-	// <backup> is cursor repositioning, not a gap in the music.
-	let justBackedUp = false;
+	// Ticks a <backup> moved the cursor back, and how many of them a following
+	// <forward> has already walked back. MuseScore anchors a mid-note direction as
+	// `backup N / forward K / direction / forward N-K`; only forwards that stay within
+	// the backup are cursor repositioning. A forward that runs past it (the common
+	// `backup 8 / barline / forward 4 / note` in a bar with a rest) is real empty time
+	// and must become a rest — consuming it would drop a beat from the bar.
+	let backupTicks = 0;
+	let backedUp = 0;
 	// Pending context changes (tempo, ottava) to insert before next note. Each may
 	// carry a target staff: an ottava (<octave-shift>) start and its stop both name
 	// the same <staff>, but in piano scores the stop direction often follows a
@@ -1569,6 +1596,10 @@ const convertMeasure = (
 				}
 			}
 			pendingForward = 0;
+			// The cursor has reached real content: a later <forward> opens a gap in
+			// this voice, not more repositioning from the earlier <backup>.
+			backupTicks = 0;
+			backedUp = 0;
 
 			// Check for tuplet start BEFORE processing the note
 			const tupletNotation = note.notations?.tuplet;
@@ -1687,7 +1718,7 @@ const convertMeasure = (
 				if (note.isChord) {
 					let lastEvent: Event | undefined = tupletTracker.isActive(voiceNum)
 						? tupletTracker.getLastEvent(voiceNum)
-						: voiceTracker.getLastEvent(voiceNum);
+						: voiceTracker.getLastNoteEvent(voiceNum);
 					// The chord member may arrive after the tuplet bracket closed (the
 					// <tuplet type="stop"> sits on the chord's first note): reach into the
 					// tuplet the voice just ended.
@@ -1808,19 +1839,21 @@ const convertMeasure = (
 			// (the common `backup N / forward N` measure-end idiom would otherwise
 			// double the bar). Only note→forward→note gaps become invisible rests.
 			pendingForward = 0;
-			justBackedUp = true;
 			const duration = getElementInt(child, 'duration') || 0;
+			backupTicks = duration;
+			backedUp = 0;
 			voiceTracker.backup(duration);
 		} else if (tagName === 'forward') {
 			const duration = getElementInt(child, 'duration') || 0;
 			voiceTracker.forward(duration);
-			// A <forward> immediately after a <backup> walks the cursor to another
-			// voice's position (often with a <direction> between them); it opens no
-			// content gap, so it must not become a spacer rest.
-			if (justBackedUp) {
-				justBackedUp = false;
+			// A <forward> after a <backup> walks the cursor back to another voice's
+			// position (often with a <direction> between them); it opens no content gap,
+			// so it must not become a spacer rest. Only the ticks the backup gave back
+			// are repositioning: a forward past that point is real empty time.
+			if (backedUp < backupTicks) {
+				backedUp = backupTicks;   // only the first forward after a backup repositions
 			} else {
-				pendingForward += duration;  // materialised as invisible rests only if a note follows in-voice
+				pendingForward += duration;
 			}
 		} else if (tagName === 'barline') {
 			const barlineData = parseBarline(child);
