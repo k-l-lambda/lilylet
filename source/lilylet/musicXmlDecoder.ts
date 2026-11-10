@@ -1461,14 +1461,12 @@ const convertMeasure = (
 	// which voice the gap belongs to. Flushed as invisible rests before that note,
 	// or onto currentVoice at a <backup>/measure end (a trailing gap in this voice).
 	let pendingForward = 0;
-	// Ticks a <backup> moved the cursor back, and how many of them a following
-	// <forward> has already walked back. MuseScore anchors a mid-note direction as
-	// `backup N / forward K / direction / forward N-K`; only forwards that stay within
-	// the backup are cursor repositioning. A forward that runs past it (the common
-	// `backup 8 / barline / forward 4 / note` in a bar with a rest) is real empty time
-	// and must become a rest — consuming it would drop a beat from the bar.
-	let backupTicks = 0;
-	let backedUp = 0;
+	// MuseScore anchors a mid-note direction with `backup N / direction / forward N`
+	// that nets to zero. Collect the forwards after a <backup> and cancel them only
+	// when they walk the cursor back to where it started: `backup 16 / forward 2` is
+	// a real gap (two eighths of rest), not repositioning, and turning it into a
+	// spacer rest would drop the note it should have preceded.
+	let backupStart = -1;  // cursor position before the <backup>; -1 = no pair open
 	// Pending context changes (tempo, ottava) to insert before next note. Each may
 	// carry a target staff: an ottava (<octave-shift>) start and its stop both name
 	// the same <staff>, but in piano scores the stop direction often follows a
@@ -1596,10 +1594,6 @@ const convertMeasure = (
 				}
 			}
 			pendingForward = 0;
-			// The cursor has reached real content: a later <forward> opens a gap in
-			// this voice, not more repositioning from the earlier <backup>.
-			backupTicks = 0;
-			backedUp = 0;
 
 			// Check for tuplet start BEFORE processing the note
 			const tupletNotation = note.notations?.tuplet;
@@ -1840,18 +1834,20 @@ const convertMeasure = (
 			// double the bar). Only note→forward→note gaps become invisible rests.
 			pendingForward = 0;
 			const duration = getElementInt(child, 'duration') || 0;
-			backupTicks = duration;
-			backedUp = 0;
+			backupStart = voiceTracker.getCurrentPosition();
 			voiceTracker.backup(duration);
 		} else if (tagName === 'forward') {
 			const duration = getElementInt(child, 'duration') || 0;
 			voiceTracker.forward(duration);
-			// A <forward> after a <backup> walks the cursor back to another voice's
-			// position (often with a <direction> between them); it opens no content gap,
-			// so it must not become a spacer rest. Only the ticks the backup gave back
-			// are repositioning: a forward past that point is real empty time.
-			if (backedUp < backupTicks) {
-				backedUp = backupTicks;   // only the first forward after a backup repositions
+			// Part of a `backup N / … / forward N` pair, or real empty time? Only the
+			// matched case is repositioning; anything short of the original position is
+			// a gap in the music and becomes a rest.
+			if (backupStart >= 0) {
+				// A `backup N / … / forward N` pair nets to zero and is pure cursor
+				// repositioning. A forward that stops short leaves the cursor inside the
+				// bar, i.e. real empty time (`backup 16 / forward 2` is an eighth rest).
+				if (voiceTracker.getCurrentPosition() >= backupStart) backupStart = -1;
+				else pendingForward += duration;
 			} else {
 				pendingForward += duration;
 			}
