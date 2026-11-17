@@ -15,6 +15,13 @@
 	});
 
 	const noteEvent = (pitches, dur, marks, options = {}) => {
+		// `c4:32` arrives as a `{ tremolo: 32 }` post-event; it is a property of the note
+		// (NoteEvent.tremolo, as every decoder and encoder reads it), not a mark.
+		if (marks && marks.some(m => m && typeof m.tremolo === 'number')) {
+			const t = marks.find(m => m && typeof m.tremolo === 'number');
+			marks = marks.filter(m => !(m && typeof m.tremolo === 'number'));
+			if (options.tremolo === undefined) options = { ...options, tremolo: t.tremolo };
+		}
 		if (currentHeadShape !== undefined && options.headShape === undefined) {
 			options = { ...options, headShape: currentHeadShape };
 			// \xNote affects only the note that follows it; \improvisationOn persists.
@@ -158,15 +165,55 @@
 		events,
 	});
 
-	const tremoloEvent = (pitchA, pitchB, count, division, marksA, marksB) => ({
-		type: 'tremolo',
-		pitchA,
-		pitchB,
-		count,
-		division,
-		...(marksA && marksA.length ? { marksA } : {}),
-		...(marksB && marksB.length ? { marksB } : {}),
-	});
+	// `dur` is the first member's duration; its dots are kept (`{ c16. d16. }` lasts
+	// 2 × 2 × 3/32 = 3/8). A second member of a different length has no LilyPond
+	// meaning for a two-note tremolo, so it is reported and the first one wins.
+	const tremoloEvent = (pitchA, pitchB, count, dur, marksA, marksB, durB) => {
+		if (durB && (durB.division !== dur.division || (durB.dots || 0) !== (dur.dots || 0))) {
+			const msg = `\\repeat tremolo ${count}: members of different durations (${dur.division}${'.'.repeat(dur.dots || 0)} and ${durB.division}${'.'.repeat(durB.dots || 0)}); using the first`;
+			console.warn('[lilylet] ' + msg);
+			parseWarnings.push({ type: 'tremolo-durations', message: msg });
+		}
+		return {
+			type: 'tremolo',
+			pitchA,
+			pitchB,
+			count,
+			division: dur.division,
+			...(dur.dots ? { dots: dur.dots } : {}),
+			...(marksA && marksA.length ? { marksA } : {}),
+			...(marksB && marksB.length ? { marksB } : {}),
+		};
+	};
+
+	// `\\repeat tremolo N c16` (one note) is the single-note tremolo `c<N×16>:16`: a note
+	// lasting N members, with strokes of the member value.
+	const SINGLE_TREMOLO_DIVISIONS = [0.5, 1, 2, 4, 8, 16, 32, 64, 128];
+	const singleTremoloEvent = (pitches, count, dur, marks) => {
+		const member = ticksOf(dur);
+		const total = member * count;
+		let duration;
+		for (const division of SINGLE_TREMOLO_DIVISIONS) {
+			for (let dots = 0; dots <= 3 && !duration; dots++) {
+				if (ticksOf({ division, dots }) === total) duration = { division, dots };
+			}
+			if (duration) break;
+		}
+		if (!duration) {
+			const msg = `\\repeat tremolo ${count} of a ${dur.division}${'.'.repeat(dur.dots || 0)}: total has no single-note duration; written as one member`;
+			console.warn('[lilylet] ' + msg);
+			parseWarnings.push({ type: 'tremolo-durations', message: msg });
+			duration = { division: dur.division, dots: dur.dots || 0 };
+		}
+		return noteEvent(pitches, duration, marks, { tremolo: dur.division });
+	};
+	// Tick length of a duration (1920 per whole note), used before durationTicks is defined.
+	const ticksOf = (d) => {
+		let t = 1920 / d.division;
+		let dot = t / 2;
+		for (let i = 0; i < (d.dots || 0); i++) { t += dot; dot /= 2; }
+		return Math.round(t);
+	};
 
 	// Articulation/mark helpers - all marks have markType for discrimination
 	const articulation = (type, placement) => ({ markType: 'articulation', type, placement });
@@ -292,6 +339,9 @@
 						total += Math.round(durationTicks(inner.duration) * factor);
 					}
 				}
+			} else if (e.type === 'tremolo') {
+				// count × 2 members, each of the member duration
+				total += 2 * e.count * durationTicks({ division: e.division, dots: e.dots || 0 });
 			}
 		}
 		return total;
@@ -799,9 +849,12 @@ tremolo_pitches
 	;
 
 tremolo_event
-	: CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration post_events tremolo_pitches duration post_events '}'		%{ currentDuration = $6; $$ = tremoloEvent($5, $8, Number($3), $6.division, $7, $10); %}
-	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration post_events tremolo_pitches '}'				%{ currentDuration = $6; $$ = tremoloEvent($5, $8, Number($3), $6.division, $7, []); %}
-	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches tremolo_pitches '}'							-> tremoloEvent($5, $6, Number($3), currentDuration.division)
+	: CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration post_events tremolo_pitches duration post_events '}'		%{ currentDuration = $9; $$ = tremoloEvent($5, $8, Number($3), $6, $7, $10, $9); %}
+	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration post_events tremolo_pitches '}'				%{ currentDuration = $6; $$ = tremoloEvent($5, $8, Number($3), $6, $7, []); %}
+	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches tremolo_pitches '}'							-> tremoloEvent($5, $6, Number($3), currentDuration)
+	// Single-note tremolo, with or without braces: `\\repeat tremolo 8 c16`.
+	| CMD_REPEAT TREMOLO NUMBER '{' tremolo_pitches duration post_events '}'					%{ currentDuration = $6; $$ = singleTremoloEvent($5, Number($3), $6, $7); %}
+	| CMD_REPEAT TREMOLO NUMBER tremolo_pitches duration post_events							%{ currentDuration = $5; $$ = singleTremoloEvent($4, Number($3), $5, $6); %}
 	;
 
 post_events

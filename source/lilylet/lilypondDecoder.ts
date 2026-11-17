@@ -45,6 +45,7 @@ import {
 } from "./types";
 
 import { clefBaseName, parseClefSuffix, withClefTransposition } from "./clefTransposition";
+import { durationFromWhole, durationWhole } from "./tremolo";
 
 
 // Phonet names mapping
@@ -1067,44 +1068,39 @@ const parseLilyDocument = (lilyDocument: lilyParser.LilyDocument): ParsedMeasure
 							}
 						}
 					}
-					// Handle repeat tremolo
+					// Handle repeat tremolo. The body's notes were already added to the voice as
+					// ordinary note events (with their chords, dots and post-events), so take
+					// them back off the voice and rebuild them as a tremolo — re-reading the raw
+					// terms kept only each member's first pitch and dropped dots and marks.
 					else if (termAny.proto === 'Repeat' && termAny.args?.[0] === 'tremolo') {
 						const count = parseInt(termAny.args?.[1], 10);
-						const body = termAny.args?.[2]?.body || [];
+						const body = termAny.args?.[2]?.body;
+						const memberCount = Array.isArray(body) ? body.length : 1;	// `\repeat tremolo 8 c16` has no braces
 
-						if (!isNaN(count) && body.length === 2) {
-							// Double tremolo has exactly 2 pitches
-							const pitch1 = body[0]?.pitches?.[0]?.pitch;
-							const pitch2 = body[1]?.pitches?.[0]?.pitch;
-							const duration = body[0]?.duration;
-
-							if (pitch1 && pitch2 && duration) {
-								const pitchA = parseRawPitch(pitch1);
-								const pitchB = parseRawPitch(pitch2);
-								const div = parseInt(duration.number, 10);
-
-								if (pitchA && pitchB && !isNaN(div)) {
-									// Remove the 2 notes that were already added
-									let removed = 0;
-									while (removed < 2 && voice.events.length > 0) {
-										const lastEvent = voice.events[voice.events.length - 1];
-										if (lastEvent.type === 'note') {
-											voice.events.pop();
-											removed++;
-										} else {
-											break;
-										}
-									}
-
-									const tremoloEvent: TremoloEvent = {
-										type: 'tremolo',
-										pitchA: [pitchA],
-										pitchB: [pitchB],
-										count,
-										division: div,
-									};
-									voice.events.push(tremoloEvent);
-								}
+						const tail = voice.events.slice(-memberCount);
+						if (!isNaN(count) && (memberCount === 1 || memberCount === 2)
+							&& tail.length === memberCount && tail.every(e => e.type === 'note')) {
+							voice.events.splice(voice.events.length - memberCount, memberCount);
+							const [a, b] = tail as NoteEvent[];
+							if (memberCount === 2) {
+								const tremoloEvent: TremoloEvent = {
+									type: 'tremolo',
+									pitchA: a.pitches,
+									pitchB: b.pitches,
+									count,
+									division: a.duration.division,
+									...(a.duration.dots ? { dots: a.duration.dots } : {}),
+									...(a.marks?.length ? { marksA: a.marks } : {}),
+									...(b.marks?.length ? { marksB: b.marks } : {}),
+								};
+								voice.events.push(tremoloEvent);
+							} else {
+								// Single-note tremolo: one note lasting `count` members, with strokes
+								// of the member value (`\repeat tremolo 8 c16` = `c2:16`).
+								const total = durationFromWhole(count * durationWhole(a.duration));
+								voice.events.push(total
+									? { ...a, duration: total, tremolo: a.duration.division }
+									: a);
 							}
 						}
 					}

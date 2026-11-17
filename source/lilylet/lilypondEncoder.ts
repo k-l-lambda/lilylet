@@ -410,7 +410,8 @@ const encodePitch = (pitch: Pitch, env: PitchEnv): { str: string; newEnv: PitchE
  * Encode duration to LilyPond
  */
 const encodeDuration = (duration: Duration): string => {
-	let result = String(duration.division);
+	// A breve (division 0.5) is `\\breve` in LilyPond; `0.5` is not a duration.
+	let result = duration.division === 0.5 ? '\\breve' : String(duration.division);
 	if (duration.dots) {
 		result += ".".repeat(duration.dots);
 	}
@@ -696,7 +697,11 @@ const encodeTremoloEvent = (event: TremoloEvent, env: PitchEnv): { str: string; 
 		newEnv = ne;
 	}
 
-	const result = `\\repeat tremolo ${event.count} { ${pitchA}${event.division} ${pitchB}${event.division} }`;
+	// Member duration carries its dots; post-events follow it, as in the source.
+	const memberDur = encodeDuration({ division: event.division, dots: event.dots || 0 });
+	const marksA = event.marksA ? encodeMarks(event.marksA) : '';
+	const marksB = event.marksB ? encodeMarks(event.marksB) : '';
+	const result = `\\repeat tremolo ${event.count} { ${pitchA}${memberDur}${marksA} ${pitchB}${memberDur}${marksB} }`;
 
 	return { str: result, newEnv };
 };
@@ -776,6 +781,9 @@ const encodeVoice = (
 				const { str, newEnv } = encodeTremoloEvent(event, env);
 				result += str + ' ';
 				env = newEnv;
+				// LilyPond's current duration is now the member duration (16 for
+				// `{ c16 d16 }`); a following bare `e` would read as e16.
+				lastDuration = { division: event.division, dots: event.dots || 0 };
 				break;
 			}
 			case 'barline': {

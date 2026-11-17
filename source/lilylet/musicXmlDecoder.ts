@@ -32,6 +32,7 @@ import {
 	BarlineEvent,
 	HarmonyEvent,
 	TupletEvent,
+	TremoloEvent,
 	LyricLane,
 	LyricSyllable,
 } from './types';
@@ -78,6 +79,7 @@ import {
 	TYPE_TO_DIVISION,
 } from './musicXmlUtils';
 import { measureLayoutFromPart } from './measureLayoutFromXml';
+import { durationWhole } from "./tremolo";
 
 // ============ Spanner Tracker ============
 
@@ -1303,6 +1305,56 @@ const directionToMarks = (
 };
 
 /**
+ * Fold `<tremolo type="start">` / `type="stop"` note pairs into a TremoloEvent.
+ *
+ * MusicXML writes a two-note tremolo as two notes whose <type> is the tremolo's TOTAL
+ * length (two halves for `\\repeat tremolo 4 { c16 d16 }`), each sounding half of it —
+ * usually expressed as a 2:1 <time-modification>. The <tremolo> value is the stroke
+ * count (2 → sixteenths). The member count follows from the written length:
+ * count = total / (2 × member). A member may be dotted when that is the only way the
+ * count comes out whole (two dotted quarters of 16th strokes: `{ c16. d16. }`).
+ * Unmatched or uncountable tags are dropped and the notes kept as written.
+ */
+const foldTwoNoteTremolos = (events: Event[]): Event[] => {
+	const out: Event[] = [];
+	for (let i = 0; i < events.length; i++) {
+		const a = events[i] as any;
+		const b = events[i + 1] as any;
+		if (a?.type === 'note' && a.__tremolo?.type === 'start' && b?.type === 'note' && b.__tremolo?.type === 'stop') {
+			const value = a.__tremolo.value;
+			const memberDivision = Math.pow(2, value + 2);
+			const written = { division: a.duration.division, dots: a.duration.dots || 0 };
+			const total = durationWhole(written);
+			let member: { division: number; dots: number } | undefined;
+			for (let dots = 0; dots <= 2 && !member; dots++) {
+				const c = total / (2 * durationWhole({ division: memberDivision, dots }));
+				if (Math.abs(c - Math.round(c)) < 1e-9 && Math.round(c) >= 1) member = { division: memberDivision, dots };
+			}
+			delete a.__tremolo;
+			delete b.__tremolo;
+			if (member) {
+				const tremolo: TremoloEvent = {
+					type: 'tremolo',
+					pitchA: a.pitches,
+					pitchB: b.pitches,
+					count: Math.round(total / (2 * durationWhole(member))),
+					division: member.division,
+					...(member.dots ? { dots: member.dots } : {}),
+					...(a.marks?.length ? { marksA: a.marks } : {}),
+					...(b.marks?.length ? { marksB: b.marks } : {}),
+				};
+				out.push(tremolo);
+				i++;
+				continue;
+			}
+		}
+		if (a?.__tremolo) delete a.__tremolo;
+		out.push(events[i]);
+	}
+	return out;
+};
+
+/**
  * Result of converting a measure - now includes voices grouped by voice number
  */
 interface MeasureConversionResult {
@@ -1755,6 +1807,10 @@ const convertMeasure = (
 					// Convert tremolo value (number of beams) to division
 					// 1 beam = 8th, 2 beams = 16th, 3 beams = 32nd
 					noteEvent.tremolo = Math.pow(2, note.notations.tremolo.value + 2);
+				} else if (note.notations?.tremolo?.type === 'start' || note.notations?.tremolo?.type === 'stop') {
+					// Two-note tremolo: tag both members; the pair is folded into one
+					// TremoloEvent when the measure is finished (see foldTwoNoteTremolos).
+					(noteEvent as any).__tremolo = { type: note.notations.tremolo.type, value: note.notations.tremolo.value };
 				}
 
 				// Add beam marks - only care about primary beam (number=1)
@@ -1976,7 +2032,7 @@ const convertMeasure = (
 	const voiceMap = new Map<number, { events: Event[]; staff: number; lyrics: Map<number, LyricSyllable[]> }>();
 	for (const [voiceNum, voiceState] of voiceTracker.getVoices()) {
 		voiceMap.set(voiceNum, {
-			events: voiceState.events,
+			events: foldTwoNoteTremolos(voiceState.events),
 			staff: voiceState.staff,
 			lyrics: lyricLanes.get(voiceNum)?.lanes || new Map(),
 		});

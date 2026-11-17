@@ -609,11 +609,12 @@ const serializeTremoloEvent = (
 
 	// \repeat tremolo count { noteA noteB }
 	parts.push('\\repeat tremolo ' + event.count + ' {');
+	const memberDur = serializeDuration({ division: event.division, dots: event.dots || 0 });
 
 	// First pitch/chord (its post-events follow the duration)
 	if (event.pitchA.length === 1) {
 		const { str, newEnv } = serializePitchRelative(event.pitchA[0], currentEnv);
-		parts.push(' ' + str + event.division + serializeMarks(event.marksA || []));
+		parts.push(' ' + str + memberDur + serializeMarks(event.marksA || []));
 		currentEnv = newEnv;
 	} else {
 		const pitchStrs: string[] = [];
@@ -626,13 +627,13 @@ const serializeTremoloEvent = (
 			pitchStrs.push(str);
 			chordEnv = newEnv;
 		}
-		parts.push(' <' + pitchStrs.join(' ') + '>' + event.division + serializeMarks(event.marksA || []));
+		parts.push(' <' + pitchStrs.join(' ') + '>' + memberDur + serializeMarks(event.marksA || []));
 	}
 
 	// Second pitch/chord
 	if (event.pitchB.length === 1) {
 		const { str, newEnv } = serializePitchRelative(event.pitchB[0], currentEnv);
-		parts.push(' ' + str + event.division + serializeMarks(event.marksB || []));
+		parts.push(' ' + str + memberDur + serializeMarks(event.marksB || []));
 		currentEnv = newEnv;
 	} else {
 		const pitchStrs: string[] = [];
@@ -645,7 +646,7 @@ const serializeTremoloEvent = (
 			pitchStrs.push(str);
 			chordEnv = newEnv;
 		}
-		parts.push(' <' + pitchStrs.join(' ') + '>' + event.division + serializeMarks(event.marksB || []));
+		parts.push(' <' + pitchStrs.join(' ') + '>' + memberDur + serializeMarks(event.marksB || []));
 	}
 
 	parts.push(' }');
@@ -1023,6 +1024,12 @@ const serializeVoice = (
 			prevDuration = (event as NoteEvent).duration;
 		} else if (event.type === 'rest') {
 			prevDuration = (event as RestEvent).duration;
+		} else if (event.type === 'tremolo') {
+			// After `\repeat tremolo N { c16 d16 }` the parser's current duration is the
+			// member duration (16), as in LilyPond. Without this a following `e4` that
+			// matched the duration BEFORE the tremolo was written bare and read back as e16.
+			const tr = event as TremoloEvent;
+			prevDuration = { division: tr.division, dots: tr.dots || 0 };
 		} else if (event.type === 'tuplet' || event.type === 'times') {
 			// After a tuplet/times block the LilyPond parser's "current duration" is the
 			// last note duration inside the tuplet, not the duration before the tuplet.

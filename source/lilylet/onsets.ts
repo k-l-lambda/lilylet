@@ -12,6 +12,7 @@
 import { calculateDuration } from "./musicXmlUtils";
 import { Accidental } from "./types";
 import { clefSuffixSemitones } from "./clefTransposition";
+import { tremoloTotalWhole } from "./tremolo";
 
 // Onset resolution in ticks per quarter note. calculateDuration() rounds its result to an
 // integer, so it must run at a resolution fine enough to represent every note value exactly:
@@ -87,7 +88,9 @@ const walkVoice = (events: any[], staff: number, voice: number,
 			cursor = walkVoice(ev.events || [], staff, voice, scale * (r.numerator / r.denominator), cursor, clefRef, out);
 		}
 		else if (ev.type === "tremolo") {
-			const each = (RES * 4 / ev.division) * scale;
+			// Each member takes half the tremolo's total (count × 2 members), not one
+			// member duration — `\repeat tremolo 4 { c16 d16 }` is two half-length notes.
+			const each = (RES * 4 * tremoloTotalWhole(ev) / 2) * scale;
 			out.push({ onset: cursor, onsetNorm: 0, durationDiv: each,
 				midi: (ev.pitchA || []).map((p: any) => pitchToMidi(p, clefRef.shift)), staff, voice, grace: false });
 			cursor += each;

@@ -334,6 +334,7 @@ export interface TremoloEvent {
 	pitchB: Pitch[];				// Second note/chord
 	count: number;					// Number of repetitions
 	division: number;			 // Note division (16, 32, etc.)
+	dots?: number;					// dots on each member (`\repeat tremolo 2 { c16. d16. }`)
 	marksA?: Mark[];				// post-events written after the first pitch's duration
 	marksB?: Mark[];				// post-events written after the second pitch's duration
 }

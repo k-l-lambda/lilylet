@@ -34,6 +34,7 @@ import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { gmProgramOf } from "./gmInstruments";
 import { parseMeasureLayout, expandMeasureLayout, decomposeToSegments } from "./measureLayout";
 import { clefBaseName, clefSuffixTransposition } from "./clefTransposition";
+import { tremoloWrittenDuration, tremoloStrokes, tremoloTotalWhole } from "./tremolo";
 
 
 // MEI key signatures: positive = sharps, negative = flats
@@ -761,7 +762,9 @@ const noteEventToMEI = (
 		staff: event.staff,
 		layerStaff,
 		artics: markOptions.artics,
-		tremolo: markOptions.tremolo,
+		// NoteEvent.tremolo is the single-note tremolo; the mark form is the old
+		// parser representation, still accepted.
+		tremolo: event.tremolo ?? markOptions.tremolo,
 		headShape: event.headShape,
 		staffOffset,
 	};
@@ -1160,35 +1163,28 @@ const tupletEventToMEI = (event: TupletEvent, indent: string, layerStaff?: numbe
 const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: number = 0, ottavaShift: number = 0, measureAccidentals?: Map<string, string>, clefOctave: number = 0): string => {
 	const ftremId = generateId('fTrem');
 
-	// For \repeat tremolo 4 { c16 d16 }:
-	// - count = 4 (repetitions)
-	// - division = 16 (note value)
-	// - Total duration = 4 × 2 × 16th = 8 × 16th = half note
-	// - Each visible note = half of total = quarter note
-
-	// Calculate beams (tremolo strokes) based on division
-	// 8th = 1 beam, 16th = 2 beams, 32nd = 3 beams
-	const beams = Math.max(1, Math.log2(event.division / 8) + 1);
-
-	// Calculate visual duration for each note
-	// For \repeat tremolo 4 { c16 d16 }:
-	// - Total strokes = 4 × 2 = 8 sixteenth notes = 1/2 whole note
-	// - Each visible note = 1/4 whole note = quarter note (dur="4")
-	// Formula: dur = division / count (e.g., 16 / 4 = 4 for quarter note)
-	const noteDur = Math.round(event.division / event.count) || 4;  // Default to quarter if calculation fails
+	// `\repeat tremolo 4 { c16 d16 }` lasts 4 × 2 sixteenths = a half note. In LilyPond
+	// and in MEI both members are WRITTEN at that total length (two half notes) and the
+	// fTrem occupies it once; Verovio times the fTrem by one child's duration. So each
+	// child gets the tremolo's TOTAL duration, not half of it. (Using division/count
+	// halved every tremolo and produced dur="5" for an odd count.)
+	const beams = tremoloStrokes(event.division);
+	const written = tremoloWrittenDuration(event);
+	const noteDur = DURATIONS[written.division] || "4";
+	const dotsAttr = written.dots > 0 ? ` dots="${written.dots}"` : '';
 
 	let result = `${indent}<fTrem xml:id="${ftremId}" beams="${beams}">\n`;
 
 	// First note (or chord)
 	if (event.pitchA.length === 1) {
 		const pitch = encodePitch(event.pitchA[0], keyFifths, ottavaShift, measureAccidentals, clefOctave);
-		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
+		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"${dotsAttr}`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		if (pitch.octGes !== undefined) attrs += ` oct.ges="${pitch.octGes}"`;
 		if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
 		result += `${indent}    <note ${attrs} />\n`;
 	} else if (event.pitchA.length > 1) {
-		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
+		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}"${dotsAttr}>\n`;
 		for (const p of event.pitchA) {
 			const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals, clefOctave);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
@@ -1203,13 +1199,13 @@ const tremoloEventToMEI = (event: TremoloEvent, indent: string, keyFifths: numbe
 	// Second note (or chord)
 	if (event.pitchB.length === 1) {
 		const pitch = encodePitch(event.pitchB[0], keyFifths, ottavaShift, measureAccidentals, clefOctave);
-		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"`;
+		let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}" dur="${noteDur}"${dotsAttr}`;
 		if (pitch.accid) attrs += ` accid="${pitch.accid}"`;
 		if (pitch.octGes !== undefined) attrs += ` oct.ges="${pitch.octGes}"`;
 		if (pitch.accidGes) attrs += ` accid.ges="${pitch.accidGes}"`;
 		result += `${indent}    <note ${attrs} />\n`;
 	} else if (event.pitchB.length > 1) {
-		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}">\n`;
+		result += `${indent}    <chord xml:id="${generateId('chord')}" dur="${noteDur}"${dotsAttr}>\n`;
 		for (const p of event.pitchB) {
 			const pitch = encodePitch(p, keyFifths, ottavaShift, measureAccidentals, clefOctave);
 			let attrs = `xml:id="${generateId('note')}" pname="${pitch.pname}" oct="${pitch.oct}"`;
@@ -3057,9 +3053,8 @@ const applyAutoBeamToVoice = (events: Event[], beamGroups: number[]): void => {
 		} else if (event.type === 'tremolo') {
 			// Tremolo breaks beams
 			const trem = event as TremoloEvent;
-			// Total duration = count * 2 * (1/division) in whole notes
-			// In eighths: count * 2 * (8/division)
-			const dur = trem.count * 2 * (8 / trem.division);
+			// Total duration in eighths (dotted members included)
+			const dur = tremoloTotalWhole(trem) * 8;
 			flushRun();
 			position += dur;
 		}

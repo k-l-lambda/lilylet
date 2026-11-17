@@ -50,6 +50,7 @@ import {
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 
 import { clefBaseName, clefSuffixSemitones, clefSuffixTransposition } from "./clefTransposition";
+import { tremoloWrittenDuration, tremoloStrokes } from "./tremolo";
 
 
 // === Constants and Reverse Mappings ===
@@ -436,6 +437,11 @@ const encodeNotations = (marks: Mark[], level: number): string => {
 				otherNotations.push(`<tuplet type="${(mark as any).start ? 'start' : 'stop'}"/>`);
 				break;
 
+			// Internal only: a tremolo (single, or one member of a two-note tremolo).
+			case 'tremolo' as any:
+				ornaments.push(`<tremolo type="${(mark as any).type}">${(mark as any).strokes}</tremolo>`);
+				break;
+
 			case 'glissando':
 				// Lilylet \glissando is start-only (the line auto-connects to the next
 				// note); emit just the start spanner so the decoder reads it back.
@@ -558,9 +564,14 @@ const encodeNote = (
 		xml += `${indent(level + 1)}<beam number="1">end</beam>\n`;
 	}
 
-	// Notations
-	if (event.marks && event.marks.length > 0) {
-		xml += encodeNotations(event.marks, level + 1);
+	// Notations. A single-note tremolo (`c4:32`) lives on NoteEvent.tremolo, not in
+	// marks; MusicXML writes it as <tremolo type="single"> with the stroke count.
+	const notationMarks: Mark[] = [...(event.marks || [])];
+	if (event.tremolo && !isChord) {
+		notationMarks.push({ markType: 'tremolo', type: 'single', strokes: tremoloStrokes(event.tremolo) } as any);
+	}
+	if (notationMarks.length > 0) {
+		xml += encodeNotations(notationMarks, level + 1);
 	}
 
 	xml += lyricXml;
@@ -1032,6 +1043,43 @@ const encodeMeasure = (
 
 						// Restore original tuplet value
 						subEvent.duration.tuplet = originalTuplet;
+					}
+					break;
+				}
+
+				case 'tremolo': {
+					// Two-note tremolo: both members are WRITTEN at the tremolo's total
+					// length and each sounds half of it — a 2:1 time-modification, as
+					// MuseScore exports it — tagged <tremolo type="start|stop">.
+					started = true;
+					const written = tremoloWrittenDuration(event);
+					const strokes = tremoloStrokes(event.division);
+					const members: [Pitch[], Mark[] | undefined, 'start' | 'stop'][] = [
+						[event.pitchA, event.marksA, 'start'],
+						[event.pitchB, event.marksB, 'stop'],
+					];
+					for (const [pitches, marks, type] of members) {
+						const directionMarks = marks?.filter(m =>
+							m.markType === 'dynamic' || m.markType === 'hairpin' ||
+							m.markType === 'pedal' || m.markType === 'markup' ||
+							m.markType === 'navigation'
+						) || [];
+						if (directionMarks.length > 0) {
+							xml += encodeDirection(directionMarks, level + 1, currentStaff, maxStaff > 1);
+						}
+						const member: NoteEvent = {
+							type: 'note',
+							pitches,
+							duration: { ...written, tuplet: { numerator: 1, denominator: 2 } },
+							marks: [...(marks || []), { markType: 'tremolo', type, strokes } as any],
+						};
+						xml += encodeNote(member, voiceNum, currentStaff, level + 1, false,
+							lyricXmlForNote(lyricCursors, level + 2, false), shiftOn(currentStaff));
+						for (let pi = 1; pi < pitches.length; pi++) {
+							xml += encodeNote({ ...member, pitches: [pitches[pi]], marks: undefined },
+								voiceNum, currentStaff, level + 1, true, '', shiftOn(currentStaff));
+						}
+						voicePosition += calculateDuration(member.duration);
 					}
 					break;
 				}

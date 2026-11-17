@@ -44,6 +44,7 @@ import {
 import { parseStaffLayout, StaffGroup, StaffGroupType } from "./staffLayout";
 import { MeasureRepeatInfo, buildMeasureLayout, applyNavText } from "./measureLayoutFromXml";
 import { parseClefSuffix, withClefTransposition } from "./clefTransposition";
+import { tremoloTotalWhole } from "./tremolo";
 
 
 // ============ Constants ============
@@ -292,7 +293,7 @@ const eventsTicks = (events: Event[]): number => {
 		}
 		else if (ev.type === "tremolo") {
 			const tr = ev as TremoloEvent;
-			total += 2 * (WHOLE_TICKS / tr.division);
+			total += WHOLE_TICKS * tremoloTotalWhole(tr);
 		}
 	}
 	return total;
