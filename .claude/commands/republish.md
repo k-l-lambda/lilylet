@@ -20,8 +20,9 @@ Steps:
    - Wait until `npm view @k-l-lambda/lilylet-markdown version` shows A.B.C
    - Verify it really carries the new lilylet: `npm view @k-l-lambda/lilylet-markdown@A.B.C devDependencies` must list `@k-l-lambda/lilylet: X.Y.Z`
 4. Update lilylet-live-editor dependencies:
-   - Run `npm update @k-l-lambda/lilylet @k-l-lambda/lilylet-markdown` in /home/camus/work/lilylet-live-editor
-   - Check the lockfile resolved both new versions (X.Y.Z and A.B.C)
+   - Run `npm install @k-l-lambda/lilylet@^X.Y.Z @k-l-lambda/lilylet-markdown@^A.B.C` in /home/camus/work/lilylet-live-editor (raises the ranges in package.json too; plain `npm update` may silently keep the previous versions)
+   - `npm view` reports a version before its tarball is downloadable: the install (and CI's `npm ci`) can fail with `404 … lilylet-markdown-A.B.C.tgz` for a few minutes. Retry until the install succeeds; do NOT push before it does, or the Pages deploy fails the same way
+   - Check the lockfile resolved both new versions (X.Y.Z and A.B.C) BEFORE committing
    - Bump version: `npm version patch --no-git-tag-version`
    - Commit: `git add package.json package-lock.json && git commit -m "chore: bump version"`
    - Push to main branch (this triggers GitHub Pages deploy automatically)
