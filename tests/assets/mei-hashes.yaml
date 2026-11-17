@@ -248,10 +248,13 @@ time-signatures-free-time.lyl: d9f37c7d5046997048189efced9de312
 time-signatures-numeric-2-2.lyl: ce0b11df7b1ec93d1d4e7706174d718c
 time-signatures-numeric-4-4.lyl: 34883497ccb08f86b9ead1459813f297
 time-signatures-omit.lyl: eacbc726069052e32afaf9bf56f023fa
-tremolos-double-tremolo-chord.lyl: 6e62a255f0b6ee6e352850ed8bbf78cd
-tremolos-double-tremolo-default-division.lyl: 6fb9b919f2ce527c317e6b5a74b2aa58
-tremolos-double-tremolo.lyl: 3df3e3bb273f8fe7def1bc561f36fc7c
-tremolos-post-event.lyl: a7b32f490adfce4d2975673a77764191
+tremolos-dotted-members.lyl: 7ba95e300bc8e2c5fe45a2394e151c9e
+tremolos-double-tremolo-chord.lyl: 6d04823ec799d3e87bd9a04f7fa99ee3
+tremolos-double-tremolo-default-division.lyl: e3c53b56c8f26d7566fc018e2fda4182
+tremolos-double-tremolo-odd-count.lyl: 7073282ee52bbc7eb682915c20739b4d
+tremolos-double-tremolo.lyl: 621a2c19d3662ac2f9dea45e5bf45fb5
+tremolos-post-event.lyl: e2d5126da8836ea172c9b17531bd48e2
+tremolos-single-repeat.lyl: ec3f42e9cf4fdd3184e12262e8e6ac57
 tremolos-single-tremolo-16.lyl: 265be348773b0cf751a89d1945e0f59e
 tremolos-single-tremolo-32.lyl: f97f46d215e1a4d99e77a39636129349
 tremolos-single-tremolo-chord.lyl: 91f44fc26c94c641d05ecd2e75759da8

@@ -1,0 +1,3 @@
+% Single-note tremolo in LilyPond's \repeat form: `\repeat tremolo 8 c16` = `c2:16`.
+% The note after it inherits the member duration (16), as in LilyPond.
+\time 4/4 \repeat tremolo 8 c''16 \repeat tremolo 4 { e''16 } d''16 e'' f'' g'' | %1

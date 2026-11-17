@@ -1,0 +1,4 @@
+% Two-note tremolo with an odd count: 3 × 2 sixteenths = 3/8, written as two dotted
+% quarters joined by two strokes (as LilyPond engraves it). MEI: dur="4" dots="1".
+\time 3/8 \repeat tremolo 3 { c'16 e'16 } | %1
+\time 3/8 c'4. | %2
